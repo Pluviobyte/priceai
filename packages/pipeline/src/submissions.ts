@@ -8,7 +8,7 @@ import {
   sourceSubmissions,
   type Database,
 } from "@price-radar/database";
-import { crawlSource } from "./catalog.js";
+import { crawlSource, type RawObjectStore } from "./catalog.js";
 import { assertSafePublicUrl } from "./url-security.js";
 
 export interface PrecheckSubmissionResult {
@@ -65,6 +65,7 @@ export async function precheckSourceSubmission(
   registry: CollectorRegistry,
   submissionId: string,
   signal: AbortSignal = new AbortController().signal,
+  rawObjectStore?: RawObjectStore,
 ): Promise<PrecheckSubmissionResult> {
   const [submission] = await db
     .select()
@@ -171,6 +172,7 @@ export async function precheckSourceSubmission(
       promoteSource: false,
       signal,
       maxPages: 50,
+      ...(rawObjectStore ? { rawObjectStore } : {}),
     });
     await db
       .update(sourceSubmissions)

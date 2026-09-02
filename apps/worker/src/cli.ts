@@ -15,12 +15,20 @@ import {
   seedCanonicalProducts,
 } from "@price-radar/pipeline";
 import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
+import { S3JsonObjectStore } from "@price-radar/object-storage";
 import { readWorkerConfig } from "./config.js";
 
 async function main(): Promise<void> {
   const [command, argument] = process.argv.slice(2);
   const config = readWorkerConfig();
   const database = createDatabase(config.databaseUrl);
+  const rawObjectStore = new S3JsonObjectStore({
+    endpoint: config.objectStorageEndpoint,
+    region: config.objectStorageRegion,
+    bucket: config.objectStorageBucket,
+    accessKeyId: config.objectStorageAccessKey,
+    secretAccessKey: config.objectStorageSecretKey,
+  });
   const registry = new InMemoryCollectorRegistry();
   registry.register(new LdxpShopApiCollector());
   registry.register(new KamiCollector());
@@ -50,13 +58,19 @@ async function main(): Promise<void> {
     }
     if (command === "precheck-submission") {
       if (!argument) throw new Error("usage: precheck-submission <submission-id>");
-      const result = await precheckSourceSubmission(database.db, registry, argument);
+      const result = await precheckSourceSubmission(
+        database.db,
+        registry,
+        argument,
+        new AbortController().signal,
+        rawObjectStore,
+      );
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
     if (command === "crawl") {
       if (!argument) throw new Error("usage: crawl <source-id>");
-      const result = await crawlSource(database.db, registry, argument);
+      const result = await crawlSource(database.db, registry, argument, { rawObjectStore });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
@@ -87,7 +101,7 @@ async function main(): Promise<void> {
     if (command === "bootstrap") {
       if (!argument) throw new Error("usage: bootstrap <source-url>");
       const source = await onboardSource(database.db, registry, argument);
-      const crawl = await crawlSource(database.db, registry, source.sourceId);
+      const crawl = await crawlSource(database.db, registry, source.sourceId, { rawObjectStore });
       await seedCanonicalProducts(database.db);
       const publication = await publishLatestSnapshots(database.db);
       const alerts = await evaluatePriceAlerts(database.db, publication.generationId);
@@ -97,6 +111,7 @@ async function main(): Promise<void> {
     throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|evaluate-alerts|deliver-notifications|bootstrap> [argument]");
   } finally {
     await database.close();
+    rawObjectStore.destroy();
   }
 }
 

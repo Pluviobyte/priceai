@@ -1,0 +1,1 @@
+ALTER TABLE "crawl_runs" ADD COLUMN "raw_manifest_hash" text;

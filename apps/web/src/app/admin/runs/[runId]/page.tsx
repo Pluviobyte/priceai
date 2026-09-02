@@ -31,6 +31,12 @@ export default async function AdminRunPage({
         <article><span>采集器</span><b>{run.collectorKind} {run.collectorVersion}</b></article>
       </section>
       {run.errorMessage ? <div className="form-error">{run.errorCode}: {run.errorMessage}</div> : null}
+      {run.rawManifestUrl ? (
+        <div className="raw-manifest-link">
+          <div><b>原始响应清单</b><small>SHA-256 {run.rawManifestHash ?? "未记录"}</small></div>
+          <a href={`/api/admin/runs/${run.id}/raw`} target="_blank" rel="noopener noreferrer">验证并回放 JSON ↗</a>
+        </div>
+      ) : null}
       <section className="run-table-wrap">
         <table className="run-table">
           <thead><tr><th>商品</th><th>价格</th><th>库存</th><th>状态</th><th>证据</th></tr></thead>

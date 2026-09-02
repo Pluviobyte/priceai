@@ -18,6 +18,7 @@
     "@price-radar/dujiao-collector": "*",
     "@price-radar/generic-html-collector": "*",
     "@price-radar/kami-collector": "*",
+    "@price-radar/object-storage": "*",
     "@price-radar/pipeline": "*",
     "@price-radar/ranking": "*",
     "@price-radar/schema": "*",

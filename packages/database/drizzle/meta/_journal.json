@@ -57,6 +57,13 @@
       "when": 1788373254199,
       "tag": "0007_nebulous_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788373724259,
+      "tag": "0008_solid_captain_america",
+      "breakpoints": true
     }
   ]
 }

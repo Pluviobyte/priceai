@@ -209,6 +209,7 @@ export const crawlRuns = pgTable(
     errorCode: text("error_code"),
     errorMessage: text("error_message"),
     rawManifestUrl: text("raw_manifest_url"),
+    rawManifestHash: text("raw_manifest_hash"),
     createdAt,
   },
   (table) => [

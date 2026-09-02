@@ -234,6 +234,10 @@ footer p { margin: 0; }
 .run-table th, .run-table td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; }
 .run-table th { color: var(--muted); background: #f7f9f6; }
 .run-table td:first-child { min-width: 330px; }
+.raw-manifest-link { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 18px 0; padding: 16px; border: 1px solid #b9dfcd; border-radius: 14px; background: #e8f6ed; }
+.raw-manifest-link > div { display: grid; gap: 5px; }
+.raw-manifest-link small { color: var(--muted); font-size: 10px; word-break: break-all; }
+.raw-manifest-link > a { padding: 9px 12px; border-radius: 9px; color: white; background: var(--ink); font-size: 11px; font-weight: 700; }
 .anomaly-values { overflow-x: auto; padding: 12px; border-radius: 10px; background: #f5f7f4; color: #48524f; font-size: 11px; }
 .anomaly-form { display: flex; flex-wrap: wrap; gap: 8px; }
 .anomaly-form input { min-width: 240px; flex: 1; border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; }

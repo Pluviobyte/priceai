@@ -1,0 +1,13 @@
+{
+  "name": "@price-radar/object-storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": { "@aws-sdk/client-s3": "3.1124.0" },
+  "devDependencies": { "@types/node": "26.4.1", "typescript": "5.9.3" }
+}

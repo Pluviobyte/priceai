@@ -6,6 +6,11 @@ export interface WorkerConfig {
   browserExecutablePath?: string;
   notificationWebhookUrl?: string;
   notificationWebhookSecret?: string;
+  objectStorageEndpoint: string;
+  objectStorageRegion: string;
+  objectStorageBucket: string;
+  objectStorageAccessKey: string;
+  objectStorageSecretKey: string;
 }
 
 export function readWorkerConfig(
@@ -27,5 +32,10 @@ export function readWorkerConfig(
     ...(env.NOTIFICATION_WEBHOOK_SECRET
       ? { notificationWebhookSecret: env.NOTIFICATION_WEBHOOK_SECRET }
       : {}),
+    objectStorageEndpoint: env.OBJECT_STORAGE_ENDPOINT ?? "http://127.0.0.1:9000",
+    objectStorageRegion: env.OBJECT_STORAGE_REGION ?? "auto",
+    objectStorageBucket: env.OBJECT_STORAGE_BUCKET ?? "price-radar-snapshots",
+    objectStorageAccessKey: env.OBJECT_STORAGE_ACCESS_KEY ?? "minio",
+    objectStorageSecretKey: env.OBJECT_STORAGE_SECRET_KEY ?? "minio-secret",
   };
 }

@@ -19,6 +19,7 @@ import {
   seedCanonicalProducts,
 } from "@price-radar/pipeline";
 import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
+import { S3JsonObjectStore } from "@price-radar/object-storage";
 import { readWorkerConfig } from "./config.js";
 
 const config = readWorkerConfig();
@@ -26,6 +27,13 @@ const logger = pino({ name: "price-radar-worker" });
 const connection = new Redis(config.redisUrl, { maxRetriesPerRequest: null });
 const queue = new Queue("source-jobs", { connection });
 const database = createDatabase(config.databaseUrl);
+const rawObjectStore = new S3JsonObjectStore({
+  endpoint: config.objectStorageEndpoint,
+  region: config.objectStorageRegion,
+  bucket: config.objectStorageBucket,
+  accessKeyId: config.objectStorageAccessKey,
+  secretAccessKey: config.objectStorageSecretKey,
+});
 const registry = new InMemoryCollectorRegistry();
 registry.register(new LdxpShopApiCollector());
 registry.register(new KamiCollector());
@@ -76,6 +84,7 @@ const worker = new Worker(
           database.db,
           registry,
           requiredString(data.sourceId, "sourceId"),
+          { rawObjectStore },
         );
         if (result.completeSnapshot) {
           const publication = await publishAndEvaluate();
@@ -89,6 +98,8 @@ const worker = new Worker(
           database.db,
           registry,
           requiredString(data.submissionId, "submissionId"),
+          new AbortController().signal,
+          rawObjectStore,
         );
       }
       case "snapshot.publish":
@@ -196,6 +207,7 @@ async function shutdown(signal: string): Promise<void> {
   await queue.close();
   await connection.quit();
   await database.close();
+  rawObjectStore.destroy();
 }
 
 process.once("SIGINT", () => void shutdown("SIGINT"));

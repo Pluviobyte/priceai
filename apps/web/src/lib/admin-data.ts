@@ -58,6 +58,8 @@ export interface AdminRunDetail {
   finishedAt: Date | null;
   errorCode: string | null;
   errorMessage: string | null;
+  rawManifestUrl: string | null;
+  rawManifestHash: string | null;
   samples: Array<{
     sourceItemId: string;
     title: string;
@@ -156,6 +158,8 @@ interface RunRow {
   finished_at: Date | null;
   error_code: string | null;
   error_message: string | null;
+  raw_manifest_url: string | null;
+  raw_manifest_hash: string | null;
 }
 
 interface SnapshotSampleRow {
@@ -561,7 +565,8 @@ export async function getAdminRun(runId: string): Promise<AdminRunDetail | null>
     `select cr.id, cr.source_id, coalesce(m.name,s.platform_merchant_id) merchant_name,
             cr.collector_kind, cr.collector_version, cr.status, cr.complete_snapshot,
             cr.expected_total, cr.fetched_total, cr.parsed_total, cr.duplicate_total,
-            cr.quarantined_total, cr.started_at, cr.finished_at, cr.error_code, cr.error_message
+            cr.quarantined_total, cr.started_at, cr.finished_at, cr.error_code, cr.error_message,
+            cr.raw_manifest_url,cr.raw_manifest_hash
        from crawl_runs cr
        join sources s on s.id=cr.source_id
        left join merchants m on m.id=s.merchant_id
@@ -595,6 +600,8 @@ export async function getAdminRun(runId: string): Promise<AdminRunDetail | null>
     finishedAt: run.finished_at,
     errorCode: run.error_code,
     errorMessage: run.error_message,
+    rawManifestUrl: run.raw_manifest_url,
+    rawManifestHash: run.raw_manifest_hash,
     samples: samples.map((sample) => ({
       sourceItemId: sample.source_item_id,
       title: sample.title,

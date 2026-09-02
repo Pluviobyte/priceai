@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@price-radar/classifier": "*",
+    "@price-radar/object-storage": "*",
     "@price-radar/ranking": "*",
     "@price-radar/schema": "*",
     "next": "16.3.4",

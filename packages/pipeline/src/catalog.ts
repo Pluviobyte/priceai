@@ -16,6 +16,11 @@ export interface CrawlSourceOptions {
   signal?: AbortSignal;
   allowDisabled?: boolean;
   promoteSource?: boolean;
+  rawObjectStore?: RawObjectStore;
+}
+
+export interface RawObjectStore {
+  putJson(key: string, value: unknown): Promise<{ uri: string; sha256: string; size: number }>;
 }
 
 export interface CrawlSourceResult {
@@ -31,6 +36,7 @@ async function insertSnapshots(
   runId: string,
   sourceId: string,
   offers: readonly RawOfferInput[],
+  rawManifestUrl?: string,
 ): Promise<void> {
   const rows = offers.map((offer) => ({
     crawlRunId: runId,
@@ -51,6 +57,9 @@ async function insertSnapshots(
       : {}),
     capturedAt: new Date(offer.capturedAt),
     rawPayloadHash: offer.rawPayloadHash,
+    ...(rawManifestUrl
+      ? { rawPayloadUrl: `${rawManifestUrl}#item=${encodeURIComponent(offer.sourceItemId)}` }
+      : {}),
   }));
 
   for (let offset = 0; offset < rows.length; offset += 250) {
@@ -111,6 +120,21 @@ export async function crawlSource(
 
     const validation = adapter.validateSnapshot(pages);
     const offers = [...normalizedById.values()];
+    const storedManifest = options.rawObjectStore
+      ? await options.rawObjectStore.putJson(
+          `crawl-runs/${sourceId}/${run.id}.json`,
+          {
+            schemaVersion: 1,
+            sourceId,
+            runId: run.id,
+            collectorKind: adapter.kind,
+            collectorVersion: "0.1.0",
+            capturedAt: startedAt.toISOString(),
+            pageCount: pages.length,
+            pages,
+          },
+        )
+      : null;
     const finishedAt = new Date();
     const primaryError = validation.issues.find((issue) => issue.severity === "error");
     const health = validation.completeSnapshot
@@ -118,7 +142,7 @@ export async function crawlSource(
       : nextFailedRun(finishedAt, source.consecutiveFailures);
 
     await db.transaction(async (tx) => {
-      await insertSnapshots(tx, run.id, sourceId, offers);
+      await insertSnapshots(tx, run.id, sourceId, offers, storedManifest?.uri);
       await tx
         .update(crawlRuns)
         .set({
@@ -129,6 +153,12 @@ export async function crawlSource(
           parsedTotal: validation.parsedTotal,
           duplicateTotal: validation.duplicateTotal,
           finishedAt,
+          ...(storedManifest
+            ? {
+                rawManifestUrl: storedManifest.uri,
+                rawManifestHash: storedManifest.sha256,
+              }
+            : {}),
           ...(primaryError
             ? {
                 errorCode: primaryError.code,
