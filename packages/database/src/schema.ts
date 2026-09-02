@@ -635,3 +635,317 @@ export const notificationOutbox = pgTable(
   },
   (table) => [index("notification_outbox_delivery_idx").on(table.status, table.availableAt)],
 );
+
+export const officialSubscriptionPlans = pgTable(
+  "official_subscription_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vendor: text("vendor").notNull(),
+    planCode: text("plan_code").notNull(),
+    displayName: text("display_name").notNull(),
+    billingPeriod: text("billing_period").notNull(),
+    canonicalProductId: uuid("canonical_product_id").references(
+      () => canonicalProducts.id,
+      { onDelete: "set null" },
+    ),
+    officialUrl: text("official_url").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("official_subscription_plans_vendor_code_uidx").on(
+      table.vendor,
+      table.planCode,
+    ),
+    index("official_subscription_plans_vendor_idx").on(table.vendor),
+  ],
+);
+
+export const exchangeRateSnapshots = pgTable(
+  "exchange_rate_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    baseCurrency: text("base_currency").notNull(),
+    quoteCurrency: text("quote_currency").notNull(),
+    rate: numeric("rate", { precision: 24, scale: 10 }).notNull(),
+    sourceUrl: text("source_url").notNull(),
+    sourceName: text("source_name").notNull(),
+    effectiveDate: date("effective_date").notNull(),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("exchange_rate_pair_date_uidx").on(
+      table.baseCurrency,
+      table.quoteCurrency,
+      table.effectiveDate,
+    ),
+    index("exchange_rate_latest_idx").on(
+      table.baseCurrency,
+      table.quoteCurrency,
+      table.effectiveDate,
+    ),
+  ],
+);
+
+export const officialSubscriptionPrices = pgTable(
+  "official_subscription_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => officialSubscriptionPlans.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    countryCode: text("country_code").notNull(),
+    currency: text("currency").notNull(),
+    priceKind: text("price_kind").notNull(),
+    amount: numeric("amount", { precision: 20, scale: 6 }),
+    lowerAmount: numeric("lower_amount", { precision: 20, scale: 6 }),
+    upperAmount: numeric("upper_amount", { precision: 20, scale: 6 }),
+    cnyEstimate: numeric("cny_estimate", { precision: 20, scale: 6 }),
+    exchangeRateSnapshotId: uuid("exchange_rate_snapshot_id").references(
+      () => exchangeRateSnapshots.id,
+      { onDelete: "set null" },
+    ),
+    rawPlanName: text("raw_plan_name").notNull(),
+    appId: text("app_id"),
+    evidenceUrl: text("evidence_url").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    evidenceHash: text("evidence_hash").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("official_subscription_price_identity_uidx").on(
+      table.planId,
+      table.channel,
+      table.countryCode,
+      table.rawPlanName,
+    ),
+    index("official_subscription_price_rank_idx").on(
+      table.planId,
+      table.priceKind,
+      table.cnyEstimate,
+    ),
+  ],
+);
+
+export const officialSubscriptionPriceHistory = pgTable(
+  "official_subscription_price_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    officialPriceId: uuid("official_price_id")
+      .notNull()
+      .references(() => officialSubscriptionPrices.id, { onDelete: "cascade" }),
+    currency: text("currency").notNull(),
+    priceKind: text("price_kind").notNull(),
+    amount: numeric("amount", { precision: 20, scale: 6 }),
+    lowerAmount: numeric("lower_amount", { precision: 20, scale: 6 }),
+    upperAmount: numeric("upper_amount", { precision: 20, scale: 6 }),
+    cnyEstimate: numeric("cny_estimate", { precision: 20, scale: 6 }),
+    evidenceUrl: text("evidence_url").notNull(),
+    evidenceHash: text("evidence_hash").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("official_subscription_history_price_idx").on(
+      table.officialPriceId,
+      table.observedAt,
+    ),
+  ],
+);
+
+export const officialApiVendors = pgTable(
+  "official_api_vendors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    displayName: text("display_name").notNull(),
+    pricingUrl: text("pricing_url").notNull(),
+    modelsUrl: text("models_url").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("official_api_vendors_slug_uidx").on(table.slug)],
+);
+
+export const officialApiModels = pgTable(
+  "official_api_models",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    vendorId: uuid("vendor_id")
+      .notNull()
+      .references(() => officialApiVendors.id, { onDelete: "cascade" }),
+    modelCode: text("model_code").notNull(),
+    displayName: text("display_name").notNull(),
+    modality: text("modality").notNull(),
+    contextWindow: integer("context_window"),
+    availability: text("availability").notNull().default("public"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("official_api_models_vendor_code_uidx").on(
+      table.vendorId,
+      table.modelCode,
+    ),
+    index("official_api_models_vendor_idx").on(table.vendorId),
+  ],
+);
+
+export const officialApiPrices = pgTable(
+  "official_api_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    modelId: uuid("model_id")
+      .notNull()
+      .references(() => officialApiModels.id, { onDelete: "cascade" }),
+    priceTier: text("price_tier").notNull().default("standard"),
+    unit: text("unit").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    inputPrice: numeric("input_price", { precision: 20, scale: 8 }),
+    cachedInputPrice: numeric("cached_input_price", { precision: 20, scale: 8 }),
+    outputPrice: numeric("output_price", { precision: 20, scale: 8 }),
+    additionalPrices: jsonb("additional_prices").$type<Record<string, unknown>>().notNull().default({}),
+    freeTier: jsonb("free_tier").$type<Record<string, unknown>>().notNull().default({}),
+    rateLimits: jsonb("rate_limits").$type<Record<string, unknown>>().notNull().default({}),
+    evidenceUrl: text("evidence_url").notNull(),
+    documentVersion: text("document_version"),
+    evidenceHash: text("evidence_hash").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("official_api_price_model_tier_uidx").on(
+      table.modelId,
+      table.priceTier,
+      table.unit,
+    ),
+    index("official_api_price_verified_idx").on(table.verifiedAt),
+  ],
+);
+
+export const officialApiPriceHistory = pgTable(
+  "official_api_price_history",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    officialApiPriceId: uuid("official_api_price_id")
+      .notNull()
+      .references(() => officialApiPrices.id, { onDelete: "cascade" }),
+    inputPrice: numeric("input_price", { precision: 20, scale: 8 }),
+    cachedInputPrice: numeric("cached_input_price", { precision: 20, scale: 8 }),
+    outputPrice: numeric("output_price", { precision: 20, scale: 8 }),
+    additionalPrices: jsonb("additional_prices").$type<Record<string, unknown>>().notNull().default({}),
+    evidenceUrl: text("evidence_url").notNull(),
+    evidenceHash: text("evidence_hash").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    createdAt,
+  },
+  (table) => [
+    index("official_api_history_price_idx").on(
+      table.officialApiPriceId,
+      table.observedAt,
+    ),
+  ],
+);
+
+export const transitProviders = pgTable(
+  "transit_providers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    displayName: text("display_name").notNull(),
+    websiteUrl: text("website_url").notNull(),
+    apiBaseUrl: text("api_base_url"),
+    modelsEndpoint: text("models_endpoint"),
+    statusUrl: text("status_url"),
+    operatorName: text("operator_name"),
+    systemKind: text("system_kind").notNull().default("unknown"),
+    discoverySource: text("discovery_source").notNull(),
+    evidenceUrl: text("evidence_url").notNull(),
+    active: boolean("active").notNull().default(false),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [uniqueIndex("transit_providers_slug_uidx").on(table.slug)],
+);
+
+export const transitModelPrices = pgTable(
+  "transit_model_prices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => transitProviders.id, { onDelete: "cascade" }),
+    modelCode: text("model_code").notNull(),
+    displayName: text("display_name").notNull(),
+    currency: text("currency").notNull().default("USD"),
+    unit: text("unit").notNull().default("per_million_tokens"),
+    inputPrice: numeric("input_price", { precision: 20, scale: 8 }),
+    outputPrice: numeric("output_price", { precision: 20, scale: 8 }),
+    multiplier: numeric("multiplier", { precision: 12, scale: 6 }),
+    fixedPlan: jsonb("fixed_plan").$type<Record<string, unknown>>().notNull().default({}),
+    evidenceKind: text("evidence_kind").notNull(),
+    evidenceUrl: text("evidence_url").notNull(),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("transit_model_price_provider_model_uidx").on(
+      table.providerId,
+      table.modelCode,
+    ),
+  ],
+);
+
+export const transitProbes = pgTable(
+  "transit_probes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => transitProviders.id, { onDelete: "cascade" }),
+    probeKind: text("probe_kind").notNull(),
+    success: boolean("success").notNull(),
+    latencyMs: integer("latency_ms"),
+    httpStatus: integer("http_status"),
+    modelCount: integer("model_count"),
+    errorCode: text("error_code"),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("transit_probes_provider_checked_idx").on(
+      table.providerId,
+      table.checkedAt,
+    ),
+  ],
+);
+
+export const transitEvents = pgTable(
+  "transit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => transitProviders.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    details: text("details"),
+    evidenceUrl: text("evidence_url"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt,
+  },
+  (table) => [
+    index("transit_events_provider_started_idx").on(
+      table.providerId,
+      table.startedAt,
+    ),
+  ],
+);

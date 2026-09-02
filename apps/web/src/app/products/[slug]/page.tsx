@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPublicProduct, type OfferFilters } from "@/lib/public-catalog";
+import { getOfficialReferencePrice } from "@/lib/public-pricing";
 import { PublicOfferList } from "../../public-offer-list";
 import { SiteHeader } from "../../site-header";
 
@@ -39,6 +40,11 @@ export default async function ProductPage({
   };
   const product = await getPublicProduct(slug, filters);
   if (!product) notFound();
+  const official = await getOfficialReferencePrice(slug);
+  const lowestCny = product.offers.find((offer) => offer.currency === "CNY");
+  const discount = official?.cnyEstimate && lowestCny
+    ? (1 - Number(lowestCny.price) / Number(official.cnyEstimate)) * 100
+    : null;
   return (
     <main>
       <SiteHeader />
@@ -62,6 +68,7 @@ export default async function ProductPage({
           </form>
         </aside>
         <div className="detail-content">
+          {official && <aside className="official-reference"><div><span className="section-kicker">官方价对照</span><b>{official.planName} · {official.countryCode} {official.channel}</b><small>核验于 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium" }).format(official.verifiedAt)}</small></div><div><strong>{official.currency} {Number(official.amount).toFixed(2)}</strong>{official.cnyEstimate && <span>约 ¥{Number(official.cnyEstimate).toFixed(2)}</span>}{discount !== null && Number.isFinite(discount) && <em>当前最低 CNY 报价约低 {discount.toFixed(1)}%</em>}<a href={official.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">官方证据 ↗</a></div></aside>}
           <div className="detail-heading"><div><span className="section-kicker">可比报价</span><h2>{product.offers.length} 条结果</h2></div><span>库存与新鲜度分开判定</span></div>
           <PublicOfferList offers={product.offers} />
           <section className="alert-panel">

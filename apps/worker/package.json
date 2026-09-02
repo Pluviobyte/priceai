@@ -20,6 +20,7 @@
     "@price-radar/kami-collector": "*",
     "@price-radar/object-storage": "*",
     "@price-radar/pipeline": "*",
+    "@price-radar/price-channels": "*",
     "@price-radar/ranking": "*",
     "@price-radar/schema": "*",
     "@price-radar/shop-api-collector": "*",

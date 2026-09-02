@@ -16,6 +16,11 @@ import {
 } from "@price-radar/pipeline";
 import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
+import {
+  refreshAllTransitProviders,
+  refreshOfficialSubscriptionChannels,
+  seedVerifiedOfficialApiPrices,
+} from "@price-radar/price-channels";
 import { readWorkerConfig } from "./config.js";
 
 async function main(): Promise<void> {
@@ -98,6 +103,21 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
+    if (command === "refresh-subscriptions") {
+      const result = await refreshOfficialSubscriptionChannels(database.db);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "refresh-official-api") {
+      const result = await seedVerifiedOfficialApiPrices(database.db);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "refresh-transit") {
+      const result = await refreshAllTransitProviders(database.db);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     if (command === "bootstrap") {
       if (!argument) throw new Error("usage: bootstrap <source-url>");
       const source = await onboardSource(database.db, registry, argument);
@@ -108,7 +128,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|evaluate-alerts|deliver-notifications|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|bootstrap> [argument]");
   } finally {
     await database.close();
     rawObjectStore.destroy();

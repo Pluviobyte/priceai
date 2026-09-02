@@ -20,6 +20,11 @@ import {
 } from "@price-radar/pipeline";
 import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
+import {
+  refreshAllTransitProviders,
+  refreshOfficialSubscriptionChannels,
+  seedVerifiedOfficialApiPrices,
+} from "@price-radar/price-channels";
 import { readWorkerConfig } from "./config.js";
 
 const config = readWorkerConfig();
@@ -104,6 +109,12 @@ const worker = new Worker(
       }
       case "snapshot.publish":
         return publishAndEvaluate();
+      case "prices.subscriptions.refresh":
+        return refreshOfficialSubscriptionChannels(database.db);
+      case "prices.official_api.refresh":
+        return seedVerifiedOfficialApiPrices(database.db);
+      case "prices.transit.refresh":
+        return refreshAllTransitProviders(database.db);
       default:
         throw new Error(`unknown_job:${job.name}`);
     }
@@ -167,6 +178,15 @@ async function deliverNotifications(): Promise<void> {
   if (result.attempted > 0) logger.info(result, "notification outbox processed");
 }
 
+async function refreshPriceChannels(): Promise<void> {
+  const [subscriptions, officialApi, transit] = await Promise.all([
+    refreshOfficialSubscriptionChannels(database.db),
+    seedVerifiedOfficialApiPrices(database.db),
+    refreshAllTransitProviders(database.db),
+  ]);
+  logger.info({ subscriptions, officialApi, transit }, "official and transit price channels refreshed");
+}
+
 const schedulerTimer = setInterval(() => {
   void enqueueDueSources().catch((error: unknown) => {
     logger.error({ error }, "source scheduling failed");
@@ -179,6 +199,10 @@ const schedulerTimer = setInterval(() => {
   });
 }, config.schedulerIntervalMs);
 schedulerTimer.unref();
+const priceRefreshTimer = setInterval(() => {
+  void refreshPriceChannels().catch((error: unknown) => logger.error({ error }, "price channel refresh failed"));
+}, 6 * 60 * 60 * 1_000);
+priceRefreshTimer.unref();
 void enqueueDueSources().catch((error: unknown) => {
   logger.error({ error }, "initial source scheduling failed");
 });
@@ -187,6 +211,9 @@ void enqueuePendingSubmissions().catch((error: unknown) => {
 });
 void deliverNotifications().catch((error: unknown) => {
   logger.error({ error }, "initial notification delivery failed");
+});
+void refreshPriceChannels().catch((error: unknown) => {
+  logger.error({ error }, "initial price channel refresh failed");
 });
 
 worker.on("completed", (job) => {
@@ -203,6 +230,7 @@ worker.on("failed", (job, error) => {
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "shutting down");
   clearInterval(schedulerTimer);
+  clearInterval(priceRefreshTimer);
   await worker.close();
   await queue.close();
   await connection.quit();
