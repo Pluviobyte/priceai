@@ -17,7 +17,7 @@ export default async function SubmissionStatusPage({
   searchParams: Promise<{ id?: string }>;
 }) {
   const { id } = await searchParams;
-  const validId = typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id);
+  const validId = typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
   const submission = validId ? await getPublicSubmissionStatus(id) : null;
   return (
     <main>

@@ -3,8 +3,16 @@ import { getPublicProduct, type OfferFilters } from "@/lib/public-catalog";
 import { getOfficialReferencePrice } from "@/lib/public-pricing";
 import { PublicOfferList } from "../../public-offer-list";
 import { SiteHeader } from "../../site-header";
+import { ShareLink } from "../../share-link";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const product = await getPublicProduct(slug, {});
+  return product ? { title: `${product.name} 比价 | AI 价格雷达`, description: `比较 ${product.name} 的价格、库存、交付方式、质保和原始证据。`, alternates: { canonical: `/products/${product.slug}` } } : { title: "产品未找到" };
+}
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -69,7 +77,7 @@ export default async function ProductPage({
         </aside>
         <div className="detail-content">
           {official && <aside className="official-reference"><div><span className="section-kicker">官方价对照</span><b>{official.planName} · {official.countryCode} {official.channel}</b><small>核验于 {new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium" }).format(official.verifiedAt)}</small></div><div><strong>{official.currency} {Number(official.amount).toFixed(2)}</strong>{official.cnyEstimate && <span>约 ¥{Number(official.cnyEstimate).toFixed(2)}</span>}{discount !== null && Number.isFinite(discount) && <em>当前最低 CNY 报价约低 {discount.toFixed(1)}%</em>}<a href={official.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">官方证据 ↗</a></div></aside>}
-          <div className="detail-heading"><div><span className="section-kicker">可比报价</span><h2>{product.offers.length} 条结果</h2></div><span>库存与新鲜度分开判定</span></div>
+          <div className="detail-heading"><div><span className="section-kicker">可比报价</span><h2>{product.offers.length} 条结果</h2></div><div><span>库存与新鲜度分开判定</span><ShareLink title={product.name} /></div></div>
           <PublicOfferList offers={product.offers} />
           <section className="alert-panel">
             <div><span className="section-kicker">价格监测</span><h2>降价或补货时通知我</h2><p>邮箱确认后才会启用，通知失败会持久化重试。</p></div>

@@ -83,6 +83,11 @@ export async function createPublicSourceSubmission(input: {
     );
     const created = result.rows[0];
     if (!created) throw new Error("source_submission_insert_failed");
+    await client.query(
+      `insert into source_candidates(candidate_url,merchant_name_hint,discovery_kind,submitted_by,status,review_note)
+       values($1,$2,'user_submission','public_form','submitted_for_precheck',$3)`,
+      [input.url, input.name ?? null, `source_submission:${created.id}`],
+    );
     await client.query("commit");
     return { ...created, duplicate: false };
   } catch (error) {
@@ -110,4 +115,42 @@ export async function getPublicSubmissionStatus(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } : null;
+}
+
+export async function createMerchantFeedApplication(input: {
+  merchantName: string; websiteUrl: string; feedUrl: string; schemaKind: string;
+  contact: string; notes?: string; fingerprint: string;
+}): Promise<string> {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const rate = await client.query<{ count: string }>(
+      `select ((select count(*) from source_submissions where submitter_fingerprint=$1 and created_at>now()-interval '1 hour')+
+               (select count(*) from merchant_feed_submissions where submitter_fingerprint=$1 and created_at>now()-interval '1 hour'))::text count`,
+      [input.fingerprint],
+    );
+    if (Number(rate.rows[0]?.count ?? 0) >= 5) throw new Error("submission_rate_limited");
+    const duplicate = await client.query<{ id: string }>("select id from source_submissions where url=$1 and created_at>now()-interval '30 days' order by created_at desc limit 1", [input.feedUrl]);
+    if (duplicate.rows[0]) { await client.query("commit"); return duplicate.rows[0].id; }
+    const submission = await client.query<{ id: string }>(
+      `insert into source_submissions(url,name,contact,primary_products,notes,submitter_fingerprint,status)
+       values($1,$2,$3,'merchant_feed',$4,$5,'submitted') returning id`,
+      [input.feedUrl, input.merchantName, input.contact, input.notes ?? null, input.fingerprint],
+    );
+    const id = submission.rows[0]?.id;
+    if (!id) throw new Error("feed_submission_insert_failed");
+    await client.query(
+      `insert into merchant_feed_submissions(merchant_name,website_url,feed_url,schema_kind,contact,notes,submitter_fingerprint,status)
+       values($1,$2,$3,$4,$5,$6,$7,'submitted')`,
+      [input.merchantName, input.websiteUrl, input.feedUrl, input.schemaKind, input.contact, input.notes ?? null, input.fingerprint],
+    );
+    await client.query(
+      `insert into source_candidates(candidate_url,merchant_name_hint,discovery_kind,submitted_by,status,review_note)
+       values($1,$2,'merchant_feed','merchant','submitted_for_precheck',$3)`,
+      [input.feedUrl, input.merchantName, `source_submission:${id}`],
+    );
+    await client.query("commit");
+    return id;
+  } catch (error) { await client.query("rollback"); throw error; }
+  finally { client.release(); }
 }

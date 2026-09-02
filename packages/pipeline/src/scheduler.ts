@@ -4,6 +4,7 @@ import { sources, sourceSubmissions, type Database } from "@price-radar/database
 export interface DueSource {
   id: string;
   nextRunAt: Date | null;
+  collectorKind: string;
 }
 
 export async function findDueSources(
@@ -12,7 +13,7 @@ export async function findDueSources(
   limit = 100,
 ): Promise<DueSource[]> {
   return db
-    .select({ id: sources.id, nextRunAt: sources.nextRunAt })
+    .select({ id: sources.id, nextRunAt: sources.nextRunAt, collectorKind: sources.collectorKind })
     .from(sources)
     .where(
       and(

@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   crawlRuns,
+  merchantFeedSubmissions,
   merchants,
   sources,
   sourceSubmissions,
@@ -115,10 +116,10 @@ export async function precheckSourceSubmission(
   const source = await db.transaction(async (tx) => {
     const [merchant] = await tx
       .insert(merchants)
-      .values({ name, slug, websiteUrl: identity.canonicalEntryUrl })
+      .values({ name, slug, websiteUrl: identity.canonicalEntryUrl, commercialRelation: selected.collectorKind === "merchant_feed" ? "merchant_direct" : "none" })
       .onConflictDoUpdate({
         target: merchants.slug,
-        set: { name, websiteUrl: identity.canonicalEntryUrl, updatedAt: new Date() },
+        set: { name, websiteUrl: identity.canonicalEntryUrl, ...(selected.collectorKind === "merchant_feed" ? { commercialRelation: "merchant_direct" as const } : {}), updatedAt: new Date() },
       })
       .returning({ id: merchants.id });
     if (!merchant) throw new Error("merchant_upsert_failed");
@@ -163,6 +164,9 @@ export async function precheckSourceSubmission(
         updatedAt: new Date(),
       })
       .where(eq(sourceSubmissions.id, submissionId));
+    if (selected.collectorKind === "merchant_feed") {
+      await tx.update(merchantFeedSubmissions).set({ sourceId: storedSource.id, status: "trial", updatedAt: new Date() }).where(eq(merchantFeedSubmissions.feedUrl, sourceUrl.toString()));
+    }
     return storedSource;
   });
 

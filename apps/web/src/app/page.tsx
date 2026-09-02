@@ -1,4 +1,5 @@
 import { getPublicCatalog, type PublicProductSummary } from "@/lib/public-catalog";
+import { getActiveSponsorships } from "@/lib/public-sponsorships";
 import { SiteHeader } from "./site-header";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ function formatPublishedAt(value: Date | null): string {
 }
 
 export default async function HomePage() {
-  const catalog = await getPublicCatalog();
+  const [catalog, sponsorships] = await Promise.all([getPublicCatalog(), getActiveSponsorships("home_after_hero")]);
 
   return (
     <main>
@@ -68,6 +69,8 @@ export default async function HomePage() {
           <span><b>{formatPublishedAt(catalog.publishedAt)}</b> 最近发布</span>
         </div>
       </section>
+
+      {sponsorships.length > 0 && <aside className="sponsorship-strip" aria-label="赞助内容">{sponsorships.map((item) => <a key={item.id} href={item.destination_url} target="_blank" rel="noopener noreferrer sponsored nofollow"><span>{item.label}</span><b>{item.name}</b><small>{item.disclosure}</small></a>)}</aside>}
 
       <section className="section" aria-labelledby="products-heading">
         <div className="section-heading">

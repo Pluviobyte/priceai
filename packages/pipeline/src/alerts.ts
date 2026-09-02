@@ -185,6 +185,7 @@ export async function deliverNotificationOutbox(
       const timer = setTimeout(() => controller.abort(), 10_000);
       const response = await fetch(webhook, {
         method: "POST",
+        redirect: "error",
         headers: {
           "content-type": "application/json",
           "x-price-radar-signature": createHmac("sha256", config.secret).update(body).digest("hex"),

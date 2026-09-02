@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdminRequest, requestHasSameOrigin } from "@/lib/admin-auth";
+import { getAdminRequestSession, requestHasSameOrigin } from "@/lib/admin-auth";
 import { reviewAdminSubmission } from "@/lib/admin-data";
 
 export async function POST(
@@ -7,7 +7,8 @@ export async function POST(
   { params }: { params: Promise<{ submissionId: string }> },
 ) {
   if (!requestHasSameOrigin(request)) return Response.json({ error: "origin_mismatch" }, { status: 403 });
-  if (!isAdminRequest(request)) return NextResponse.redirect(new URL("/admin/login", request.url), 303);
+  const session = getAdminRequestSession(request);
+  if (!session || !["system_admin", "reviewer"].includes(session.role)) return Response.json({ error: "forbidden" }, { status: 403 });
   const { submissionId } = await params;
   const form = await request.formData();
   const action = form.get("action");
@@ -23,7 +24,7 @@ export async function POST(
       submissionId,
       action,
       reason: reason.trim(),
-      actorId: "admin",
+      actorId: session.sub,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "submission_action_failed";

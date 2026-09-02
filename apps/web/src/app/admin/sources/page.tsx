@@ -65,6 +65,9 @@ export default async function AdminSourcesPage() {
                 <button name="action" value="enable" type="submit">启用</button>
               )}
               <button name="action" value="retry" type="submit">立即重抓</button>
+              <select name="collectorKind" defaultValue={source.collectorKind} aria-label="采集器"><option value="shop_api">Shop API</option><option value="kami">Kami</option><option value="dujiao">独角数卡</option><option value="public_json">通用 JSON</option><option value="merchant_feed">商家 Feed</option><option value="generic_html">通用 HTML</option><option value="browser">浏览器兜底</option></select>
+              <button name="action" value="switch" type="submit">切换采集器</button>
+              <button className="danger" name="action" value="remove" type="submit">标记移除</button>
             </form>
           </article>
         ))}

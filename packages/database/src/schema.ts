@@ -399,6 +399,7 @@ export const publishGenerations = pgTable("publish_generations", {
   productCount: integer("product_count").notNull().default(0),
   sourceCount: integer("source_count").notNull().default(0),
   manifestUrl: text("manifest_url"),
+  manifestHash: text("manifest_hash"),
   previousGenerationId: uuid("previous_generation_id"),
 });
 
@@ -464,6 +465,56 @@ export const offers = pgTable(
       table.canonicalProductId,
       table.availabilityState,
       table.freshnessState,
+      table.price,
+    ),
+    index("offers_generation_product_rank_idx").on(
+      table.publishGenerationId,
+      table.canonicalProductId,
+      table.availabilityState,
+      table.price,
+    ),
+  ],
+);
+
+export const publishedOfferSnapshots = pgTable(
+  "published_offer_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    publishGenerationId: uuid("publish_generation_id")
+      .notNull()
+      .references(() => publishGenerations.id, { onDelete: "cascade" }),
+    offerId: uuid("offer_id").references(() => offers.id, { onDelete: "set null" }),
+    sourceId: uuid("source_id").notNull().references(() => sources.id),
+    sourceItemId: text("source_item_id").notNull(),
+    canonicalProductId: uuid("canonical_product_id").notNull().references(() => canonicalProducts.id),
+    latestRawSnapshotId: uuid("latest_raw_snapshot_id").notNull().references(() => rawOfferSnapshots.id),
+    price: numeric("price", { precision: 20, scale: 6 }).notNull(),
+    currency: text("currency").notNull(),
+    stockCount: integer("stock_count"),
+    stockState: stockStateEnum("stock_state").notNull(),
+    availabilityState: availabilityStateEnum("availability_state").notNull(),
+    freshnessState: freshnessStateEnum("freshness_state").notNull(),
+    riskFacts: jsonb("risk_facts").$type<string[]>().notNull().default([]),
+    offerMode: text("offer_mode").notNull(),
+    productUrl: text("product_url").notNull(),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+    offerVerifiedAt: timestamp("offer_verified_at", { withTimezone: true }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    classificationConfidence: numeric("classification_confidence", { precision: 5, scale: 4 }).notNull(),
+    quarantineReason: text("quarantine_reason"),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("published_offer_snapshot_generation_identity_uidx").on(
+      table.publishGenerationId,
+      table.sourceId,
+      table.sourceItemId,
+    ),
+    index("published_offer_snapshot_generation_rank_idx").on(
+      table.publishGenerationId,
+      table.canonicalProductId,
+      table.availabilityState,
       table.price,
     ),
   ],
@@ -948,4 +999,166 @@ export const transitEvents = pgTable(
       table.startedAt,
     ),
   ],
+);
+
+export const merchantFeedSubmissions = pgTable(
+  "merchant_feed_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    merchantName: text("merchant_name").notNull(),
+    websiteUrl: text("website_url").notNull(),
+    feedUrl: text("feed_url").notNull(),
+    schemaKind: text("schema_kind").notNull().default("auto"),
+    contact: text("contact").notNull(),
+    notes: text("notes"),
+    submitterFingerprint: text("submitter_fingerprint"),
+    status: text("status").notNull().default("submitted"),
+    reviewNote: text("review_note"),
+    sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("merchant_feed_submissions_status_idx").on(table.status),
+    index("merchant_feed_submissions_fingerprint_idx").on(table.submitterFingerprint, table.createdAt),
+  ],
+);
+
+export const discoveryRuns = pgTable(
+  "discovery_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    query: text("query").notNull(),
+    provider: text("provider").notNull(),
+    status: text("status").notNull().default("running"),
+    resultCount: integer("result_count").notNull().default(0),
+    candidateCount: integer("candidate_count").notNull().default(0),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+    errorMessage: text("error_message"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [index("discovery_runs_kind_started_idx").on(table.kind, table.startedAt)],
+);
+
+export const crawlLeases = pgTable(
+  "crawl_leases",
+  {
+    sourceId: uuid("source_id").primaryKey().references(() => sources.id, { onDelete: "cascade" }),
+    hostname: text("hostname").notNull(),
+    platformKind: text("platform_kind").notNull().default("unknown"),
+    platformSlot: integer("platform_slot").notNull().default(0),
+    leaseToken: uuid("lease_token").notNull(),
+    acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("crawl_leases_hostname_uidx").on(table.hostname),
+    uniqueIndex("crawl_leases_platform_slot_uidx").on(table.platformKind, table.platformSlot),
+  ],
+);
+
+export const semanticDuplicateCandidates = pgTable(
+  "semantic_duplicate_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
+    leftSnapshotId: uuid("left_snapshot_id").notNull().references(() => rawOfferSnapshots.id, { onDelete: "cascade" }),
+    rightSnapshotId: uuid("right_snapshot_id").notNull().references(() => rawOfferSnapshots.id, { onDelete: "cascade" }),
+    score: numeric("score", { precision: 5, scale: 4 }).notNull(),
+    signals: jsonb("signals").$type<string[]>().notNull().default([]),
+    status: text("status").notNull().default("candidate"),
+    createdAt,
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("semantic_duplicate_pair_uidx").on(table.leftSnapshotId, table.rightSnapshotId),
+    index("semantic_duplicate_status_idx").on(table.status, table.score),
+  ],
+);
+
+export const llmExtractionCandidates = pgTable(
+  "llm_extraction_candidates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    rawOfferSnapshotId: uuid("raw_offer_snapshot_id").notNull().references(() => rawOfferSnapshots.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    candidate: jsonb("candidate").$type<Record<string, unknown>>().notNull(),
+    confidence: numeric("confidence", { precision: 5, scale: 4 }),
+    status: text("status").notNull().default("candidate"),
+    createdAt,
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("llm_extraction_snapshot_model_prompt_uidx").on(table.rawOfferSnapshotId, table.model, table.promptVersion),
+    index("llm_extraction_status_idx").on(table.status),
+  ],
+);
+
+export const sponsorshipPlacements = pgTable(
+  "sponsorship_placements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    position: text("position").notNull(),
+    label: text("label").notNull().default("赞助"),
+    destinationUrl: text("destination_url").notNull(),
+    imageUrl: text("image_url"),
+    disclosure: text("disclosure").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    status: text("status").notNull().default("draft"),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [index("sponsorship_active_idx").on(table.status, table.position, table.startsAt, table.endsAt)],
+);
+
+export const systemMetricSamples = pgTable(
+  "system_metric_samples",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    service: text("service").notNull(),
+    metric: text("metric").notNull(),
+    value: numeric("value", { precision: 24, scale: 6 }).notNull(),
+    unit: text("unit").notNull(),
+    labels: jsonb("labels").$type<Record<string, string>>().notNull().default({}),
+    sampledAt: timestamp("sampled_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("system_metric_service_metric_time_idx").on(table.service, table.metric, table.sampledAt)],
+);
+
+export const errorEvents = pgTable(
+  "error_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    service: text("service").notNull(),
+    operation: text("operation").notNull(),
+    errorCode: text("error_code").notNull(),
+    message: text("message").notNull(),
+    context: jsonb("context").$type<Record<string, unknown>>().notNull().default({}),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [index("error_events_service_time_idx").on(table.service, table.occurredAt)],
+);
+
+export const operatorJobRequests = pgTable(
+  "operator_job_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("pending"),
+    requestedBy: text("requested_by").notNull(),
+    reason: text("reason").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>(),
+    errorMessage: text("error_message"),
+    createdAt,
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (table) => [index("operator_job_requests_status_idx").on(table.status, table.createdAt)],
 );

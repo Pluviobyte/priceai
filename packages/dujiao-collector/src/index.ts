@@ -175,6 +175,7 @@ export class DujiaoCollector implements CollectorAdapter {
 
   async #json(url: URL, signal: AbortSignal): Promise<DujiaoEnvelope> {
     const response = await fetch(url, {
+      redirect: "error",
       headers: { accept: "application/json", "user-agent": "AIPriceRadar/0.1" },
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
     });

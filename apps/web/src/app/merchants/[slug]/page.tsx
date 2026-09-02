@@ -2,8 +2,15 @@ import { notFound } from "next/navigation";
 import { getPublicMerchant } from "@/lib/public-catalog";
 import { PublicOfferList } from "../../public-offer-list";
 import { SiteHeader } from "../../site-header";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const merchant = await getPublicMerchant(slug);
+  return merchant ? { title: `${merchant.name} 报价与健康度 | AI 价格雷达`, description: `查看 ${merchant.name} 的 AI 订阅报价、来源健康度和最后成功采集时间。`, alternates: { canonical: `/merchants/${merchant.slug}` } } : { title: "商家未找到" };
+}
 
 function date(value: Date | null): string { return value ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short" }).format(value) : "—"; }
 

@@ -88,6 +88,22 @@ export async function publishLatestSnapshots(
       .where(eq(publicationChannels.channel, channel))
       .limit(1);
     const previousGenerationId = publication?.currentGenerationId ?? null;
+    if (previousGenerationId) {
+      await tx.execute(sql`
+        insert into published_offer_snapshots (
+          publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+          latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
+          freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
+          offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
+        )
+        select ${previousGenerationId}::uuid,id,source_id,source_item_id,canonical_product_id,
+          latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
+          freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
+          offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}
+        from offers where publish_generation_id=${previousGenerationId}::uuid
+        on conflict (publish_generation_id,source_id,source_item_id) do nothing
+      `);
+    }
     const [generation] = await tx
       .insert(publishGenerations)
       .values({ status: "staging", previousGenerationId })
@@ -417,6 +433,20 @@ export async function publishLatestSnapshots(
     if (offerCount === 0 && !options.allowEmpty) {
       throw new Error("publish_refused_no_classified_offers");
     }
+    await tx.execute(sql`
+      insert into published_offer_snapshots (
+        publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+        latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
+        freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
+        offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
+      )
+      select ${generation.id}::uuid,id,source_id,source_item_id,canonical_product_id,
+        latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
+        freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
+        offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}
+      from offers where publish_generation_id=${generation.id}::uuid
+      on conflict (publish_generation_id,source_id,source_item_id) do nothing
+    `);
     await tx
       .update(publishGenerations)
       .set({

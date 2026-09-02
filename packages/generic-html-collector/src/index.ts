@@ -23,6 +23,7 @@ interface ParsedHtmlOffer {
 }
 
 export interface GenericHtmlCollectorOptions {
+  kind?: "generic_html" | "custom_html";
   requestTimeoutMs?: number;
   maxDocumentBytes?: number;
   maxProductLinks?: number;
@@ -155,13 +156,14 @@ function asParsedOffer(value: unknown): ParsedHtmlOffer {
 }
 
 export class GenericHtmlCollector implements CollectorAdapter {
-  readonly kind = "generic_html";
+  readonly kind: "generic_html" | "custom_html";
   readonly #requestTimeoutMs: number;
   readonly #maxDocumentBytes: number;
   readonly #maxProductLinks: number;
   readonly #concurrency: number;
 
   constructor(options: GenericHtmlCollectorOptions = {}) {
+    this.kind = options.kind ?? "generic_html";
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.#maxDocumentBytes = options.maxDocumentBytes ?? 2_000_000;
     this.#maxProductLinks = options.maxProductLinks ?? 80;
@@ -170,6 +172,7 @@ export class GenericHtmlCollector implements CollectorAdapter {
 
   async #html(url: URL, signal: AbortSignal): Promise<string> {
     const response = await fetch(url, {
+      redirect: "error",
       headers: { accept: "text/html", "user-agent": "AIPriceRadar/0.1" },
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
     });
@@ -202,7 +205,7 @@ export class GenericHtmlCollector implements CollectorAdapter {
       if (evidence.length === 0) {
         return {
           supported: false,
-          collectorKind: "generic_html",
+          collectorKind: this.kind,
           confidence: 0.1,
           evidence,
           reason: "no_machine_readable_products",
@@ -211,10 +214,10 @@ export class GenericHtmlCollector implements CollectorAdapter {
       const $ = cheerio.load(html);
       return {
         supported: true,
-        collectorKind: "generic_html",
+        collectorKind: this.kind,
         confidence: evidence.includes("json_ld_product") ? 0.8 : 0.65,
         identity: {
-          platformKind: "generic_html",
+          platformKind: this.kind,
           platformMerchantId: sourceUrl.hostname.toLowerCase(),
           canonicalEntryUrl: new URL("/", sourceUrl.origin).toString(),
           merchantName: $("title").first().text().replace(/\s+/g, " ").trim() || sourceUrl.hostname,
@@ -224,7 +227,7 @@ export class GenericHtmlCollector implements CollectorAdapter {
     } catch (error) {
       return {
         supported: false,
-        collectorKind: "generic_html",
+        collectorKind: this.kind,
         confidence: 0,
         evidence: [],
         reason: error instanceof Error ? error.message : "generic_html_probe_failed",

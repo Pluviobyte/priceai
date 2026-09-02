@@ -173,6 +173,7 @@ export class LdxpShopApiCollector implements CollectorAdapter {
     const timeoutSignal = AbortSignal.timeout(this.#requestTimeoutMs);
     const response = await fetch(new URL(path, origin), {
       method: "POST",
+      redirect: "error",
       headers: {
         accept: "application/json",
         "content-type": "application/json",

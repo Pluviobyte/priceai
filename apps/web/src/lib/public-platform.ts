@@ -45,7 +45,7 @@ export async function getPublicHealth(): Promise<PublicHealthSummary> {
          from crawl_runs where created_at > now() - interval '24 hours'
      ), offer_stats as (
        select count(*) current_offer_count,
-              count(*) filter (where freshness_state='stale') stale_offer_count
+              count(*) filter (where offer_verified_at<=now()-interval '24 hours') stale_offer_count
          from offers o,publication p where o.publish_generation_id=p.generation_id
      ), anomaly_stats as (
        select count(*) open_anomaly_count from offer_anomalies where status='open'

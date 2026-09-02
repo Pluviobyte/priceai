@@ -44,6 +44,7 @@ export default async function AdminPage() {
             <span className="section-kicker">分类队列</span>
             <h2>逐条确认商品归属</h2>
           </div>
+          <a href="/api/admin/classification-rule-patch">导出人工判断规则补丁 JSON</a>
         </div>
         {dashboard.reviews.length > 0 ? (
           <form className="batch-review" action="/api/admin/reviews/batch" method="post">

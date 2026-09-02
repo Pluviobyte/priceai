@@ -515,7 +515,8 @@ export async function getAdminSources(): Promise<AdminSourceRow[]> {
 
 export async function updateAdminSource(input: {
   sourceId: string;
-  action: "enable" | "pause" | "retry";
+  action: "enable" | "pause" | "retry" | "remove" | "switch";
+  collectorKind?: string;
   reason: string;
   actorId: string;
 }): Promise<void> {
@@ -526,17 +527,19 @@ export async function updateAdminSource(input: {
       enabled: boolean;
       health_status: string;
       next_run_at: Date | null;
-    }>("select enabled, health_status, next_run_at from sources where id=$1 for update", [input.sourceId]);
+      collector_kind: string;
+    }>("select enabled, health_status, next_run_at,collector_kind from sources where id=$1 for update", [input.sourceId]);
     const current = currentResult.rows[0];
     if (!current) throw new Error("source_not_found");
-    const enabled = input.action !== "pause";
-    const healthStatus = input.action === "pause" ? "paused" : "retrying";
-    const nextRunAt = input.action === "pause" ? current.next_run_at : new Date();
+    const enabled = input.action === "remove" ? false : input.action === "pause" ? false : input.action === "switch" ? current.enabled : true;
+    const healthStatus = input.action === "remove" ? "removed" : input.action === "pause" ? "paused" : input.action === "switch" ? current.health_status : "retrying";
+    const nextRunAt = input.action === "remove" ? null : input.action === "pause" || input.action === "switch" ? current.next_run_at : new Date();
+    const collectorKind = input.action === "switch" ? input.collectorKind ?? current.collector_kind : current.collector_kind;
     await client.query(
       `update sources
-          set enabled=$2, health_status=$3, next_run_at=$4, updated_at=now()
+          set enabled=$2, health_status=$3, next_run_at=$4,collector_kind=$5,updated_at=now()
         where id=$1`,
-      [input.sourceId, enabled, healthStatus, nextRunAt],
+      [input.sourceId, enabled, healthStatus, nextRunAt, collectorKind],
     );
     await client.query(
       `insert into audit_logs
@@ -548,7 +551,7 @@ export async function updateAdminSource(input: {
         input.sourceId,
         input.reason,
         JSON.stringify(current),
-        JSON.stringify({ enabled, healthStatus, nextRunAt }),
+        JSON.stringify({ enabled, healthStatus, nextRunAt, collectorKind }),
       ],
     );
     await client.query("commit");
@@ -759,6 +762,11 @@ export async function reviewAdminSubmission(input: {
           where id=$1`,
         [input.submissionId, input.actorId],
       );
+      await client.query(
+        `update merchant_feed_submissions mfs set status='approved',source_id=$2,review_note=$3,updated_at=now()
+          from source_submissions ss where ss.id=$1 and mfs.feed_url=ss.url`,
+        [input.submissionId, current.source_id, input.reason],
+      );
     } else {
       nextStatus = "rejected";
       await client.query(
@@ -766,6 +774,11 @@ export async function reviewAdminSubmission(input: {
             set status='rejected',reviewed_by=$2,reviewed_at=now(),updated_at=now()
           where id=$1`,
         [input.submissionId, input.actorId],
+      );
+      await client.query(
+        `update merchant_feed_submissions mfs set status='rejected',review_note=$2,updated_at=now()
+          from source_submissions ss where ss.id=$1 and mfs.feed_url=ss.url`,
+        [input.submissionId, input.reason],
       );
     }
     await client.query(
@@ -866,4 +879,221 @@ export async function resolveAdminReport(input: {
   } finally {
     client.release();
   }
+}
+
+export interface AdminGeneration {
+  id: string;
+  status: string;
+  publishedAt: Date | null;
+  offerCount: number;
+  productCount: number;
+  sourceCount: number;
+  previousGenerationId: string | null;
+  manifestUrl: string | null;
+  manifestHash: string | null;
+  isCurrent: boolean;
+  snapshotCount: number;
+  addedCount: number;
+  removedCount: number;
+  changedCount: number;
+}
+
+interface GenerationRow {
+  id: string; status: string; published_at: Date | null; offer_count: number;
+  product_count: number; source_count: number; previous_generation_id: string | null;
+  manifest_url: string | null; manifest_hash: string | null; is_current: boolean;
+  snapshot_count: string; added_count: string; removed_count: string; changed_count: string;
+}
+
+export async function getAdminGenerations(channel = "card_prices"): Promise<AdminGeneration[]> {
+  const rows = await query<GenerationRow>(
+    `select g.id,g.status,g.published_at,g.offer_count,g.product_count,g.source_count,
+            g.previous_generation_id,g.manifest_url,g.manifest_hash,
+            (pc.current_generation_id=g.id) as is_current,
+            (select count(*) from published_offer_snapshots s where s.publish_generation_id=g.id)::text snapshot_count,
+            (select count(*) from published_offer_snapshots s
+              where s.publish_generation_id=g.id and not exists (
+                select 1 from published_offer_snapshots p where p.publish_generation_id=g.previous_generation_id
+                and p.source_id=s.source_id and p.source_item_id=s.source_item_id))::text added_count,
+            (select count(*) from published_offer_snapshots p
+              where p.publish_generation_id=g.previous_generation_id and not exists (
+                select 1 from published_offer_snapshots s where s.publish_generation_id=g.id
+                and s.source_id=p.source_id and s.source_item_id=p.source_item_id))::text removed_count,
+            (select count(*) from published_offer_snapshots s join published_offer_snapshots p
+              on p.publish_generation_id=g.previous_generation_id and p.source_id=s.source_id and p.source_item_id=s.source_item_id
+              where s.publish_generation_id=g.id and (s.price,s.currency,s.stock_state,s.availability_state)
+                is distinct from (p.price,p.currency,p.stock_state,p.availability_state))::text changed_count
+       from publish_generations g
+       left join publication_channels pc on pc.channel=$1
+      order by g.generated_at desc limit 60`,
+    [channel],
+  );
+  return rows.map((row) => ({ id: row.id, status: row.status, publishedAt: row.published_at, offerCount: row.offer_count, productCount: row.product_count, sourceCount: row.source_count, previousGenerationId: row.previous_generation_id, manifestUrl: row.manifest_url, manifestHash: row.manifest_hash, isCurrent: row.is_current, snapshotCount: Number(row.snapshot_count), addedCount: Number(row.added_count), removedCount: Number(row.removed_count), changedCount: Number(row.changed_count) }));
+}
+
+export async function rollbackAdminGeneration(input: { generationId: string; reason: string; actorId: string; channel?: string }): Promise<number> {
+  const channel = input.channel ?? "card_prices";
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const pointerResult = await client.query<{ current_generation_id: string }>("select current_generation_id from publication_channels where channel=$1 for update", [channel]);
+    const current = pointerResult.rows[0]?.current_generation_id;
+    if (!current) throw new Error("publication_channel_empty");
+    if (current === input.generationId) throw new Error("generation_already_current");
+    const eligible = await client.query("select id from publish_generations where id=$1 and status in ('published','superseded')", [input.generationId]);
+    if (!eligible.rowCount) throw new Error("generation_not_rollback_eligible");
+    const snapshot = await client.query<{ count: string }>("select count(*)::text count from published_offer_snapshots where publish_generation_id=$1", [input.generationId]);
+    const count = Number(snapshot.rows[0]?.count ?? 0);
+    if (!count) throw new Error("generation_snapshot_missing");
+    await client.query("update offers set publish_generation_id=null,updated_at=now() where publish_generation_id=$1", [current]);
+    await client.query(
+      `insert into offers (source_id,source_item_id,canonical_product_id,latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,publish_generation_id,created_at,updated_at)
+       select source_id,source_item_id,canonical_product_id,latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,$1,now(),now()
+         from published_offer_snapshots where publish_generation_id=$1
+       on conflict (source_id,source_item_id) do update set canonical_product_id=excluded.canonical_product_id,latest_raw_snapshot_id=excluded.latest_raw_snapshot_id,price=excluded.price,currency=excluded.currency,stock_count=excluded.stock_count,stock_state=excluded.stock_state,availability_state=excluded.availability_state,freshness_state=excluded.freshness_state,risk_facts=excluded.risk_facts,offer_mode=excluded.offer_mode,product_url=excluded.product_url,first_seen_at=excluded.first_seen_at,last_seen_at=excluded.last_seen_at,offer_verified_at=excluded.offer_verified_at,last_checked_at=excluded.last_checked_at,classification_confidence=excluded.classification_confidence,quarantine_reason=excluded.quarantine_reason,publish_generation_id=excluded.publish_generation_id,updated_at=now()`,
+      [input.generationId],
+    );
+    await client.query("update publish_generations set status='superseded' where id=$1", [current]);
+    await client.query("update publish_generations set status='published' where id=$1", [input.generationId]);
+    await client.query("update publication_channels set current_generation_id=$2,previous_generation_id=$3,updated_at=now() where channel=$1", [channel, input.generationId, current]);
+    await client.query(
+      `insert into audit_logs(actor_id,action,target_type,target_id,reason,before_value,after_value)
+       values($1,'publication.rollback','publish_generation',$2,$3,$4::jsonb,$5::jsonb)`,
+      [input.actorId, input.generationId, input.reason, JSON.stringify({ currentGenerationId: current }), JSON.stringify({ currentGenerationId: input.generationId, restoredOffers: count })],
+    );
+    await client.query("commit");
+    return count;
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function getAdminQualityReport() {
+  const [summary] = await query<Record<string, string | number | null>>(
+    `with current as (select current_generation_id id from publication_channels where channel='card_prices')
+     select
+       (select count(*) from sources)::text source_count,
+       (select count(*) from sources where enabled)::text enabled_source_count,
+       (select count(*) from canonical_products where status='active')::text product_count,
+       (select count(distinct canonical_product_id) from offers o,current c where o.publish_generation_id=c.id)::text covered_product_count,
+       (select count(*) from offers o,current c where o.publish_generation_id=c.id)::text offer_count,
+       (select count(*) from offers o,current c where o.publish_generation_id=c.id and o.freshness_state='stale')::text stale_offer_count,
+       (select count(*) from offer_anomalies where status='open')::text open_anomaly_count,
+       (select count(*) from offer_matches where review_status='pending')::text pending_review_count,
+       (select count(*) from semantic_duplicate_candidates where status='candidate')::text duplicate_candidate_count,
+       (select count(*) from llm_extraction_candidates where status='candidate')::text llm_candidate_count,
+       (select count(*) from crawl_runs where created_at>now()-interval '24 hours')::text runs_24h,
+       (select count(*) from crawl_runs where created_at>now()-interval '24 hours' and complete_snapshot)::text complete_runs_24h,
+       (select count(*) from crawl_runs where created_at>now()-interval '24 hours' and status='failed')::text failed_runs_24h,
+       (select count(*) from audit_logs where action like 'classification.%')::text reviewed_decisions,
+       (select count(*) from audit_logs where action in ('classification.correct','classification.reject','classification.batch_correct','classification.batch_reject'))::text corrected_decisions`,
+  );
+  const merchants = await query<{ merchant_name: string; merchant_slug: string; offer_count: string; product_count: string; clicks_30d: string; last_success_at: Date | null }>(
+    `select m.name merchant_name,m.slug merchant_slug,count(distinct o.id)::text offer_count,
+            count(distinct o.canonical_product_id)::text product_count,
+            coalesce(sum(c.click_count),0)::text clicks_30d,max(s.last_success_at) last_success_at
+       from merchants m left join sources s on s.merchant_id=m.id
+       left join offers o on o.source_id=s.id
+       left join outbound_click_daily c on c.offer_id=o.id and c.day>=current_date-29
+      group by m.id order by coalesce(sum(c.click_count),0) desc,m.name`,
+  );
+  return { summary: Object.fromEntries(Object.entries(summary ?? {}).map(([key, value]) => [key, Number(value ?? 0)])), merchants };
+}
+
+export interface AdminSponsorship { id: string; name: string; position: string; label: string; destinationUrl: string; imageUrl: string | null; disclosure: string; startsAt: Date; endsAt: Date; status: string; }
+
+export async function getAdminSponsorships(): Promise<AdminSponsorship[]> {
+  const rows = await query<{ id: string; name: string; position: string; label: string; destination_url: string; image_url: string | null; disclosure: string; starts_at: Date; ends_at: Date; status: string }>("select id,name,position,label,destination_url,image_url,disclosure,starts_at,ends_at,status from sponsorship_placements order by created_at desc");
+  return rows.map((row) => ({ id: row.id, name: row.name, position: row.position, label: row.label, destinationUrl: row.destination_url, imageUrl: row.image_url, disclosure: row.disclosure, startsAt: row.starts_at, endsAt: row.ends_at, status: row.status }));
+}
+
+export async function saveAdminSponsorship(input: { id?: string; name: string; position: string; label: string; destinationUrl: string; imageUrl?: string; disclosure: string; startsAt: Date; endsAt: Date; status: "draft" | "active" | "paused" | "archived"; actorId: string }) {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const result = input.id
+      ? await client.query<{ id: string }>("update sponsorship_placements set name=$2,position=$3,label=$4,destination_url=$5,image_url=$6,disclosure=$7,starts_at=$8,ends_at=$9,status=$10,updated_at=now() where id=$1 returning id", [input.id,input.name,input.position,input.label,input.destinationUrl,input.imageUrl ?? null,input.disclosure,input.startsAt,input.endsAt,input.status])
+      : await client.query<{ id: string }>("insert into sponsorship_placements(name,position,label,destination_url,image_url,disclosure,starts_at,ends_at,status) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id", [input.name,input.position,input.label,input.destinationUrl,input.imageUrl ?? null,input.disclosure,input.startsAt,input.endsAt,input.status]);
+    const id = result.rows[0]?.id; if (!id) throw new Error("sponsorship_save_failed");
+    await client.query("insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value) values($1,'sponsorship.save','sponsorship',$2,'admin sponsorship management',$3::jsonb)", [input.actorId,id,JSON.stringify({ ...input, actorId: undefined })]);
+    await client.query("commit"); return id;
+  } catch (error) { await client.query("rollback"); throw error; }
+  finally { client.release(); }
+}
+
+export interface AdminDiscoveryCandidate { id: string; candidateUrl: string; merchantNameHint: string | null; discoveryKind: string; discoveryUrl: string | null; status: string; reviewNote: string | null; discoveredAt: Date; }
+
+export async function getAdminDiscoveryCandidates(): Promise<AdminDiscoveryCandidate[]> {
+  const rows = await query<{ id: string; candidate_url: string; merchant_name_hint: string | null; discovery_kind: string; discovery_url: string | null; status: string; review_note: string | null; discovered_at: Date }>(
+    `select id,candidate_url,merchant_name_hint,discovery_kind,discovery_url,status,review_note,discovered_at
+       from source_candidates where status in ('pending','adapter_needed') order by discovered_at desc limit 300`,
+  );
+  return rows.map((row) => ({ id: row.id, candidateUrl: row.candidate_url, merchantNameHint: row.merchant_name_hint, discoveryKind: row.discovery_kind, discoveryUrl: row.discovery_url, status: row.status, reviewNote: row.review_note, discoveredAt: row.discovered_at }));
+}
+
+export async function reviewSourceCandidate(input: { candidateId: string; action: "precheck" | "adapter" | "reject"; reason: string; actorId: string }): Promise<void> {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query<{ candidate_url: string; merchant_name_hint: string | null; status: string }>("select candidate_url,merchant_name_hint,status from source_candidates where id=$1 for update", [input.candidateId]);
+    const candidate = result.rows[0];
+    if (!candidate) throw new Error("candidate_not_found");
+    let submissionId: string | null = null;
+    const nextStatus = input.action === "precheck" ? "submitted_for_precheck" : input.action === "adapter" ? "adapter_needed" : "rejected";
+    if (input.action === "precheck") {
+      const inserted = await client.query<{ id: string }>(
+        `insert into source_submissions(url,name,notes,status)
+         values($1,$2,$3,'submitted') returning id`,
+        [candidate.candidate_url, candidate.merchant_name_hint, `发现候选转入预检：${input.reason}`],
+      );
+      submissionId = inserted.rows[0]?.id ?? null;
+    }
+    await client.query("update source_candidates set status=$2,review_note=$3,reviewed_at=now() where id=$1", [input.candidateId, nextStatus, input.reason]);
+    await client.query(
+      `insert into audit_logs(actor_id,action,target_type,target_id,reason,before_value,after_value)
+       values($1,$2,'source_candidate',$3,$4,$5::jsonb,$6::jsonb)`,
+      [input.actorId, `source_candidate.${input.action}`, input.candidateId, input.reason, JSON.stringify(candidate), JSON.stringify({ status: nextStatus, submissionId })],
+    );
+    await client.query("commit");
+  } catch (error) { await client.query("rollback"); throw error; }
+  finally { client.release(); }
+}
+
+export async function getClassificationRulePatch() {
+  const rules = await query<{ source_id: string; source_item_id: string; raw_title: string; decision: string; product_slug: string | null; reason: string; updated_at: Date }>(
+    `select co.source_id,co.source_item_id,ros.raw_title,co.decision,cp.slug product_slug,co.reason,co.updated_at
+       from classification_overrides co
+       left join canonical_products cp on cp.id=co.canonical_product_id
+       left join lateral (select raw_title from raw_offer_snapshots where source_id=co.source_id and source_item_id=co.source_item_id order by captured_at desc limit 1) ros on true
+      where co.active order by co.updated_at desc`,
+  );
+  return { schemaVersion: 1, generatedAt: new Date().toISOString(), mode: "candidate_only", rules: rules.map((row) => ({ sourceId: row.source_id, sourceItemId: row.source_item_id, exampleTitle: row.raw_title, decision: row.decision, canonicalProductSlug: row.product_slug, rationale: row.reason, updatedAt: row.updated_at })) };
+}
+
+export async function getAdminAuditLog() {
+  return query<{ id: string; actor_id: string; action: string; target_type: string; target_id: string; reason: string; before_value: unknown; after_value: unknown; created_at: Date }>(
+    `select id,actor_id,action,target_type,target_id,reason,before_value,after_value,created_at
+       from audit_logs order by created_at desc limit 500`,
+  );
+}
+
+export async function requestAdminPublication(input: { actorId: string; reason: string }): Promise<string> {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const pending = await client.query("select id from operator_job_requests where kind='publish' and status in ('pending','running') limit 1");
+    if (pending.rowCount) throw new Error("publication_already_queued");
+    const result = await client.query<{ id: string }>("insert into operator_job_requests(kind,requested_by,reason) values('publish',$1,$2) returning id", [input.actorId, input.reason]);
+    const id = result.rows[0]?.id;
+    if (!id) throw new Error("publication_request_failed");
+    await client.query("insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value) values($1,'publication.request','operator_job',$2,$3,$4::jsonb)", [input.actorId,id,input.reason,JSON.stringify({ status: "pending" })]);
+    await client.query("commit");
+    return id;
+  } catch (error) { await client.query("rollback"); throw error; }
+  finally { client.release(); }
+}
+
+export async function getAdminPublicationRequests() {
+  return query<{ id: string; status: string; requested_by: string; reason: string; error_message: string | null; created_at: Date; finished_at: Date | null }>("select id,status,requested_by,reason,error_message,created_at,finished_at from operator_job_requests where kind='publish' order by created_at desc limit 20");
 }

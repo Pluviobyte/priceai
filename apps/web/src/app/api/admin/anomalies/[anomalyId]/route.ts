@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAdminRequest, requestHasSameOrigin } from "@/lib/admin-auth";
+import { getAdminRequestSession, requestHasSameOrigin } from "@/lib/admin-auth";
 import { resolveAdminAnomaly } from "@/lib/admin-data";
 
 export async function POST(
@@ -7,7 +7,8 @@ export async function POST(
   { params }: { params: Promise<{ anomalyId: string }> },
 ) {
   if (!requestHasSameOrigin(request)) return Response.json({ error: "origin_mismatch" }, { status: 403 });
-  if (!isAdminRequest(request)) return NextResponse.redirect(new URL("/admin/login", request.url), 303);
+  const session = getAdminRequestSession(request);
+  if (!session || !["system_admin", "reviewer"].includes(session.role)) return Response.json({ error: "forbidden" }, { status: 403 });
   const { anomalyId } = await params;
   const form = await request.formData();
   const action = form.get("action");
@@ -23,7 +24,7 @@ export async function POST(
     anomalyId,
     action,
     reason: reason.trim(),
-    actorId: "admin",
+    actorId: session.sub,
   });
   return NextResponse.redirect(new URL("/admin/anomalies", request.url), 303);
 }

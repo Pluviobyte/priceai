@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @price-radar/web",
     "dev:worker": "npm run dev --workspace @price-radar/worker",
+    "dev:browser-worker": "npm run dev --workspace @price-radar/browser-worker",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -23,4 +24,3 @@
     "npm": ">=10"
   }
 }
-

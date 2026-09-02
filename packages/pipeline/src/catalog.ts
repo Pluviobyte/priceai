@@ -1,4 +1,5 @@
-import { and, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, eq, sql } from "drizzle-orm";
 import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   crawlRuns,
@@ -8,6 +9,7 @@ import {
 } from "@price-radar/database";
 import { sourceIdentitySchema, type CatalogPage, type RawOfferInput } from "@price-radar/schema";
 import { nextFailedRun, nextHealthyRun } from "./source-health.js";
+import { detectSemanticDuplicatesForRun } from "./quality.js";
 
 export interface CrawlSourceOptions {
   now?: Date;
@@ -29,6 +31,28 @@ export interface CrawlSourceResult {
   completeSnapshot: boolean;
   fetchedTotal: number;
   parsedTotal: number;
+}
+
+function transientCollectorError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:http_(?:429|5\d\d)|timeout|timed out|fetch failed|ECONNRESET|EAI_AGAIN|UND_ERR_CONNECT)/i.test(message);
+}
+
+async function withTransientRetry<T>(work: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try { return await work(); }
+    catch (error) {
+      last = error;
+      if (attempt === 2 || !transientCollectorError(error) || signal.aborted) throw error;
+      const delay = Math.round(250 * 2 ** attempt * (0.8 + Math.random() * 0.4));
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, delay);
+        signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+      });
+    }
+  }
+  throw last;
 }
 
 async function insertSnapshots(
@@ -68,7 +92,7 @@ async function insertSnapshots(
   }
 }
 
-export async function crawlSource(
+async function crawlSourceUnlocked(
   db: Database,
   registry: CollectorRegistry,
   sourceId: string,
@@ -76,7 +100,9 @@ export async function crawlSource(
 ): Promise<CrawlSourceResult> {
   const startedAt = options.now ?? new Date();
   const maxPages = options.maxPages ?? 1_000;
-  const signal = options.signal ?? new AbortController().signal;
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, AbortSignal.timeout(5 * 60_000)])
+    : AbortSignal.timeout(5 * 60_000);
   const [source] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!source) throw new Error(`source_not_found:${sourceId}`);
   if (!source.enabled && !options.allowDisabled) throw new Error(`source_disabled:${sourceId}`);
@@ -109,7 +135,7 @@ export async function crawlSource(
 
     do {
       if (pages.length >= maxPages) throw new Error("catalog_page_limit_exceeded");
-      const page = await adapter.fetchCatalog(identity, context, cursor);
+      const page = await withTransientRetry(() => adapter.fetchCatalog(identity, context, cursor), signal);
       pages.push(page);
       for (const item of page.items) {
         const normalized = adapter.normalizeItem(item, context);
@@ -137,8 +163,19 @@ export async function crawlSource(
       : null;
     const finishedAt = new Date();
     const primaryError = validation.issues.find((issue) => issue.severity === "error");
+    let adaptiveIntervalMs = options.successIntervalMs;
+    if (adaptiveIntervalMs === undefined && source.latestCompleteRunId) {
+      const previous = await db.select({ sourceItemId: rawOfferSnapshots.sourceItemId, rawPayloadHash: rawOfferSnapshots.rawPayloadHash }).from(rawOfferSnapshots).where(eq(rawOfferSnapshots.crawlRunId, source.latestCompleteRunId));
+      const previousById = new Map(previous.map((item) => [item.sourceItemId, item.rawPayloadHash]));
+      let changed = 0;
+      for (const offer of offers) if (previousById.get(offer.sourceItemId) !== offer.rawPayloadHash) changed += 1;
+      for (const item of previous) if (!normalizedById.has(item.sourceItemId)) changed += 1;
+      const denominator = Math.max(1, new Set([...previous.map((item) => item.sourceItemId), ...offers.map((item) => item.sourceItemId)]).size);
+      const changeRate = changed / denominator;
+      adaptiveIntervalMs = changeRate >= 0.2 ? 15 * 60_000 : changeRate >= 0.05 ? 30 * 60_000 : changeRate > 0 ? 60 * 60_000 : 4 * 60 * 60_000;
+    }
     const health = validation.completeSnapshot
-      ? nextHealthyRun(finishedAt, options.successIntervalMs)
+      ? nextHealthyRun(finishedAt, adaptiveIntervalMs)
       : nextFailedRun(finishedAt, source.consecutiveFailures);
 
     await db.transaction(async (tx) => {
@@ -190,6 +227,11 @@ export async function crawlSource(
       }
     });
 
+    if (validation.completeSnapshot) {
+      // Duplicate scoring is advisory. A quality-side failure must never turn a
+      // fully persisted source snapshot into a failed crawl or trigger backoff.
+      await detectSemanticDuplicatesForRun(db, sourceId, run.id).catch(() => 0);
+    }
     const finalStatus = validation.status === "success"
       ? "success"
       : validation.status === "partial"
@@ -224,5 +266,33 @@ export async function crawlSource(
       }
     });
     throw error;
+  }
+}
+
+export async function crawlSource(
+  db: Database,
+  registry: CollectorRegistry,
+  sourceId: string,
+  options: CrawlSourceOptions = {},
+): Promise<CrawlSourceResult> {
+  const [source] = await db.select({ canonicalEntryUrl: sources.canonicalEntryUrl, platformKind: sources.platformKind }).from(sources).where(eq(sources.id, sourceId)).limit(1);
+  if (!source) throw new Error(`source_not_found:${sourceId}`);
+  const hostname = new URL(source.canonicalEntryUrl).hostname.toLowerCase();
+  const leaseToken = randomUUID();
+  await db.execute(sql`delete from crawl_leases where expires_at<=now()`);
+  let acquired = false;
+  for (let platformSlot = 0; platformSlot < 4 && !acquired; platformSlot += 1) {
+    const result = await db.execute(sql`
+      insert into crawl_leases(source_id,hostname,platform_kind,platform_slot,lease_token,expires_at)
+      values(${sourceId}::uuid,${hostname},${source.platformKind},${platformSlot},${leaseToken}::uuid,now()+interval '30 minutes')
+      on conflict do nothing returning lease_token
+    `);
+    acquired = result.rows.length > 0;
+  }
+  if (!acquired) throw new Error("crawl_already_running_or_host_busy");
+  try {
+    return await crawlSourceUnlocked(db, registry, sourceId, options);
+  } finally {
+    await db.execute(sql`delete from crawl_leases where source_id=${sourceId}::uuid and lease_token=${leaseToken}::uuid`);
   }
 }

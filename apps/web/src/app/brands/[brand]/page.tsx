@@ -1,7 +1,14 @@
 import { getProductSummaries } from "@/lib/public-catalog";
 import { SiteHeader } from "../../site-header";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ brand: string }> }): Promise<Metadata> {
+  const { brand } = await params;
+  const label = decodeURIComponent(brand);
+  return { title: `${label} AI 订阅比价 | AI 价格雷达`, description: `浏览 ${label} 的标准 AI 订阅产品和可核验报价。`, alternates: { canonical: `/brands/${encodeURIComponent(brand)}` } };
+}
 
 export default async function BrandPage({ params }: { params: Promise<{ brand: string }> }) {
   const { brand } = await params;

@@ -18,7 +18,7 @@ export function readWorkerConfig(
 ): WorkerConfig {
   return {
     databaseUrl:
-      env.DATABASE_URL ??
+      env.WORKER_DATABASE_URL ?? env.DATABASE_URL ??
       "postgresql://price_radar:price_radar@127.0.0.1:5433/price_radar",
     redisUrl: env.REDIS_URL ?? "redis://localhost:6379",
     concurrency: Number(env.WORKER_CONCURRENCY ?? 4),

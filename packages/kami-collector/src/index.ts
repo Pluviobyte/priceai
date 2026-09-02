@@ -92,6 +92,7 @@ export class KamiCollector implements CollectorAdapter {
 
   async #get(url: URL, signal: AbortSignal): Promise<Response> {
     const response = await fetch(url, {
+      redirect: "error",
       headers: { accept: "application/json,text/html", "user-agent": "AIPriceRadar/0.1" },
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
     });

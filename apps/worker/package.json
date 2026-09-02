@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "@price-radar/classifier": "*",
-    "@price-radar/browser-collector": "*",
     "@price-radar/collector-sdk": "*",
     "@price-radar/database": "*",
     "@price-radar/dujiao-collector": "*",
     "@price-radar/generic-html-collector": "*",
     "@price-radar/kami-collector": "*",
+    "@price-radar/json-feed-collector": "*",
     "@price-radar/object-storage": "*",
     "@price-radar/pipeline": "*",
     "@price-radar/price-channels": "*",
@@ -25,6 +25,7 @@
     "@price-radar/schema": "*",
     "@price-radar/shop-api-collector": "*",
     "bullmq": "6.0.0",
+    "drizzle-orm": "0.45.2",
     "ioredis": "6.0.0",
     "pino": "10.3.1"
   },

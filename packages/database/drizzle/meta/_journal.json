@@ -71,6 +71,34 @@
       "when": 1788374086358,
       "tag": "0009_panoramic_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788374819035,
+      "tag": "0010_perfect_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788374830554,
+      "tag": "0011_slimy_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788376440909,
+      "tag": "0012_spotty_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788376548252,
+      "tag": "0013_plain_micromax",
+      "breakpoints": true
     }
   ]
 }

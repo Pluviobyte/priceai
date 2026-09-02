@@ -1,0 +1,1 @@
+ALTER TABLE "publish_generations" ADD COLUMN "manifest_hash" text;

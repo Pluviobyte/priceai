@@ -19,3 +19,14 @@ export function publicApiResponse(body: unknown): NextResponse {
     },
   });
 }
+
+export function parsePagination(request: Request, maximum = 100): { limit: number; offset: number; page: number } {
+  const params = new URL(request.url).searchParams;
+  const limit = Math.min(maximum, Math.max(1, Number.parseInt(params.get("limit") ?? "50", 10) || 50));
+  const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
+  return { limit, page, offset: (page - 1) * limit };
+}
+
+export function paginated<T>(items: T[], pagination: { limit: number; offset: number; page: number }) {
+  return { data: items.slice(pagination.offset, pagination.offset + pagination.limit), pagination: { page: pagination.page, limit: pagination.limit, total: items.length, hasNext: pagination.offset + pagination.limit < items.length } };
+}

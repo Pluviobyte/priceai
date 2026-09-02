@@ -63,6 +63,10 @@ export class BrowserCollector implements CollectorAdapter {
       waitUntil: "domcontentloaded",
       timeout: this.#navigationTimeoutMs,
     });
+    const requested = new URL(url);
+    const final = new URL(page.url());
+    if (final.protocol !== "https:" && final.protocol !== "http:") throw new Error("browser_redirect_protocol_rejected");
+    if (final.hostname !== requested.hostname) throw new Error("browser_cross_host_redirect_rejected");
     await page.waitForLoadState("networkidle", { timeout: 4_000 }).catch(() => undefined);
     return page.content();
   }

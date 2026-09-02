@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { isAdminRequest, requestHasSameOrigin } from "@/lib/admin-auth";
+import { getAdminRequestSession, requestHasSameOrigin } from "@/lib/admin-auth";
 import { saveBatchReviewDecision } from "@/lib/admin-data";
 
 export async function POST(request: Request) {
   if (!requestHasSameOrigin(request)) return Response.json({ error: "origin_mismatch" }, { status: 403 });
-  if (!isAdminRequest(request)) return NextResponse.redirect(new URL("/admin/login", request.url), 303);
+  const session = getAdminRequestSession(request);
+  if (!session || !["system_admin", "reviewer"].includes(session.role)) return Response.json({ error: "forbidden" }, { status: 403 });
   const form = await request.formData();
   const matchIds = form.getAll("matchIds").filter((value): value is string => typeof value === "string");
   const action = form.get("action");
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
         ? { canonicalProductSlug }
         : {}),
       reason: reason.trim(),
-      actorId: "admin",
+      actorId: session.sub,
     });
   } catch (error) {
     return Response.json(

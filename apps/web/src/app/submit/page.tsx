@@ -35,6 +35,7 @@ export default async function SubmitPage({
           <button type="submit">提交并开始预检</button>
         </form>
         <p className="privacy-note">我们只保存处理投稿所需的信息；提交网址不会绕过登录、验证码或站点防护。</p>
+        <p className="privacy-note">已有稳定 JSON API？<a href="/merchant-feed"> 申请商家直连 Feed →</a></p>
       </section>
     </main>
   );

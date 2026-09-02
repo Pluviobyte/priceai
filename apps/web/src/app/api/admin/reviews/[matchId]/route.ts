@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  isAdminRequest,
+  getAdminRequestSession,
   requestHasSameOrigin,
 } from "@/lib/admin-auth";
 import { saveReviewDecision } from "@/lib/admin-data";
@@ -12,8 +12,9 @@ export async function POST(
   if (!requestHasSameOrigin(request)) {
     return Response.json({ error: "origin_mismatch" }, { status: 403 });
   }
-  if (!isAdminRequest(request)) {
-    return NextResponse.redirect(new URL("/admin/login", request.url), 303);
+  const session = getAdminRequestSession(request);
+  if (!session || !["system_admin", "reviewer"].includes(session.role)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
   }
   const { matchId } = await params;
   const form = await request.formData();
@@ -34,7 +35,7 @@ export async function POST(
       ? { canonicalProductSlug }
       : {}),
     reason: reason.trim(),
-    actorId: "admin",
+    actorId: session.sub,
   });
   return NextResponse.redirect(new URL("/admin", request.url), 303);
 }

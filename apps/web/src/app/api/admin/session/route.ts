@@ -3,7 +3,7 @@ import {
   ADMIN_COOKIE_NAME,
   createAdminToken,
   requestHasSameOrigin,
-  verifyAdminPassword,
+  verifyAdminCredentials,
 } from "@/lib/admin-auth";
 
 export async function POST(request: Request) {
@@ -11,13 +11,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "origin_mismatch" }, { status: 403 });
   }
   const form = await request.formData();
+  const username = form.get("username");
   const password = form.get("password");
-  if (typeof password !== "string" || !verifyAdminPassword(password)) {
+  const session = typeof username === "string" && typeof password === "string" ? verifyAdminCredentials(username, password) : null;
+  if (!session) {
     return NextResponse.redirect(new URL("/admin/login?error=1", request.url), 303);
   }
   let token: string;
   try {
-    token = createAdminToken();
+    token = createAdminToken(session);
   } catch {
     return NextResponse.redirect(new URL("/admin/login?error=1", request.url), 303);
   }

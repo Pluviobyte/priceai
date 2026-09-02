@@ -255,7 +255,8 @@ export async function getPublicCatalog(): Promise<PublicCatalog> {
             o.currency,
             o.stock_count,
             o.stock_state,
-            o.freshness_state,
+            case when o.offer_verified_at>now()-interval '6 hours' then 'fresh'
+                 when o.offer_verified_at>now()-interval '24 hours' then 'aging' else 'stale' end freshness_state,
             o.offer_mode,
             o.product_url,
             o.risk_facts,
@@ -266,6 +267,7 @@ export async function getPublicCatalog(): Promise<PublicCatalog> {
        join merchants m on m.id = s.merchant_id
       where o.publish_generation_id = $1
         and o.availability_state = 'purchasable'
+        and o.offer_verified_at > now()-interval '24 hours'
       order by o.price asc`,
     [publication.generation_id],
   );
@@ -360,7 +362,9 @@ function mapOfferDetail(row: OfferDetailRow): PublicOfferDetail {
 function offerDetailSelect(): string {
   return `select o.id,cp.slug product_slug,cp.display_name product_name,
                  m.name merchant_name,m.slug merchant_slug,s.id source_id,
-                 o.price,o.currency,o.stock_count,o.stock_state,o.freshness_state,
+                 o.price,o.currency,o.stock_count,o.stock_state,
+                 case when o.offer_verified_at>now()-interval '6 hours' then 'fresh'
+                      when o.offer_verified_at>now()-interval '24 hours' then 'aging' else 'stale' end freshness_state,
                  o.offer_mode,o.product_url,o.risk_facts,o.offer_verified_at verified_at,
                  o.first_seen_at,ros.raw_title,ros.raw_description,ros.raw_category,
                  ros.raw_price_text,o.source_item_id,oa.duration_days,oa.warranty_type,
@@ -394,6 +398,7 @@ function filterOfferSql(
   if (filters.ownership) conditions.push(`oa.account_ownership=${push(filters.ownership)}`);
   if (filters.stock !== "all") {
     conditions.push("o.availability_state='purchasable'");
+    conditions.push("o.offer_verified_at>now()-interval '24 hours'");
     conditions.push("o.stock_state in ('in_stock','low_stock','unknown')");
   }
   if (filters.shared === "yes") conditions.push("oa.shared=true");
@@ -406,7 +411,7 @@ function filterOfferSql(
     : filters.sort === "freshness"
       ? "o.offer_verified_at desc nulls last,o.price asc"
       : `case o.availability_state when 'purchasable' then 1 when 'unavailable' then 2 else 3 end,
-         case o.freshness_state when 'fresh' then 1 when 'aging' then 2 else 3 end,
+         case when o.offer_verified_at>now()-interval '6 hours' then 1 when o.offer_verified_at>now()-interval '24 hours' then 2 else 3 end,
          case when o.offer_mode in ('recharge','finished_account','redeem_code','team_seat') then 1 else 2 end,
          o.price asc`;
   return { conditions, orderBy };
@@ -418,10 +423,10 @@ export async function getProductSummaries(brand?: string): Promise<PublicProduct
   const brandCondition = brand ? `and lower(cp.brand)=lower($${values.push(brand)})` : "";
   const rows = await query<ProductSummaryRow>(
     `select cp.slug,cp.display_name name,cp.brand platform,
-            count(o.id) filter (where o.availability_state='purchasable')::text offer_count,
-            min(o.price) filter (where o.availability_state='purchasable') lowest_price,
-            min(o.price) filter (where o.availability_state='purchasable' and oa.warranty_type not in ('none','unknown')) warranty_lowest_price,
-            min(o.currency) filter (where o.availability_state='purchasable') currency
+            count(o.id) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours')::text offer_count,
+            min(o.price) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours') lowest_price,
+            min(o.price) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours' and oa.warranty_type not in ('none','unknown')) warranty_lowest_price,
+            min(o.currency) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours') currency
        from canonical_products cp
        left join offers o on o.canonical_product_id=cp.id and o.publish_generation_id=$1
        left join raw_offer_snapshots ros on ros.id=o.latest_raw_snapshot_id

@@ -24,5 +24,5 @@ export function ModelChecker() {
     <label>API Key<input name="apiKey" type="password" autoComplete="off" required maxLength={4096} /></label>
     <label>可选模型<input name="model" placeholder="model-id" maxLength={200} /></label>
     <button disabled={pending} type="submit">{pending ? "检测中…" : "开始检测"}</button>
-  </form>{error && <p className="form-error">{error}</p>}{result && <div className="check-result"><b>{result.modelCount} 个模型 · {result.latencyMs} ms</b>{result.test && <span>推理测试：{result.test.success ? "成功" : `失败 HTTP ${result.test.status}`} · {result.test.latencyMs} ms</span>}<details><summary>展开模型列表</summary><pre>{result.models.join("\n")}</pre></details></div>}</section>;
+  </form><div aria-live="polite">{error && <p className="form-error">{error}</p>}{result && <div className="check-result"><b>{result.modelCount} 个模型 · {result.latencyMs} ms</b>{result.test && <span>推理测试：{result.test.success ? "成功" : `失败 HTTP ${result.test.status}`} · {result.test.latencyMs} ms</span>}<details><summary>展开模型列表</summary><pre>{result.models.join("\n")}</pre></details></div>}</div></section>;
 }
