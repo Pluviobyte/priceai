@@ -62,3 +62,12 @@ export function requestHasSameOrigin(request: Request): boolean {
   if (!origin) return true;
   return origin === new URL(request.url).origin;
 }
+
+export function isAdminRequest(request: Request): boolean {
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const token = cookieHeader
+    .split(";")
+    .map((part) => part.trim().split("="))
+    .find(([name]) => name === ADMIN_COOKIE_NAME)?.[1];
+  return verifyAdminToken(token);
+}

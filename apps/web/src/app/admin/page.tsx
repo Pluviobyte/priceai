@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import { getAdminDashboard } from "@/lib/admin-data";
+import { AdminNav } from "./admin-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function AdminPage() {
           <span className="section-kicker">运营与数据治理</span>
           <h1>审核后台</h1>
         </div>
-        <a href="/">查看公开首页</a>
+        <AdminNav />
       </header>
 
       <section className="admin-summary">

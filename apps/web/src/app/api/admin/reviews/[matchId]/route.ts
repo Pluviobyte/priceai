@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import {
-  ADMIN_COOKIE_NAME,
+  isAdminRequest,
   requestHasSameOrigin,
-  verifyAdminToken,
 } from "@/lib/admin-auth";
 import { saveReviewDecision } from "@/lib/admin-data";
 
@@ -13,12 +12,7 @@ export async function POST(
   if (!requestHasSameOrigin(request)) {
     return Response.json({ error: "origin_mismatch" }, { status: 403 });
   }
-  const cookieHeader = request.headers.get("cookie") ?? "";
-  const token = cookieHeader
-    .split(";")
-    .map((part) => part.trim().split("="))
-    .find(([name]) => name === ADMIN_COOKIE_NAME)?.[1];
-  if (!verifyAdminToken(token)) {
+  if (!isAdminRequest(request)) {
     return NextResponse.redirect(new URL("/admin/login", request.url), 303);
   }
   const { matchId } = await params;

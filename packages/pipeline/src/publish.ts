@@ -1,4 +1,4 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
 import {
@@ -231,9 +231,9 @@ export async function publishLatestSnapshots(
                 ? { baselineValue: anomaly.baselineValue }
                 : {}),
               details: anomaly.details,
-              status: "open",
+              status: sql`case when ${offerAnomalies.status} = 'ignored' then 'ignored' else 'open' end`,
               detectedAt: now,
-              resolvedAt: null,
+              resolvedAt: sql`case when ${offerAnomalies.status} = 'ignored' then ${offerAnomalies.resolvedAt} else null end`,
             },
           });
       }
