@@ -1,4 +1,5 @@
 import { getPublicCatalog, type PublicProductSummary } from "@/lib/public-catalog";
+import { SiteHeader } from "./site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -47,19 +48,7 @@ export default async function HomePage() {
 
   return (
     <main>
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="AI 价格雷达首页">
-          <span className="brand-mark">A</span>
-          <span>AI 价格雷达</span>
-        </a>
-        <nav aria-label="主导航">
-          <a className="active" href="/">卡网订阅</a>
-          <a href="/official-prices">官方订阅</a>
-          <a href="/official-api">官方 API</a>
-          <a href="/api-transit">中转 API</a>
-        </nav>
-        <a className="submit-link" href="/submit">提交渠道</a>
-      </header>
+      <SiteHeader />
 
       <section className="hero">
         <div className="eyebrow">公开来源 · 独立核验 · 不参与交易</div>
@@ -90,7 +79,7 @@ export default async function HomePage() {
         </div>
         <div className="product-grid">
           {catalog.products.map((product, index) => (
-            <article className={`product-card ${tones[index] ?? "mint"}`} key={product.slug}>
+            <a className={`product-card ${tones[index] ?? "mint"}`} href={`/products/${product.slug}`} key={product.slug}>
               <div className="product-meta">
                 <span>{product.platform}</span>
                 <span>{product.offerCount} 条报价</span>
@@ -102,7 +91,7 @@ export default async function HomePage() {
                 <span>库存、规格与来源均已核验</span>
                 <span aria-hidden="true">↗</span>
               </div>
-            </article>
+            </a>
           ))}
         </div>
       </section>

@@ -95,6 +95,17 @@ export interface AdminSubmissionRow {
   createdAt: Date;
 }
 
+export interface AdminReportRow {
+  id: string;
+  targetType: string;
+  targetId: string;
+  targetLabel: string;
+  reportType: string;
+  details: string | null;
+  evidenceUrl: string | null;
+  createdAt: Date;
+}
+
 interface ReviewRow {
   match_id: string;
   title: string;
@@ -180,6 +191,17 @@ interface SubmissionRow {
   source_id: string | null;
   trial_run_id: string | null;
   precheck_result: unknown;
+  created_at: Date;
+}
+
+interface ReportRow {
+  id: string;
+  target_type: string;
+  target_id: string;
+  target_label: string;
+  report_type: string;
+  details: string | null;
+  evidence_url: string | null;
   created_at: Date;
 }
 
@@ -750,6 +772,84 @@ export async function reviewAdminSubmission(input: {
         input.reason,
         JSON.stringify(current),
         JSON.stringify({ status: nextStatus, sourceId: current.source_id }),
+      ],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getAdminReports(): Promise<AdminReportRow[]> {
+  const rows = await query<ReportRow>(
+    `select r.id,r.target_type,r.target_id,r.report_type,r.details,r.evidence_url,r.created_at,
+            coalesce(ros.raw_title,m.name,r.target_id::text) target_label
+       from reports r
+       left join offers o on r.target_type='offer' and o.id=r.target_id
+       left join raw_offer_snapshots ros on ros.id=o.latest_raw_snapshot_id
+       left join merchants m on r.target_type='merchant' and m.id=r.target_id
+      where r.status='open'
+      order by r.created_at asc limit 300`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    targetLabel: row.target_label,
+    reportType: row.report_type,
+    details: row.details,
+    evidenceUrl: row.evidence_url,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function resolveAdminReport(input: {
+  reportId: string;
+  action: "resolve" | "dismiss" | "quarantine";
+  resolution: string;
+  actorId: string;
+}): Promise<void> {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query<{ target_type: string; target_id: string; status: string }>(
+      "select target_type,target_id,status from reports where id=$1 for update",
+      [input.reportId],
+    );
+    const report = result.rows[0];
+    if (!report) throw new Error("report_not_found");
+    if (input.action === "quarantine") {
+      if (report.target_type === "offer") {
+        await client.query(
+          "update offers set availability_state='quarantined',quarantine_reason='admin_report',updated_at=now() where id=$1",
+          [report.target_id],
+        );
+      } else if (report.target_type === "merchant") {
+        await client.query(
+          "update sources set enabled=false,health_status='removed',next_run_at=null,updated_at=now() where merchant_id=$1",
+          [report.target_id],
+        );
+      }
+    }
+    const status = input.action === "dismiss" ? "dismissed" : "resolved";
+    await client.query(
+      "update reports set status=$2,resolution=$3,resolved_at=now() where id=$1",
+      [input.reportId, status, input.resolution],
+    );
+    await client.query(
+      `insert into audit_logs
+         (actor_id,action,target_type,target_id,reason,before_value,after_value)
+       values ($1,$2,'report',$3,$4,$5::jsonb,$6::jsonb)`,
+      [
+        input.actorId,
+        `report.${input.action}`,
+        input.reportId,
+        input.resolution,
+        JSON.stringify(report),
+        JSON.stringify({ status, quarantined: input.action === "quarantine" }),
       ],
     );
     await client.query("commit");

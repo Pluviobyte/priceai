@@ -1,0 +1,5 @@
+import { SiteHeader } from "../site-header";
+
+export default function MethodologyPage() {
+  return <main><SiteHeader active="methodology" /><article className="prose-shell"><span className="section-kicker">可核验的比价</span><h1>数据、排序与责任边界</h1><h2>数据从哪里来</h2><p>报价来自商家公开店铺 API、公开 JSON、页面结构化数据或公开网页。平台不登录商家账号，不绕过验证码、WAF 或访问控制。</p><h2>如何排序</h2><p>默认最低价只使用可购买、未过期、分类置信足够且没有库存冲突的报价。代充、成品号、兑换码和团队席位会显示交付差异；共享、镜像与反代不会偷换成完整订阅的“最低价”。</p><h2>库存与新鲜度</h2><p>库存是商品事实，新鲜度是最后核验时间。采集失败不会将上一份快照全部改成缺货；数据过期时会单独标记并退出默认最低价。</p><h2>商业与免责</h2><p>交易在第三方原站完成。本平台不代收款、不代充、不保管账号密码，也不为商家信用背书。赞助或联盟关系必须标记，且不得改变自然排序。</p><h2>纠错与退出</h2><p>每条报价和商家页都提供举报入口。商家可申请修改公开信息或退出收录；处理结果会保留审计记录。</p></article></main>;
+}

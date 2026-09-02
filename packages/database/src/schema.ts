@@ -497,12 +497,16 @@ export const reports = pgTable(
     reportType: text("report_type").notNull(),
     details: text("details"),
     evidenceUrl: text("evidence_url"),
+    submitterFingerprint: text("submitter_fingerprint"),
     status: text("status").notNull().default("open"),
     resolution: text("resolution"),
     createdAt,
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   },
-  (table) => [index("reports_status_idx").on(table.status)],
+  (table) => [
+    index("reports_status_idx").on(table.status),
+    index("reports_fingerprint_idx").on(table.submitterFingerprint, table.createdAt),
+  ],
 );
 
 export const offerAnomalies = pgTable(
