@@ -64,6 +64,18 @@ export default async function ProductPage({
         <div className="detail-content">
           <div className="detail-heading"><div><span className="section-kicker">可比报价</span><h2>{product.offers.length} 条结果</h2></div><span>库存与新鲜度分开判定</span></div>
           <PublicOfferList offers={product.offers} />
+          <section className="alert-panel">
+            <div><span className="section-kicker">价格监测</span><h2>降价或补货时通知我</h2><p>邮箱确认后才会启用，通知失败会持久化重试。</p></div>
+            <form action="/api/alerts" method="post">
+              <input type="hidden" name="productSlug" value={product.slug} />
+              <input type="hidden" name="filters" value={JSON.stringify(filters)} />
+              <select name="alertType" defaultValue="price_drop"><option value="price_drop">低于目标价</option><option value="restock">重新补货</option></select>
+              <input name="targetPrice" type="number" min="0.01" max="1000000" step="0.01" placeholder="目标价（补货可留空）" />
+              <input name="email" type="email" maxLength={320} placeholder="you@example.com" required />
+              <input name="website" className="honeypot" tabIndex={-1} autoComplete="off" />
+              <button type="submit">创建提醒</button>
+            </form>
+          </section>
           <section className="history-section">
             <span className="section-kicker">变化记录</span><h2>价格与库存历史</h2>
             {product.history.length ? <div className="history-table-wrap"><table><thead><tr><th>时间</th><th>商家</th><th>价格</th><th>库存</th></tr></thead><tbody>{product.history.map((row, index) => <tr key={`${row.offerId}:${row.observedAt.toISOString()}:${index}`}><td>{new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short" }).format(row.observedAt)}</td><td>{row.merchantName}</td><td>{row.currency} {Number(row.price).toFixed(2)}</td><td>{row.stockState}{row.stockCount === null ? "" : ` · ${row.stockCount}`}</td></tr>)}</tbody></table></div> : <div className="empty-state">暂无变价或库存变化记录。</div>}

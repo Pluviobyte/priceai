@@ -1,4 +1,5 @@
 export * from "./catalog-products.js";
+export * from "./alerts.js";
 export * from "./catalog.js";
 export * from "./onboarding.js";
 export * from "./publish.js";

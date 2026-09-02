@@ -10,6 +10,8 @@ import { KamiCollector } from "@price-radar/kami-collector";
 import {
   assertSafePublicUrl,
   crawlSource,
+  deliverNotificationOutbox,
+  evaluatePriceAlerts,
   findDueSources,
   findPendingSourceSubmissions,
   precheckSourceSubmission,
@@ -50,6 +52,13 @@ function requiredString(value: unknown, field: string): string {
   return value;
 }
 
+async function publishAndEvaluate() {
+  await seedCanonicalProducts(database.db);
+  const publication = await publishLatestSnapshots(database.db);
+  const alerts = await evaluatePriceAlerts(database.db, publication.generationId);
+  return { ...publication, alerts };
+}
+
 const worker = new Worker(
   "source-jobs",
   async (job) => {
@@ -69,8 +78,7 @@ const worker = new Worker(
           requiredString(data.sourceId, "sourceId"),
         );
         if (result.completeSnapshot) {
-          await seedCanonicalProducts(database.db);
-          const publication = await publishLatestSnapshots(database.db);
+          const publication = await publishAndEvaluate();
           return { ...result, publication };
         }
         return result;
@@ -84,8 +92,7 @@ const worker = new Worker(
         );
       }
       case "snapshot.publish":
-        await seedCanonicalProducts(database.db);
-        return publishLatestSnapshots(database.db);
+        return publishAndEvaluate();
       default:
         throw new Error(`unknown_job:${job.name}`);
     }
@@ -140,12 +147,24 @@ async function enqueuePendingSubmissions(): Promise<void> {
   }
 }
 
+async function deliverNotifications(): Promise<void> {
+  if (!config.notificationWebhookUrl || !config.notificationWebhookSecret) return;
+  const result = await deliverNotificationOutbox(database.db, {
+    url: config.notificationWebhookUrl,
+    secret: config.notificationWebhookSecret,
+  });
+  if (result.attempted > 0) logger.info(result, "notification outbox processed");
+}
+
 const schedulerTimer = setInterval(() => {
   void enqueueDueSources().catch((error: unknown) => {
     logger.error({ error }, "source scheduling failed");
   });
   void enqueuePendingSubmissions().catch((error: unknown) => {
     logger.error({ error }, "submission scheduling failed");
+  });
+  void deliverNotifications().catch((error: unknown) => {
+    logger.error({ error }, "notification delivery failed");
   });
 }, config.schedulerIntervalMs);
 schedulerTimer.unref();
@@ -154,6 +173,9 @@ void enqueueDueSources().catch((error: unknown) => {
 });
 void enqueuePendingSubmissions().catch((error: unknown) => {
   logger.error({ error }, "initial submission scheduling failed");
+});
+void deliverNotifications().catch((error: unknown) => {
+  logger.error({ error }, "initial notification delivery failed");
 });
 
 worker.on("completed", (job) => {

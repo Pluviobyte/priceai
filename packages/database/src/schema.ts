@@ -589,3 +589,48 @@ export const apiRateLimitWindows = pgTable(
     index("api_rate_limit_window_idx").on(table.windowStart),
   ],
 );
+
+export const priceAlerts = pgTable(
+  "price_alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    canonicalProductId: uuid("canonical_product_id")
+      .notNull()
+      .references(() => canonicalProducts.id, { onDelete: "cascade" }),
+    alertType: text("alert_type").notNull(),
+    email: text("email").notNull(),
+    targetPrice: numeric("target_price", { precision: 20, scale: 6 }),
+    filters: jsonb("filters").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status").notNull().default("pending_verification"),
+    verificationTokenHash: text("verification_token_hash").notNull(),
+    unsubscribeTokenHash: text("unsubscribe_token_hash").notNull(),
+    lastObservedPrice: numeric("last_observed_price", { precision: 20, scale: 6 }),
+    lastObservedAvailable: boolean("last_observed_available"),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    index("price_alerts_active_idx").on(table.status, table.canonicalProductId),
+    index("price_alerts_email_idx").on(table.email),
+  ],
+);
+
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    destination: text("destination").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [index("notification_outbox_delivery_idx").on(table.status, table.availableAt)],
+);

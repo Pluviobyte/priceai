@@ -7,6 +7,8 @@ import { KamiCollector } from "@price-radar/kami-collector";
 import {
   assertSafePublicUrl,
   crawlSource,
+  deliverNotificationOutbox,
+  evaluatePriceAlerts,
   onboardSource,
   precheckSourceSubmission,
   publishLatestSnapshots,
@@ -61,6 +63,24 @@ async function main(): Promise<void> {
     if (command === "publish") {
       await seedCanonicalProducts(database.db);
       const result = await publishLatestSnapshots(database.db);
+      const alerts = await evaluatePriceAlerts(database.db, result.generationId);
+      process.stdout.write(`${JSON.stringify({ ...result, alerts }, null, 2)}\n`);
+      return;
+    }
+    if (command === "evaluate-alerts") {
+      if (!argument) throw new Error("usage: evaluate-alerts <generation-id>");
+      const result = await evaluatePriceAlerts(database.db, argument);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "deliver-notifications") {
+      if (!config.notificationWebhookUrl || !config.notificationWebhookSecret) {
+        throw new Error("notification_webhook_not_configured");
+      }
+      const result = await deliverNotificationOutbox(database.db, {
+        url: config.notificationWebhookUrl,
+        secret: config.notificationWebhookSecret,
+      });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
@@ -70,10 +90,11 @@ async function main(): Promise<void> {
       const crawl = await crawlSource(database.db, registry, source.sourceId);
       await seedCanonicalProducts(database.db);
       const publication = await publishLatestSnapshots(database.db);
-      process.stdout.write(`${JSON.stringify({ source, crawl, publication }, null, 2)}\n`);
+      const alerts = await evaluatePriceAlerts(database.db, publication.generationId);
+      process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|evaluate-alerts|deliver-notifications|bootstrap> [argument]");
   } finally {
     await database.close();
   }
