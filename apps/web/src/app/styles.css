@@ -142,6 +142,40 @@ nav a:hover, nav a.active { color: var(--ink); background: var(--white); }
 .product-card strong { font-size: 18px; }
 .card-footer { margin-top: auto; padding-top: 26px; border-top: 1px solid rgba(32, 40, 39, 0.1); }
 .trust-section { padding-top: 72px; }
+.offers-section { padding-top: 36px; }
+.offer-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--white);
+}
+.offer-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.3fr) 2fr auto 20px;
+  align-items: center;
+  gap: 18px;
+  min-height: 84px;
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--line);
+  transition: background 150ms ease;
+}
+.offer-row:last-child { border-bottom: 0; }
+.offer-row:hover { background: #f7faf7; }
+.offer-product { display: flex; flex-direction: column; gap: 5px; }
+.offer-product b { font-size: 15px; }
+.offer-product small { color: var(--muted); }
+.offer-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.offer-tags em {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #4d5e59;
+  background: #edf2ef;
+  font-size: 11px;
+  font-style: normal;
+}
+.offer-tags em.risk { color: #8a541e; background: #fbefdd; }
+.offer-row > strong { font-size: 18px; }
+.empty-state { padding: 34px; color: var(--muted); text-align: center; }
 .capability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .capability-grid article { min-height: 210px; padding: 26px; border: 1px solid var(--line); border-radius: 22px; background: var(--white); }
 .capability-number { color: var(--accent); font-family: Georgia, serif; font-size: 20px; }
@@ -165,7 +199,9 @@ footer p { margin: 0; }
   .hero > p { font-size: 15px; }
   .status-row { flex-wrap: wrap; gap: 10px 20px; }
   .product-grid, .capability-grid { grid-template-columns: 1fr; }
+  .offer-row { grid-template-columns: 1fr auto; gap: 12px; }
+  .offer-tags { grid-column: 1 / -1; grid-row: 2; }
+  .offer-row > span:last-child { display: none; }
   .section-heading { align-items: start; flex-direction: column; }
   footer { flex-direction: column; }
 }
-

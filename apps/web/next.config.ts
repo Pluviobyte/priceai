@@ -4,7 +4,6 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: [
     "@price-radar/classifier",
-    "@price-radar/database",
     "@price-radar/ranking",
     "@price-radar/schema",
   ],
@@ -14,4 +13,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

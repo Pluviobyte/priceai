@@ -303,37 +303,44 @@ export const offerMatches = pgTable(
     createdAt,
   },
   (table) => [
+    uniqueIndex("offer_matches_snapshot_uidx").on(table.rawOfferSnapshotId),
     index("offer_matches_product_idx").on(table.canonicalProductId),
     index("offer_matches_review_idx").on(table.reviewStatus),
   ],
 );
 
-export const offerAttributes = pgTable("offer_attributes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  offerMatchId: uuid("offer_match_id")
-    .notNull()
-    .references(() => offerMatches.id, { onDelete: "cascade" }),
-  offerMode: text("offer_mode").notNull(),
-  durationDays: integer("duration_days"),
-  region: text("region"),
-  accountOwnership: text("account_ownership").notNull().default("unknown"),
-  phoneBound: boolean("phone_bound"),
-  emailType: text("email_type"),
-  warrantyType: text("warranty_type").notNull().default("unknown"),
-  warrantyHours: integer("warranty_hours"),
-  autoDelivery: boolean("auto_delivery"),
-  webAvailable: boolean("web_available"),
-  desktopAvailable: boolean("desktop_available"),
-  apiAvailable: boolean("api_available"),
-  shared: boolean("shared"),
-  invoiceAvailable: boolean("invoice_available"),
-  refundPolicy: text("refund_policy"),
-  riskFacts: jsonb("risk_facts").$type<string[]>().notNull().default([]),
-  attributeEvidence: jsonb("attribute_evidence")
-    .$type<Record<string, string[]>>()
-    .notNull()
-    .default({}),
-});
+export const offerAttributes = pgTable(
+  "offer_attributes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    offerMatchId: uuid("offer_match_id")
+      .notNull()
+      .references(() => offerMatches.id, { onDelete: "cascade" }),
+    offerMode: text("offer_mode").notNull(),
+    durationDays: integer("duration_days"),
+    region: text("region"),
+    accountOwnership: text("account_ownership").notNull().default("unknown"),
+    phoneBound: boolean("phone_bound"),
+    emailType: text("email_type"),
+    warrantyType: text("warranty_type").notNull().default("unknown"),
+    warrantyHours: integer("warranty_hours"),
+    autoDelivery: boolean("auto_delivery"),
+    webAvailable: boolean("web_available"),
+    desktopAvailable: boolean("desktop_available"),
+    apiAvailable: boolean("api_available"),
+    shared: boolean("shared"),
+    invoiceAvailable: boolean("invoice_available"),
+    refundPolicy: text("refund_policy"),
+    riskFacts: jsonb("risk_facts").$type<string[]>().notNull().default([]),
+    attributeEvidence: jsonb("attribute_evidence")
+      .$type<Record<string, string[]>>()
+      .notNull()
+      .default({}),
+  },
+  (table) => [
+    uniqueIndex("offer_attributes_match_uidx").on(table.offerMatchId),
+  ],
+);
 
 export const publishGenerations = pgTable("publish_generations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -347,6 +354,19 @@ export const publishGenerations = pgTable("publish_generations", {
   sourceCount: integer("source_count").notNull().default(0),
   manifestUrl: text("manifest_url"),
   previousGenerationId: uuid("previous_generation_id"),
+});
+
+export const publicationChannels = pgTable("publication_channels", {
+  channel: text("channel").primaryKey(),
+  currentGenerationId: uuid("current_generation_id").references(
+    () => publishGenerations.id,
+    { onDelete: "set null" },
+  ),
+  previousGenerationId: uuid("previous_generation_id").references(
+    () => publishGenerations.id,
+    { onDelete: "set null" },
+  ),
+  updatedAt,
 });
 
 export const offers = pgTable(
@@ -456,4 +476,3 @@ export const auditLogs = pgTable(
   },
   (table) => [index("audit_logs_target_idx").on(table.targetType, table.targetId)],
 );
-

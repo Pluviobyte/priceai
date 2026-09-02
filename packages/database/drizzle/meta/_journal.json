@@ -8,6 +8,13 @@
       "when": 1788369687542,
       "tag": "0000_optimal_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788370131753,
+      "tag": "0001_illegal_steel_serpent",
+      "breakpoints": true
     }
   ]
 }
