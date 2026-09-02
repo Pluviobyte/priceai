@@ -1,0 +1,19 @@
+{
+  "name": "@price-radar/kami-collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@price-radar/collector-sdk": "*",
+    "@price-radar/schema": "*"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "typescript": "5.9.3"
+  }
+}

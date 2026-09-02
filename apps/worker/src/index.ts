@@ -3,6 +3,9 @@ import Redis from "ioredis";
 import pino from "pino";
 import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
 import { createDatabase } from "@price-radar/database";
+import { DujiaoCollector } from "@price-radar/dujiao-collector";
+import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
+import { KamiCollector } from "@price-radar/kami-collector";
 import {
   crawlSource,
   findDueSources,
@@ -19,6 +22,9 @@ const queue = new Queue("source-jobs", { connection });
 const database = createDatabase(config.databaseUrl);
 const registry = new InMemoryCollectorRegistry();
 registry.register(new LdxpShopApiCollector());
+registry.register(new KamiCollector());
+registry.register(new DujiaoCollector());
+registry.register(new GenericHtmlCollector());
 
 interface SourceJobData {
   sourceId?: unknown;

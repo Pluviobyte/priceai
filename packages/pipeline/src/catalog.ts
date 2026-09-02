@@ -110,6 +110,7 @@ export async function crawlSource(
     const validation = adapter.validateSnapshot(pages);
     const offers = [...normalizedById.values()];
     const finishedAt = new Date();
+    const primaryError = validation.issues.find((issue) => issue.severity === "error");
     const health = validation.completeSnapshot
       ? nextHealthyRun(finishedAt, options.successIntervalMs)
       : nextFailedRun(finishedAt, source.consecutiveFailures);
@@ -126,10 +127,13 @@ export async function crawlSource(
           parsedTotal: validation.parsedTotal,
           duplicateTotal: validation.duplicateTotal,
           finishedAt,
-          ...(validation.issues.length > 0
+          ...(primaryError
             ? {
-                errorCode: validation.issues[0]?.code,
-                errorMessage: validation.issues.map((issue) => issue.message).join("; "),
+                errorCode: primaryError.code,
+                errorMessage: validation.issues
+                  .filter((issue) => issue.severity === "error")
+                  .map((issue) => issue.message)
+                  .join("; "),
               }
             : {}),
         })
@@ -146,7 +150,7 @@ export async function crawlSource(
                 expectedProductCount: validation.expectedTotal,
                 lastErrorCode: null,
               }
-            : { lastErrorCode: validation.issues[0]?.code ?? "partial_snapshot" }),
+            : { lastErrorCode: primaryError?.code ?? "partial_snapshot" }),
           updatedAt: finishedAt,
         })
         .where(eq(sources.id, sourceId));
