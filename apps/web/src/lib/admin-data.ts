@@ -80,6 +80,21 @@ export interface AdminAnomalyRow {
   detectedAt: Date;
 }
 
+export interface AdminSubmissionRow {
+  id: string;
+  url: string;
+  name: string | null;
+  primaryProducts: string | null;
+  contact: string | null;
+  notes: string | null;
+  status: string;
+  detectedCollectorKind: string | null;
+  sourceId: string | null;
+  trialRunId: string | null;
+  precheckResult: unknown;
+  createdAt: Date;
+}
+
 interface ReviewRow {
   match_id: string;
   title: string;
@@ -151,6 +166,21 @@ interface AdminAnomalyDetailRow {
   observed_value: unknown;
   baseline_value: unknown;
   detected_at: Date;
+}
+
+interface SubmissionRow {
+  id: string;
+  url: string;
+  name: string | null;
+  primary_products: string | null;
+  contact: string | null;
+  notes: string | null;
+  status: string;
+  detected_collector_kind: string | null;
+  source_id: string | null;
+  trial_run_id: string | null;
+  precheck_result: unknown;
+  created_at: Date;
 }
 
 export async function getAdminDashboard(): Promise<{
@@ -305,6 +335,103 @@ export async function saveReviewDecision(input: {
       ],
     );
     await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function saveBatchReviewDecision(input: {
+  matchIds: string[];
+  action: "approve" | "reject" | "correct";
+  canonicalProductSlug?: string;
+  reason: string;
+  actorId: string;
+}): Promise<number> {
+  const matchIds = [...new Set(input.matchIds)].slice(0, 100);
+  if (matchIds.length === 0) throw new Error("review_targets_required");
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const targetsResult = await client.query<{
+      match_id: string;
+      source_id: string;
+      source_item_id: string;
+      canonical_product_id: string | null;
+      review_status: string;
+    }>(
+      `select om.id match_id,ros.source_id,ros.source_item_id,
+              om.canonical_product_id,om.review_status
+         from offer_matches om
+         join raw_offer_snapshots ros on ros.id=om.raw_offer_snapshot_id
+        where om.id = any($1::uuid[])
+        for update of om`,
+      [matchIds],
+    );
+    if (targetsResult.rows.length !== matchIds.length) throw new Error("review_target_not_found");
+
+    let correctedProductId: string | null = null;
+    if (input.action === "correct") {
+      if (!input.canonicalProductSlug) throw new Error("canonical_product_required");
+      const productResult = await client.query<{ id: string }>(
+        "select id from canonical_products where slug=$1 and status='active' limit 1",
+        [input.canonicalProductSlug],
+      );
+      correctedProductId = productResult.rows[0]?.id ?? null;
+      if (!correctedProductId) throw new Error("canonical_product_not_found");
+    }
+
+    for (const target of targetsResult.rows) {
+      const productId = input.action === "reject"
+        ? null
+        : input.action === "correct"
+          ? correctedProductId
+          : target.canonical_product_id;
+      if (input.action !== "reject" && !productId) throw new Error("canonical_product_required");
+      const decision = input.action === "reject" ? "reject" : "approve";
+      const reviewStatus = input.action === "reject" ? "rejected" : "manual_approved";
+      const overrideResult = await client.query<{ id: string }>(
+        `insert into classification_overrides
+           (source_id,source_item_id,canonical_product_id,decision,reason,created_by,active)
+         values ($1,$2,$3,$4,$5,$6,true)
+         on conflict (source_id,source_item_id) do update set
+           canonical_product_id=excluded.canonical_product_id,
+           decision=excluded.decision,reason=excluded.reason,
+           created_by=excluded.created_by,active=true,updated_at=now()
+         returning id`,
+        [target.source_id, target.source_item_id, productId, decision, input.reason, input.actorId],
+      );
+      await client.query(
+        `update offer_matches
+            set canonical_product_id=$2,confidence=1,review_status=$3
+          where id=$1`,
+        [target.match_id, productId, reviewStatus],
+      );
+      await client.query(
+        `insert into audit_logs
+           (actor_id,action,target_type,target_id,reason,before_value,after_value)
+         values ($1,$2,'offer_match',$3,$4,$5::jsonb,$6::jsonb)`,
+        [
+          input.actorId,
+          `classification.batch_${input.action}`,
+          target.match_id,
+          input.reason,
+          JSON.stringify({
+            canonicalProductId: target.canonical_product_id,
+            reviewStatus: target.review_status,
+          }),
+          JSON.stringify({
+            canonicalProductId: productId,
+            reviewStatus,
+            overrideId: overrideResult.rows[0]?.id,
+          }),
+        ],
+      );
+    }
+    await client.query("commit");
+    return targetsResult.rows.length;
   } catch (error) {
     await client.query("rollback");
     throw error;
@@ -515,6 +642,114 @@ export async function resolveAdminAnomaly(input: {
         input.reason,
         JSON.stringify({ status: current.status }),
         JSON.stringify({ status }),
+      ],
+    );
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getAdminSubmissions(): Promise<AdminSubmissionRow[]> {
+  const rows = await query<SubmissionRow>(
+    `select id,url,name,primary_products,contact,notes,status,
+            detected_collector_kind,source_id,trial_run_id,precheck_result,created_at
+       from source_submissions
+      order by case status
+        when 'review' then 1 when 'trial_crawled' then 2 when 'prechecked' then 3
+        when 'submitted' then 4 else 5 end,
+        created_at desc
+      limit 300`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    url: row.url,
+    name: row.name,
+    primaryProducts: row.primary_products,
+    contact: row.contact,
+    notes: row.notes,
+    status: row.status,
+    detectedCollectorKind: row.detected_collector_kind,
+    sourceId: row.source_id,
+    trialRunId: row.trial_run_id,
+    precheckResult: row.precheck_result,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function reviewAdminSubmission(input: {
+  submissionId: string;
+  action: "retry" | "approve" | "reject";
+  reason: string;
+  actorId: string;
+}): Promise<void> {
+  const client = await databasePool.connect();
+  try {
+    await client.query("begin");
+    const result = await client.query<{
+      status: string;
+      source_id: string | null;
+      trial_run_id: string | null;
+      trial_complete: boolean | null;
+    }>(
+      `select ss.status,ss.source_id,ss.trial_run_id,cr.complete_snapshot trial_complete
+         from source_submissions ss
+         left join crawl_runs cr on cr.id=ss.trial_run_id
+        where ss.id=$1 for update of ss`,
+      [input.submissionId],
+    );
+    const current = result.rows[0];
+    if (!current) throw new Error("source_submission_not_found");
+
+    let nextStatus: string;
+    if (input.action === "retry") {
+      nextStatus = "submitted";
+      await client.query(
+        `update source_submissions
+            set status='submitted',reviewed_by=null,reviewed_at=null,updated_at=now()
+          where id=$1`,
+        [input.submissionId],
+      );
+    } else if (input.action === "approve") {
+      if (!current.source_id || !current.trial_run_id || !current.trial_complete) {
+        throw new Error("complete_trial_required");
+      }
+      nextStatus = "approved";
+      await client.query(
+        `update sources
+            set enabled=true,health_status='retrying',next_run_at=now(),updated_at=now()
+          where id=$1`,
+        [current.source_id],
+      );
+      await client.query(
+        `update source_submissions
+            set status='approved',reviewed_by=$2,reviewed_at=now(),updated_at=now()
+          where id=$1`,
+        [input.submissionId, input.actorId],
+      );
+    } else {
+      nextStatus = "rejected";
+      await client.query(
+        `update source_submissions
+            set status='rejected',reviewed_by=$2,reviewed_at=now(),updated_at=now()
+          where id=$1`,
+        [input.submissionId, input.actorId],
+      );
+    }
+    await client.query(
+      `insert into audit_logs
+         (actor_id,action,target_type,target_id,reason,before_value,after_value)
+       values ($1,$2,'source_submission',$3,$4,$5::jsonb,$6::jsonb)`,
+      [
+        input.actorId,
+        `source_submission.${input.action}`,
+        input.submissionId,
+        input.reason,
+        JSON.stringify(current),
+        JSON.stringify({ status: nextStatus, sourceId: current.source_id }),
       ],
     );
     await client.query("commit");

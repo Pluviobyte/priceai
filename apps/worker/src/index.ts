@@ -8,8 +8,11 @@ import { DujiaoCollector } from "@price-radar/dujiao-collector";
 import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
 import { KamiCollector } from "@price-radar/kami-collector";
 import {
+  assertSafePublicUrl,
   crawlSource,
   findDueSources,
+  findPendingSourceSubmissions,
+  precheckSourceSubmission,
   publishLatestSnapshots,
   seedCanonicalProducts,
 } from "@price-radar/pipeline";
@@ -37,6 +40,7 @@ registry.register(
 interface SourceJobData {
   sourceId?: unknown;
   sourceUrl?: unknown;
+  submissionId?: unknown;
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -54,7 +58,7 @@ const worker = new Worker(
     switch (job.name) {
       case "source.probe": {
         const data = job.data as SourceJobData;
-        const sourceUrl = new URL(requiredString(data.sourceUrl, "sourceUrl"));
+        const sourceUrl = await assertSafePublicUrl(requiredString(data.sourceUrl, "sourceUrl"));
         return registry.probe(sourceUrl, new AbortController().signal);
       }
       case "source.crawl": {
@@ -70,6 +74,14 @@ const worker = new Worker(
           return { ...result, publication };
         }
         return result;
+      }
+      case "submission.precheck": {
+        const data = job.data as SourceJobData;
+        return precheckSourceSubmission(
+          database.db,
+          registry,
+          requiredString(data.submissionId, "submissionId"),
+        );
       }
       case "snapshot.publish":
         await seedCanonicalProducts(database.db);
@@ -107,14 +119,41 @@ async function enqueueDueSources(): Promise<void> {
   }
 }
 
+async function enqueuePendingSubmissions(): Promise<void> {
+  const submissions = await findPendingSourceSubmissions(database.db);
+  await Promise.all(
+    submissions.map((submission) =>
+      queue.add(
+        "submission.precheck",
+        { submissionId: submission.id },
+        {
+          jobId: `submission-${submission.id}-${submission.updatedAt.getTime()}`,
+          attempts: 1,
+          removeOnComplete: { age: 3_600, count: 1_000 },
+          removeOnFail: { age: 86_400, count: 5_000 },
+        },
+      ),
+    ),
+  );
+  if (submissions.length > 0) {
+    logger.info({ submissionCount: submissions.length }, "source submissions enqueued");
+  }
+}
+
 const schedulerTimer = setInterval(() => {
   void enqueueDueSources().catch((error: unknown) => {
     logger.error({ error }, "source scheduling failed");
+  });
+  void enqueuePendingSubmissions().catch((error: unknown) => {
+    logger.error({ error }, "submission scheduling failed");
   });
 }, config.schedulerIntervalMs);
 schedulerTimer.unref();
 void enqueueDueSources().catch((error: unknown) => {
   logger.error({ error }, "initial source scheduling failed");
+});
+void enqueuePendingSubmissions().catch((error: unknown) => {
+  logger.error({ error }, "initial submission scheduling failed");
 });
 
 worker.on("completed", (job) => {

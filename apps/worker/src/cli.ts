@@ -5,8 +5,10 @@ import { DujiaoCollector } from "@price-radar/dujiao-collector";
 import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
 import { KamiCollector } from "@price-radar/kami-collector";
 import {
+  assertSafePublicUrl,
   crawlSource,
   onboardSource,
+  precheckSourceSubmission,
   publishLatestSnapshots,
   seedCanonicalProducts,
 } from "@price-radar/pipeline";
@@ -33,13 +35,20 @@ async function main(): Promise<void> {
   try {
     if (command === "probe") {
       if (!argument) throw new Error("usage: probe <source-url>");
-      const result = await registry.probe(new URL(argument), new AbortController().signal);
+      const sourceUrl = await assertSafePublicUrl(argument);
+      const result = await registry.probe(sourceUrl, new AbortController().signal);
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
     if (command === "onboard") {
       if (!argument) throw new Error("usage: onboard <source-url>");
       const result = await onboardSource(database.db, registry, argument);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "precheck-submission") {
+      if (!argument) throw new Error("usage: precheck-submission <submission-id>");
+      const result = await precheckSourceSubmission(database.db, registry, argument);
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
@@ -64,7 +73,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|crawl|publish|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|bootstrap> [argument]");
   } finally {
     await database.close();
   }

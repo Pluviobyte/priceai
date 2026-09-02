@@ -58,7 +58,7 @@ export default async function HomePage() {
           <a href="/official-api">官方 API</a>
           <a href="/api-transit">中转 API</a>
         </nav>
-        <a className="submit-link" href="/channels">提交渠道</a>
+        <a className="submit-link" href="/submit">提交渠道</a>
       </header>
 
       <section className="hero">

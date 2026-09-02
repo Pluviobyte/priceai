@@ -6,6 +6,7 @@ import {
   sourceSubmissions,
   type Database,
 } from "@price-radar/database";
+import { assertSafePublicUrl } from "./url-security.js";
 
 export interface OnboardSourceResult {
   sourceId: string;
@@ -30,7 +31,7 @@ export async function onboardSource(
   inputUrl: string,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<OnboardSourceResult> {
-  const sourceUrl = new URL(inputUrl);
+  const sourceUrl = await assertSafePublicUrl(inputUrl);
   const [submission] = await db
     .insert(sourceSubmissions)
     .values({ url: sourceUrl.toString(), status: "submitted" })

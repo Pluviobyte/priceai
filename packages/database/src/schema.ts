@@ -162,16 +162,28 @@ export const sourceSubmissions = pgTable(
     url: text("url").notNull(),
     name: text("name"),
     contact: text("contact"),
+    primaryProducts: text("primary_products"),
     notes: text("notes"),
+    submitterFingerprint: text("submitter_fingerprint"),
     status: submissionStatusEnum("status").notNull().default("submitted"),
     detectedCollectorKind: text("detected_collector_kind"),
+    sourceId: uuid("source_id").references(() => sources.id, {
+      onDelete: "set null",
+    }),
     trialRunId: uuid("trial_run_id"),
+    precheckResult: jsonb("precheck_result").$type<Record<string, unknown>>(),
     reviewedBy: text("reviewed_by"),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     createdAt,
     updatedAt,
   },
-  (table) => [index("source_submissions_status_idx").on(table.status)],
+  (table) => [
+    index("source_submissions_status_idx").on(table.status),
+    index("source_submissions_fingerprint_idx").on(
+      table.submitterFingerprint,
+      table.createdAt,
+    ),
+  ],
 );
 
 export const crawlRuns = pgTable(

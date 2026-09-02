@@ -14,6 +14,8 @@ export interface CrawlSourceOptions {
   maxPages?: number;
   successIntervalMs?: number;
   signal?: AbortSignal;
+  allowDisabled?: boolean;
+  promoteSource?: boolean;
 }
 
 export interface CrawlSourceResult {
@@ -68,7 +70,7 @@ export async function crawlSource(
   const signal = options.signal ?? new AbortController().signal;
   const [source] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!source) throw new Error(`source_not_found:${sourceId}`);
-  if (!source.enabled) throw new Error(`source_disabled:${sourceId}`);
+  if (!source.enabled && !options.allowDisabled) throw new Error(`source_disabled:${sourceId}`);
 
   const adapter = registry.get(source.collectorKind);
   if (!adapter) throw new Error(`collector_not_registered:${source.collectorKind}`);
@@ -138,22 +140,24 @@ export async function crawlSource(
             : {}),
         })
         .where(and(eq(crawlRuns.id, run.id), eq(crawlRuns.sourceId, sourceId)));
-      await tx
-        .update(sources)
-        .set({
-          ...health,
-          lastCheckedAt: finishedAt,
-          ...(validation.completeSnapshot
-            ? {
-                lastSuccessAt: finishedAt,
-                latestCompleteRunId: run.id,
-                expectedProductCount: validation.expectedTotal,
-                lastErrorCode: null,
-              }
-            : { lastErrorCode: primaryError?.code ?? "partial_snapshot" }),
-          updatedAt: finishedAt,
-        })
-        .where(eq(sources.id, sourceId));
+      if (options.promoteSource !== false) {
+        await tx
+          .update(sources)
+          .set({
+            ...health,
+            lastCheckedAt: finishedAt,
+            ...(validation.completeSnapshot
+              ? {
+                  lastSuccessAt: finishedAt,
+                  latestCompleteRunId: run.id,
+                  expectedProductCount: validation.expectedTotal,
+                  lastErrorCode: null,
+                }
+              : { lastErrorCode: primaryError?.code ?? "partial_snapshot" }),
+            updatedAt: finishedAt,
+          })
+          .where(eq(sources.id, sourceId));
+      }
     });
 
     const finalStatus = validation.status === "success"
@@ -177,15 +181,17 @@ export async function crawlSource(
         .update(crawlRuns)
         .set({ status: "failed", finishedAt, errorCode: "crawl_failed", errorMessage: message })
         .where(eq(crawlRuns.id, run.id));
-      await tx
-        .update(sources)
-        .set({
-          ...health,
-          lastCheckedAt: finishedAt,
-          lastErrorCode: "crawl_failed",
-          updatedAt: finishedAt,
-        })
-        .where(eq(sources.id, sourceId));
+      if (options.promoteSource !== false) {
+        await tx
+          .update(sources)
+          .set({
+            ...health,
+            lastCheckedAt: finishedAt,
+            lastErrorCode: "crawl_failed",
+            updatedAt: finishedAt,
+          })
+          .where(eq(sources.id, sourceId));
+      }
     });
     throw error;
   }

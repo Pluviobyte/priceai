@@ -45,6 +45,28 @@ export default async function AdminPage() {
             <h2>逐条确认商品归属</h2>
           </div>
         </div>
+        {dashboard.reviews.length > 0 ? (
+          <form className="batch-review" action="/api/admin/reviews/batch" method="post">
+            <div className="batch-review-list">
+              {dashboard.reviews.map((item) => (
+                <label key={item.matchId}>
+                  <input type="checkbox" name="matchIds" value={item.matchId} />
+                  <span><b>{item.title}</b><small>{item.sourceName} · {item.productSlug ?? "未归类"}</small></span>
+                </label>
+              ))}
+            </div>
+            <div className="batch-review-controls">
+              <select name="canonicalProductSlug" defaultValue="">
+                <option value="">保留各自当前分类</option>
+                {dashboard.products.map((product) => <option value={product.slug} key={product.slug}>{product.name}</option>)}
+              </select>
+              <input name="reason" minLength={2} placeholder="批量审核理由" required />
+              <button name="action" value="approve" type="submit">批量确认当前分类</button>
+              <button name="action" value="correct" type="submit">批量修正为所选产品</button>
+              <button className="danger" name="action" value="reject" type="submit">批量排除</button>
+            </div>
+          </form>
+        ) : null}
         <div className="review-list">
           {dashboard.reviews.length === 0 ? (
             <div className="empty-state">当前没有待审核商品。</div>
