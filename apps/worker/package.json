@@ -1,0 +1,27 @@
+{
+  "name": "@price-radar/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@price-radar/classifier": "*",
+    "@price-radar/collector-sdk": "*",
+    "@price-radar/database": "*",
+    "@price-radar/ranking": "*",
+    "@price-radar/schema": "*",
+    "bullmq": "6.0.0",
+    "ioredis": "6.0.0",
+    "pino": "10.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
+  }
+}

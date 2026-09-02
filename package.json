@@ -1,0 +1,26 @@
+{
+  "name": "ai-price-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI subscription price intelligence and source verification platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @price-radar/web",
+    "dev:worker": "npm run dev --workspace @price-radar/worker",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @price-radar/database",
+    "db:migrate": "npm run db:migrate --workspace @price-radar/database",
+    "db:studio": "npm run db:studio --workspace @price-radar/database"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10"
+  }
+}
+
