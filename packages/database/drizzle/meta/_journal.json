@@ -43,6 +43,13 @@
       "when": 1788372795189,
       "tag": "0005_motionless_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788373074393,
+      "tag": "0006_dry_nemesis",
+      "breakpoints": true
     }
   ]
 }

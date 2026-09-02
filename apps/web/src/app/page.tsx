@@ -110,7 +110,7 @@ export default async function HomePage() {
           ) : catalog.offers.map((offer) => (
             <a
               className="offer-row"
-              href={offer.productUrl}
+              href={`/out/${offer.id}`}
               target="_blank"
               rel="noopener noreferrer nofollow"
               key={offer.id}

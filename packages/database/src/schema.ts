@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -552,4 +553,39 @@ export const auditLogs = pgTable(
     createdAt,
   },
   (table) => [index("audit_logs_target_idx").on(table.targetType, table.targetId)],
+);
+
+export const outboundClickDaily = pgTable(
+  "outbound_click_daily",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    offerId: uuid("offer_id")
+      .notNull()
+      .references(() => offers.id, { onDelete: "cascade" }),
+    day: date("day").notNull(),
+    clickCount: integer("click_count").notNull().default(0),
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("outbound_click_daily_offer_day_uidx").on(table.offerId, table.day),
+    index("outbound_click_daily_day_idx").on(table.day),
+  ],
+);
+
+export const apiRateLimitWindows = pgTable(
+  "api_rate_limit_windows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fingerprint: text("fingerprint").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    requestCount: integer("request_count").notNull().default(0),
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("api_rate_limit_fingerprint_window_uidx").on(
+      table.fingerprint,
+      table.windowStart,
+    ),
+    index("api_rate_limit_window_idx").on(table.windowStart),
+  ],
 );

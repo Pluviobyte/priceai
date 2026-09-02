@@ -45,7 +45,7 @@ export function PublicOfferList({ offers, showProduct = false }: { offers: Publi
           </div>
           <div className="public-offer-buy">
             <strong>¥{Number(offer.price).toFixed(2)}</strong>
-            <a href={offer.productUrl} target="_blank" rel="noopener noreferrer nofollow">前往原站 ↗</a>
+            <a href={`/out/${offer.id}`} target="_blank" rel="noopener noreferrer nofollow">前往原站 ↗</a>
             <details>
               <summary>举报错误</summary>
               <form action="/api/reports" method="post" className="inline-report-form">
