@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@price-radar/classifier": "*",
+    "@price-radar/anomaly-detector": "*",
     "@price-radar/collector-sdk": "*",
     "@price-radar/database": "*",
     "@price-radar/ranking": "*",

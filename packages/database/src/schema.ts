@@ -277,6 +277,38 @@ export const manualOverrides = pgTable("manual_overrides", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
 });
 
+export const classificationOverrides = pgTable(
+  "classification_overrides",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    sourceItemId: text("source_item_id").notNull(),
+    canonicalProductId: uuid("canonical_product_id").references(
+      () => canonicalProducts.id,
+      { onDelete: "set null" },
+    ),
+    decision: text("decision").notNull(),
+    attributeOverrides: jsonb("attribute_overrides")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    reason: text("reason").notNull(),
+    createdBy: text("created_by").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("classification_overrides_source_item_uidx").on(
+      table.sourceId,
+      table.sourceItemId,
+    ),
+    index("classification_overrides_active_idx").on(table.active),
+  ],
+);
+
 export const offerMatches = pgTable(
   "offer_matches",
   {
@@ -459,6 +491,35 @@ export const reports = pgTable(
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   },
   (table) => [index("reports_status_idx").on(table.status)],
+);
+
+export const offerAnomalies = pgTable(
+  "offer_anomalies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    rawOfferSnapshotId: uuid("raw_offer_snapshot_id")
+      .notNull()
+      .references(() => rawOfferSnapshots.id, { onDelete: "cascade" }),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    offerId: uuid("offer_id").references(() => offers.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    severity: text("severity").notNull(),
+    observedValue: jsonb("observed_value"),
+    baselineValue: jsonb("baseline_value"),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    status: text("status").notNull().default("open"),
+    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("offer_anomalies_snapshot_kind_uidx").on(
+      table.rawOfferSnapshotId,
+      table.kind,
+    ),
+    index("offer_anomalies_status_idx").on(table.status, table.severity),
+  ],
 );
 
 export const auditLogs = pgTable(

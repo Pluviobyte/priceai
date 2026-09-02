@@ -15,6 +15,20 @@
       "when": 1788370131753,
       "tag": "0001_illegal_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788371366533,
+      "tag": "0002_good_mister_sinister",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788371447453,
+      "tag": "0003_overjoyed_nightshade",
+      "breakpoints": true
     }
   ]
 }

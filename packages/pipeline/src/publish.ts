@@ -1,8 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
+import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
 import {
   canonicalProducts,
+  classificationOverrides,
   offerAttributes,
+  offerAnomalies,
   offerMatches,
   offerPriceHistory,
   offers,
@@ -13,7 +16,12 @@ import {
   type Database,
 } from "@price-radar/database";
 import { evaluateOfferEligibility } from "@price-radar/ranking";
-import { rawOfferInputSchema, type FreshnessState } from "@price-radar/schema";
+import {
+  offerAttributesSchema,
+  rawOfferInputSchema,
+  type ClassificationResult,
+  type FreshnessState,
+} from "@price-radar/schema";
 
 export interface PublishOptions {
   channel?: string;
@@ -61,6 +69,17 @@ export async function publishLatestSnapshots(
 
   const products = await db.select().from(canonicalProducts);
   const productBySlug = new Map(products.map((product) => [product.slug, product]));
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const overrides = await db
+    .select()
+    .from(classificationOverrides)
+    .where(eq(classificationOverrides.active, true));
+  const overrideBySourceItem = new Map(
+    overrides.map((override) => [
+      `${override.sourceId}:${override.sourceItemId}`,
+      override,
+    ]),
+  );
 
   return db.transaction(async (tx) => {
     const [publication] = await tx
@@ -99,11 +118,125 @@ export async function publishLatestSnapshots(
         capturedAt: row.raw.capturedAt.toISOString(),
         rawPayloadHash: row.raw.rawPayloadHash,
       });
-      const classification = classifyOffer(raw);
+      const [existing] = await tx
+        .select({
+          id: offers.id,
+          price: offers.price,
+          stockCount: offers.stockCount,
+          stockState: offers.stockState,
+        })
+        .from(offers)
+        .where(
+          and(
+            eq(offers.sourceId, row.source.id),
+            eq(offers.sourceItemId, raw.sourceItemId),
+          ),
+        )
+        .limit(1);
+      const automaticClassification = classifyOffer(raw);
+      const classificationOverride = overrideBySourceItem.get(
+        `${row.source.id}:${raw.sourceItemId}`,
+      );
+      let classification: ClassificationResult = automaticClassification;
+      if (classificationOverride) {
+        const overrideProduct = classificationOverride.canonicalProductId
+          ? productById.get(classificationOverride.canonicalProductId)
+          : undefined;
+        const attributes = offerAttributesSchema.safeParse({
+          ...automaticClassification.attributes,
+          ...classificationOverride.attributeOverrides,
+        });
+        classification = {
+          ...automaticClassification,
+          canonicalProductSlug:
+            classificationOverride.decision === "reject"
+              ? null
+              : overrideProduct?.slug ?? automaticClassification.canonicalProductSlug,
+          attributes: attributes.success
+            ? attributes.data
+            : automaticClassification.attributes,
+          confidence: 1,
+          matchedRules: [
+            ...automaticClassification.matchedRules,
+            `manual:${classificationOverride.decision}`,
+          ],
+          conflictingSignals: attributes.success
+            ? automaticClassification.conflictingSignals
+            : [
+                ...automaticClassification.conflictingSignals,
+                "invalid_manual_attribute_override",
+              ],
+          requiresReview: false,
+        };
+      }
       const product = classification.canonicalProductSlug
         ? productBySlug.get(classification.canonicalProductSlug)
         : undefined;
-      const reviewStatus = classification.requiresReview ? "pending" : "auto_approved";
+      const reviewStatus = classificationOverride
+        ? classificationOverride.decision === "reject"
+          ? "rejected"
+          : "manual_approved"
+        : classification.requiresReview
+          ? "pending"
+          : "auto_approved";
+      const detectedAnomalies = classificationOverride?.decision === "reject"
+        ? []
+        : detectOfferAnomalies({
+            price: raw.price,
+            ...(raw.stockCount !== undefined ? { stockCount: raw.stockCount } : {}),
+            stockState: raw.stockState,
+            classificationConfidence: classification.confidence,
+            canonicalProductSlug: classification.canonicalProductSlug,
+            ...(existing ? { previousPrice: existing.price } : {}),
+          });
+      const anomalyKinds = detectedAnomalies.map((anomaly) => anomaly.kind);
+      await tx
+        .update(offerAnomalies)
+        .set({ status: "resolved", resolvedAt: now })
+        .where(
+          anomalyKinds.length > 0
+            ? and(
+                eq(offerAnomalies.rawOfferSnapshotId, row.raw.id),
+                notInArray(offerAnomalies.kind, anomalyKinds),
+              )
+            : eq(offerAnomalies.rawOfferSnapshotId, row.raw.id),
+        );
+      for (const anomaly of detectedAnomalies) {
+        await tx
+          .insert(offerAnomalies)
+          .values({
+            rawOfferSnapshotId: row.raw.id,
+            sourceId: row.source.id,
+            ...(existing ? { offerId: existing.id } : {}),
+            kind: anomaly.kind,
+            severity: anomaly.severity,
+            ...(anomaly.observedValue !== undefined
+              ? { observedValue: anomaly.observedValue }
+              : {}),
+            ...(anomaly.baselineValue !== undefined
+              ? { baselineValue: anomaly.baselineValue }
+              : {}),
+            details: anomaly.details,
+            status: "open",
+            detectedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [offerAnomalies.rawOfferSnapshotId, offerAnomalies.kind],
+            set: {
+              severity: anomaly.severity,
+              ...(anomaly.observedValue !== undefined
+                ? { observedValue: anomaly.observedValue }
+                : {}),
+              ...(anomaly.baselineValue !== undefined
+                ? { baselineValue: anomaly.baselineValue }
+                : {}),
+              details: anomaly.details,
+              status: "open",
+              detectedAt: now,
+              resolvedAt: null,
+            },
+          });
+      }
       const [match] = await tx
         .insert(offerMatches)
         .values({
@@ -204,11 +337,6 @@ export async function publishLatestSnapshots(
         : null;
       if (eligibility.availabilityState === "quarantined") quarantinedCount += 1;
 
-      const [existing] = await tx
-        .select({ id: offers.id, price: offers.price, stockCount: offers.stockCount, stockState: offers.stockState })
-        .from(offers)
-        .where(and(eq(offers.sourceId, row.source.id), eq(offers.sourceItemId, raw.sourceItemId)))
-        .limit(1);
       const [publishedOffer] = await tx
         .insert(offers)
         .values({
@@ -257,6 +385,12 @@ export async function publishLatestSnapshots(
         })
         .returning({ id: offers.id });
       if (!publishedOffer) throw new Error("offer_upsert_failed");
+      if (detectedAnomalies.length > 0) {
+        await tx
+          .update(offerAnomalies)
+          .set({ offerId: publishedOffer.id })
+          .where(eq(offerAnomalies.rawOfferSnapshotId, row.raw.id));
+      }
 
       const changed =
         !existing ||

@@ -5,7 +5,7 @@ import type {
   RawOfferInput,
 } from "@price-radar/schema";
 
-const VERSION = "rules-2026-09-03.1";
+const VERSION = "rules-2026-09-03.2";
 
 interface ProductRule {
   slug: string;
@@ -15,13 +15,35 @@ interface ProductRule {
 
 const productRules: ProductRule[] = [
   {
+    slug: "codex-credits",
+    include: [/\bcodex\b.*(?:额度|点数|credits?)/i],
+    exclude: [/接马|接码|绑定|手机号/i],
+  },
+  {
+    slug: "chatgpt-team",
+    include: [/(?:chat\s*gpt|g[-\s]*p[-\s]*t|openai).*\bteam\b/i, /\bg\s*team\b/i],
+  },
+  {
+    slug: "chatgpt-go",
+    include: [/(?:chat\s*gpt|gpt).*\bgo\b/i],
+  },
+  {
     slug: "chatgpt-pro",
-    include: [/\bchatgpt\b.*\bpro\b/i, /\bgpt\s*pro\b/i],
+    include: [
+      /\bchat\s*gpt\b.*\bpro\b/i,
+      /\bgpt\s*(?:5\s*x|20\s*x)?\s*pro\b/i,
+    ],
+    exclude: [/教程|免费|free/i],
   },
   {
     slug: "chatgpt-plus",
-    include: [/\bchatgpt\b.*\bplus\b/i, /\bgpt\s*plus\b/i, /\bplus\b.*\bcodex\b/i],
-    exclude: [/\bpro\b/i],
+    include: [
+      /\bchat\s*gpt\b.*\bplus\b/i,
+      /\bgpt\s*plus\b/i,
+      /\bg[-\s]*plus\b/i,
+      /\bplus\b.*\b(?:codex|成品|账号|充值|代充)\b/i,
+    ],
+    exclude: [/\b(?:pro|go|team|k12|free)\b|接马|接码|额度/i],
   },
   {
     slug: "claude-max-20x",
@@ -42,7 +64,11 @@ const productRules: ProductRule[] = [
   },
   {
     slug: "gemini-pro",
-    include: [/\bgemini\b.*\bpro\b/i, /\bgoogle\s*ai\s*pro\b/i],
+    include: [
+      /\bgemini\b.*\bpro\b/i,
+      /\bgemini\s*\d+(?:\.\d+)?\s*pro\b/i,
+      /\bgoogle\s*ai\s*pro\b/i,
+    ],
     exclude: [/\bultra\b/i],
   },
   {
@@ -52,6 +78,14 @@ const productRules: ProductRule[] = [
   {
     slug: "cursor-pro",
     include: [/\bcursor\b.*\bpro\b/i],
+  },
+  {
+    slug: "perplexity-pro",
+    include: [/\bperplexity\b.*\bpro\b/i],
+  },
+  {
+    slug: "x-premium",
+    include: [/(?:x[-\s]*twitter|twitter|推特).*\bpremium\b/i],
   },
 ];
 
@@ -69,6 +103,15 @@ const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
 
 function normalizedText(offer: RawOfferInput): string {
   return [offer.rawTitle, offer.rawDescription, offer.rawCategory]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizedProductText(offer: RawOfferInput): string {
+  return [offer.rawTitle, offer.rawCategory]
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .normalize("NFKC")
@@ -152,6 +195,9 @@ function extractRiskFacts(text: string): string[] {
   if (/共享|拼车|合租/i.test(text)) facts.add("共享使用");
   if (/需要.*密码|提供.*账密|账号密码/i.test(text)) facts.add("涉及账号凭据");
   if (/不可囤|不能囤/i.test(text)) facts.add("不可囤积");
+  if (/不退不换|不可退款|拒绝退款/i.test(text)) facts.add("不支持退款");
+  if (/封号.*不售后|封禁.*不质保/i.test(text)) facts.add("封禁不质保");
+  if (/自动重置|定期重置/i.test(text)) facts.add("权益可能重置");
   if (/日抛|小时号/i.test(text)) facts.add("短期商品");
   if (/未接码|未绑.*手机/i.test(text)) facts.add("未完成手机号验证");
 
@@ -209,7 +255,7 @@ function extractAttributes(text: string, mode: OfferMode): OfferAttributes {
 
 export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const text = normalizedText(offer);
-  const product = matchProduct(text);
+  const product = matchProduct(normalizedProductText(offer));
   const mode = matchOfferMode(text);
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];
@@ -232,4 +278,3 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
     requiresReview: !product.slug || confidence < 0.75 || conflictingSignals.length > 0,
   };
 }
-
