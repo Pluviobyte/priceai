@@ -2,6 +2,7 @@ import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import pino from "pino";
 import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
+import { BrowserCollector } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
 import { DujiaoCollector } from "@price-radar/dujiao-collector";
 import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
@@ -25,6 +26,13 @@ registry.register(new LdxpShopApiCollector());
 registry.register(new KamiCollector());
 registry.register(new DujiaoCollector());
 registry.register(new GenericHtmlCollector());
+registry.register(
+  new BrowserCollector({
+    ...(config.browserExecutablePath
+      ? { executablePath: config.browserExecutablePath }
+      : {}),
+  }),
+);
 
 interface SourceJobData {
   sourceId?: unknown;

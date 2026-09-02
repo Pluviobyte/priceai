@@ -136,6 +136,10 @@ function parseOffers(html: string, pageUrl: URL): ParsedHtmlOffer[] {
   return [...byId.values()];
 }
 
+export function extractGenericHtmlOffers(html: string, pageUrl: URL): unknown[] {
+  return parseOffers(html, pageUrl);
+}
+
 function asParsedOffer(value: unknown): ParsedHtmlOffer {
   if (
     !isRecord(value) ||

@@ -14,6 +14,7 @@ export interface CollectorContext {
 
 export interface CollectorAdapter {
   readonly kind: string;
+  readonly probePriority?: "fast" | "browser";
 
   probe(sourceUrl: URL, signal: AbortSignal): Promise<ProbeResult>;
 
@@ -54,13 +55,21 @@ export class InMemoryCollectorRegistry implements CollectorRegistry {
   }
 
   async probe(sourceUrl: URL, signal: AbortSignal): Promise<ProbeResult[]> {
-    const results = await Promise.all(
-      [...this.#adapters.values()].map((adapter) =>
+    const adapters = [...this.#adapters.values()];
+    const fastAdapters = adapters.filter((adapter) => adapter.probePriority !== "browser");
+    const browserAdapters = adapters.filter((adapter) => adapter.probePriority === "browser");
+    const fastResults = await Promise.all(
+      fastAdapters.map((adapter) =>
         adapter.probe(sourceUrl, signal),
       ),
     );
 
+    const results = fastResults.some((result) => result.supported)
+      ? fastResults
+      : [...fastResults, ...(await Promise.all(
+          browserAdapters.map((adapter) => adapter.probe(sourceUrl, signal)),
+        ))];
+
     return results.sort((left, right) => right.confidence - left.confidence);
   }
 }
-

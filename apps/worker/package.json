@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@price-radar/classifier": "*",
+    "@price-radar/browser-collector": "*",
     "@price-radar/collector-sdk": "*",
     "@price-radar/database": "*",
     "@price-radar/dujiao-collector": "*",

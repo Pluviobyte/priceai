@@ -3,6 +3,7 @@ export interface WorkerConfig {
   redisUrl: string;
   concurrency: number;
   schedulerIntervalMs: number;
+  browserExecutablePath?: string;
 }
 
 export function readWorkerConfig(
@@ -15,5 +16,8 @@ export function readWorkerConfig(
     redisUrl: env.REDIS_URL ?? "redis://localhost:6379",
     concurrency: Number(env.WORKER_CONCURRENCY ?? 4),
     schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS ?? 30_000),
+    ...(env.BROWSER_EXECUTABLE_PATH
+      ? { browserExecutablePath: env.BROWSER_EXECUTABLE_PATH }
+      : {}),
   };
 }
