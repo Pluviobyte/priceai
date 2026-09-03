@@ -25,7 +25,7 @@ const deliveryFamilies = [
   },
   {
     icon: "shield",
-    title: "代充 · 团队席位",
+    title: "代充",
     ownership: "你的账号，别人替你付款",
     band: "约为官方价的 5–8 折",
     cost: "需提取账号 Session 或交由对方代付，渠道异常可能波及订阅。下单时尽量选择信誉卡网与有售后保障的商家。",
