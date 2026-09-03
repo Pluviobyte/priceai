@@ -16,6 +16,8 @@ export const dynamic = "force-dynamic";
 const deliveryFamilies = [
   {
     icon: "badge",
+    tag: "稳定安全",
+    tagTheme: "green",
     title: "官网自己付款",
     ownership: "账号完全属于你",
     band: "官方正价",
@@ -25,6 +27,8 @@ const deliveryFamilies = [
   },
   {
     icon: "shield",
+    tag: "免外币卡",
+    tagTheme: "blue",
     title: "代充 · 卡网",
     ownership: "你的账号，别人替你付款",
     band: "约为官方价的 5–8 折",
@@ -34,6 +38,8 @@ const deliveryFamilies = [
   },
   {
     icon: "package",
+    tag: "开箱即用",
+    tagTheme: "orange",
     title: "成品账号 · 卡网",
     ownership: "对方建好后交给你",
     band: "约为官方价的 3–7 折",
@@ -42,7 +48,9 @@ const deliveryFamilies = [
     cta: "去卡网订阅找成品号",
   },
   {
-    icon: "users",
+    icon: "key",
+    tag: "白菜价尝鲜",
+    tagTheme: "purple",
     title: "共享 · 镜像 · 反代",
     ownership: "账号不归你，你买的是使用权",
     band: "约为官方价的 1–4 折",
@@ -125,7 +133,10 @@ export default async function HomePage() {
         </div>
         <div className="priceai-delivery-grid">
           {deliveryFamilies.map((item) => <article key={item.title}>
-            <div className="priceai-card-top"><span className="priceai-icon"><LineIcon name={item.icon} /></span></div>
+            <div className="priceai-card-top">
+              <span className="priceai-icon"><LineIcon name={item.icon} /></span>
+              <span className={`priceai-emotion-tag ${item.tagTheme}`}>{item.tag}</span>
+            </div>
             <h3>{item.title}</h3>
             <span className="priceai-pill">{item.band}</span>
             <p className="priceai-delivery-own">{item.ownership}</p>
