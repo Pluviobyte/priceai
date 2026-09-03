@@ -196,7 +196,7 @@ export function ResendCubeLogo() {
         const delta = reducedMotion ? 0 : Math.min(clock.getDelta(), 0.05);
         engagement += ((isEngaged ? 1 : 0) - engagement) * Math.min(1, delta * 4.5);
         motionTime += delta * (1 + engagement * 0.32);
-        yawRotation += delta * (0.15 + engagement * 0.07);
+        yawRotation += delta * (0.23 + engagement * 0.1);
 
         cube.rotation.x = -0.4 + Math.sin(motionTime * 0.36) * 0.065;
         cube.rotation.y = yawRotation + Math.sin(motionTime * 0.48) * 0.035;
