@@ -35,6 +35,8 @@ export default async function ProductPage({
   const phone = first(raw.phone);
   const sort = first(raw.sort);
   const duration = Number(first(raw.duration));
+  const minPrice = Number(first(raw.minPrice));
+  const maxPrice = Number(first(raw.maxPrice));
   const filters: OfferFilters = {
     ...(q ? { q } : {}),
     ...(mode ? { mode } : {}),
@@ -44,7 +46,9 @@ export default async function ProductPage({
     ...(shared === "yes" || shared === "no" ? { shared } : {}),
     ...(phone === "yes" || phone === "no" ? { phoneBound: phone } : {}),
     ...(Number.isInteger(duration) && duration > 0 ? { durationDays: duration } : {}),
-    ...(sort === "price" || sort === "freshness" ? { sort } : { sort: "default" as const }),
+    ...(Number.isFinite(minPrice) && minPrice >= 0 && first(raw.minPrice) !== undefined && first(raw.minPrice) !== "" ? { minPrice } : {}),
+    ...(Number.isFinite(maxPrice) && maxPrice >= 0 && first(raw.maxPrice) !== undefined && first(raw.maxPrice) !== "" ? { maxPrice } : {}),
+    ...(sort === "price" || sort === "freshness" || sort === "stock" ? { sort } : { sort: "default" as const }),
   };
   const product = await getPublicProduct(slug, filters);
   if (!product) notFound();
@@ -55,12 +59,31 @@ export default async function ProductPage({
     : null;
   return (
     <main>
-      <SiteHeader />
+      <SiteHeader active="subscriptions" />
       <section className="detail-hero">
-        <a className="breadcrumb" href={`/brands/${product.brand.toLowerCase()}`}>{product.brand}</a>
+        <div className="breadcrumb-row"><a className="breadcrumb" href="/subscriptions">← 返回卡网订阅</a><a className="breadcrumb" href={`/brands/${product.brand.toLowerCase()}`}>{product.brand} 产品</a></div>
         <h1>{product.name}</h1>
         <p>{product.planFamily} · {product.baseDurationDays ? `标准 ${product.baseDurationDays} 天` : "按原站规格"}</p>
+        <div className="detail-summary" aria-label="商品报价概况">
+          <span><b>{product.offers.length}</b> 条当前匹配</span>
+          <span><b>{product.offers.filter((offer) => offer.stockState !== "out_of_stock").length}</b> 条可购买</span>
+          <span><b>{product.publishedAt ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(product.publishedAt) : "未发布"}</b> 最近发布</span>
+        </div>
       </section>
+      <div className="detail-guide-wrap">
+        <aside className="guide-strip detail-guide" aria-label="商品比价提示">
+          <div><span>比较提示</span><b>先筛交付方式，再比较价格</b></div>
+          <p>低价可能来自短期号、共享或首登质保，购买前务必查看原始标题与风险事实。</p>
+          <a href="/methodology">了解排序规则</a>
+        </aside>
+        <nav className="quick-filters" aria-label="常用报价筛选">
+          <a href={`/products/${product.slug}`}>全部可购买</a>
+          <a href={`/products/${product.slug}?mode=recharge`}>自己账号代充</a>
+          <a href={`/products/${product.slug}?mode=finished_account`}>成品账号</a>
+          <a href={`/products/${product.slug}?warranty=subscription_period`}>订阅期质保</a>
+          <a href={`/products/${product.slug}?sort=freshness`}>最新确认</a>
+        </nav>
+      </div>
       <section className="detail-layout">
         <aside className="filter-panel">
           <h2>筛选报价</h2>
@@ -70,7 +93,8 @@ export default async function ProductPage({
             <label>质保<select name="warranty" defaultValue={first(raw.warranty) ?? ""}><option value="">全部</option><option value="subscription_period">订阅期质保</option><option value="fixed_hours">固定时长</option><option value="first_login">仅保首登</option><option value="none">无质保</option></select></label>
             <label>账号归属<select name="ownership" defaultValue={first(raw.ownership) ?? ""}><option value="">全部</option><option value="buyer">买家自有</option><option value="merchant">商家提供</option><option value="shared">共享</option></select></label>
             <label>库存<select name="stock" defaultValue={first(raw.stock) ?? "available"}><option value="available">仅可购买</option><option value="all">包含缺货/过期</option></select></label>
-            <label>排序<select name="sort" defaultValue={first(raw.sort) ?? "default"}><option value="default">默认可比排序</option><option value="price">价格从低到高</option><option value="freshness">最新确认</option></select></label>
+            <div className="price-range-fields"><label>最低价<input name="minPrice" type="number" min="0" step="0.01" defaultValue={first(raw.minPrice)} placeholder="不限" /></label><label>最高价<input name="maxPrice" type="number" min="0" step="0.01" defaultValue={first(raw.maxPrice)} placeholder="不限" /></label></div>
+            <label>排序<select name="sort" defaultValue={first(raw.sort) ?? "default"}><option value="default">默认可比排序</option><option value="price">价格从低到高</option><option value="stock">库存从多到少</option><option value="freshness">最新确认</option></select></label>
             <button type="submit">应用筛选</button>
             <a href={`/products/${product.slug}`}>清空条件</a>
           </form>

@@ -1,19 +1,26 @@
-export function SiteHeader({ active = "card" }: { active?: "card" | "official" | "api" | "transit" | "channels" | "submit" | "methodology" | "status" }) {
+import Link from "next/link";
+
+type HeaderSection = "home" | "subscriptions" | "official" | "api" | "transit" | "channels" | "changes" | "submit" | "methodology" | "status";
+
+export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   return (
     <header className="topbar">
-      <a className="brand" href="/" aria-label="AI 价格雷达首页">
+      <Link className="brand" href="/" aria-label="AI 价格雷达首页">
         <span className="brand-mark">A</span><span>AI 价格雷达</span>
-      </a>
+      </Link>
       <nav aria-label="主导航">
-        <a className={active === "card" ? "active" : undefined} href="/">AI 订阅</a>
-        <a className={active === "official" ? "active" : undefined} href="/official-prices">官方订阅</a>
-        <a className={active === "api" ? "active" : undefined} href="/official-api">官方 API</a>
-        <a className={active === "transit" ? "active" : undefined} href="/api-transit">API 中转</a>
-        <a className={active === "channels" ? "active" : undefined} href="/channels">来源目录</a>
-        <a className={active === "methodology" ? "active" : undefined} href="/methodology">数据说明</a>
-        <a className={active === "status" ? "active" : undefined} href="/status">系统健康</a>
+        <Link className={active === "home" ? "active" : undefined} href="/">首页</Link>
+        <Link className={active === "subscriptions" ? "active" : undefined} href="/subscriptions">卡网订阅</Link>
+        <Link className={active === "official" ? "active" : undefined} href="/official-prices">官方订阅</Link>
+        <Link className={active === "api" ? "active" : undefined} href="/official-api">官方 API</Link>
+        <Link className={active === "transit" ? "active" : undefined} href="/api-transit">中转 API</Link>
+        <Link className={active === "changes" ? "active" : undefined} href="/changes">价格异动</Link>
+        <Link className={active === "methodology" ? "active" : undefined} href="/methodology">数据说明</Link>
       </nav>
-      <a className="submit-link" href="/submit">提交渠道</a>
+      <div className="header-actions">
+        <Link className="directory-link" href="/channels">来源目录</Link>
+        <Link className={`submit-link${active === "submit" ? " active" : ""}`} href="/submit">提交渠道</Link>
+      </div>
     </header>
   );
 }

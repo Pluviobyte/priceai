@@ -1,3 +1,6 @@
+import { SiteHeader } from "../site-header";
+import Link from "next/link";
+
 export const dynamic = "force-dynamic";
 
 const errorMessages: Record<string, string> = {
@@ -13,17 +16,18 @@ export default async function SubmitPage({
   const { error } = await searchParams;
   return (
     <main>
-      <header className="topbar">
-        <a className="brand" href="/"><span className="brand-mark">A</span><span>AI 价格雷达</span></a>
-        <nav aria-label="主导航"><a href="/">卡网订阅</a><a className="active" href="/submit">提交渠道</a></nav>
-        <a className="submit-link" href="/channels">来源目录</a>
-      </header>
+      <SiteHeader active="submit" />
       <section className="form-shell">
         <div className="form-intro">
           <span className="section-kicker">渠道收录</span>
           <h1>提交公开店铺</h1>
           <p>提交后会先做 URL 安全检查、系统识别和小规模试采集，再由运营人员确认。候选店铺不会自动进入公开比价。</p>
         </div>
+        <nav className="submission-paths" aria-label="提交类型">
+          <span className="active"><b>新增店铺</b><small>提交公开网址进入预检</small></span>
+          <Link href="/channels"><b>纠错或举报</b><small>先找到商家，再提交问题</small></Link>
+          <Link href="/merchant-feed"><b>商家直连</b><small>用稳定 Feed 提高时效</small></Link>
+        </nav>
         {error ? <div className="form-error">{errorMessages[error] ?? errorMessages.invalid}</div> : null}
         <form className="public-form" action="/api/submissions" method="post">
           <label>店铺网址<input type="url" name="url" maxLength={2048} placeholder="https://example.com/shop" required /></label>

@@ -76,7 +76,25 @@ export interface OfferFilters {
   shared?: "yes" | "no";
   phoneBound?: "yes" | "no";
   durationDays?: number;
-  sort?: "default" | "price" | "freshness";
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: "default" | "price" | "freshness" | "stock";
+}
+
+export interface PublicMarketChange {
+  offerId: string;
+  productSlug: string;
+  productName: string;
+  merchantSlug: string;
+  merchantName: string;
+  currency: string;
+  price: string;
+  previousPrice: string;
+  stockCount: number | null;
+  previousStockCount: number | null;
+  stockState: string;
+  previousStockState: string;
+  observedAt: Date;
 }
 
 export interface PublicMerchantDetail {
@@ -210,6 +228,22 @@ interface ChannelRow {
   last_success_at: Date | null;
   expected_product_count: number | null;
   last_checked_at: Date | null;
+}
+
+interface MarketChangeRow {
+  offer_id: string;
+  product_slug: string;
+  product_name: string;
+  merchant_slug: string;
+  merchant_name: string;
+  currency: string;
+  price: string;
+  previous_price: string;
+  stock_count: number | null;
+  previous_stock_count: number | null;
+  stock_state: string;
+  previous_stock_state: string;
+  observed_at: Date;
 }
 
 const FEATURED_PRODUCTS = [
@@ -406,10 +440,14 @@ function filterOfferSql(
   if (filters.phoneBound === "yes") conditions.push("oa.phone_bound=true");
   if (filters.phoneBound === "no") conditions.push("oa.phone_bound=false");
   if (filters.durationDays) conditions.push(`oa.duration_days=${push(filters.durationDays)}`);
+  if (filters.minPrice !== undefined) conditions.push(`o.price>=${push(filters.minPrice)}`);
+  if (filters.maxPrice !== undefined) conditions.push(`o.price<=${push(filters.maxPrice)}`);
   const orderBy = filters.sort === "price"
     ? "o.price asc,o.offer_verified_at desc nulls last"
     : filters.sort === "freshness"
       ? "o.offer_verified_at desc nulls last,o.price asc"
+      : filters.sort === "stock"
+        ? "o.stock_count desc nulls last,o.offer_verified_at desc nulls last,o.price asc"
       : `case o.availability_state when 'purchasable' then 1 when 'unavailable' then 2 else 3 end,
          case when o.offer_verified_at>now()-interval '6 hours' then 1 when o.offer_verified_at>now()-interval '24 hours' then 2 else 3 end,
          case when o.offer_mode in ('recharge','finished_account','redeem_code','team_seat') then 1 else 2 end,
@@ -575,5 +613,54 @@ export async function getPublicChannels(): Promise<PublicChannel[]> {
     lastSuccessAt: row.last_success_at,
     expectedProductCount: row.expected_product_count,
     lastCheckedAt: row.last_checked_at,
+  }));
+}
+
+export async function getPublicMarketChanges(days: 1 | 7 | 30): Promise<PublicMarketChange[]> {
+  const rows = await query<MarketChangeRow>(
+    `with sequenced as (
+       select oph.offer_id,oph.price,oph.currency,oph.stock_count,oph.stock_state,oph.observed_at,
+              lag(oph.price) over (partition by oph.offer_id order by oph.observed_at) previous_price,
+              lag(oph.stock_count) over (partition by oph.offer_id order by oph.observed_at) previous_stock_count,
+              lag(oph.stock_state) over (partition by oph.offer_id order by oph.observed_at) previous_stock_state
+         from offer_price_history oph
+        where oph.observed_at>=now()-(($1::int + 7) * interval '1 day')
+     ), latest_changes as (
+       select distinct on (offer_id) *
+         from sequenced
+        where observed_at>=now()-($1::int * interval '1 day')
+          and previous_price is not null
+          and (price is distinct from previous_price
+            or stock_count is distinct from previous_stock_count
+            or stock_state is distinct from previous_stock_state)
+        order by offer_id,observed_at desc
+     )
+     select c.offer_id,cp.slug product_slug,cp.display_name product_name,
+            m.slug merchant_slug,m.name merchant_name,c.currency,c.price,c.previous_price,
+            c.stock_count,c.previous_stock_count,c.stock_state,c.previous_stock_state,c.observed_at
+       from latest_changes c
+       join offers o on o.id=c.offer_id
+       join canonical_products cp on cp.id=o.canonical_product_id
+       join sources s on s.id=o.source_id
+       join merchants m on m.id=s.merchant_id
+      where o.availability_state<>'quarantined' and cp.status='active' and m.status='active'
+      order by c.observed_at desc
+      limit 120`,
+    [days],
+  );
+  return rows.map((row) => ({
+    offerId: row.offer_id,
+    productSlug: row.product_slug,
+    productName: row.product_name,
+    merchantSlug: row.merchant_slug,
+    merchantName: row.merchant_name,
+    currency: row.currency,
+    price: row.price,
+    previousPrice: row.previous_price,
+    stockCount: row.stock_count,
+    previousStockCount: row.previous_stock_count,
+    stockState: row.stock_state,
+    previousStockState: row.previous_stock_state,
+    observedAt: row.observed_at,
   }));
 }

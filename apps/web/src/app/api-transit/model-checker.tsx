@@ -19,7 +19,7 @@ export function ModelChecker() {
     } catch (caught) { setError(caught instanceof Error ? caught.message : "check_failed"); }
     finally { setPending(false); }
   }
-  return <section className="model-checker"><div><span className="section-kicker">Bring your own key</span><h2>一次性模型检测</h2><p>Key 只用于本次请求，不写入数据库、日志或 Cookie。留空模型名时只读取 <code>/models</code>。</p></div><form onSubmit={submit}>
+  return <section className="model-checker" id="model-checker"><div><span className="section-kicker">Bring your own key</span><h2>一次性模型检测</h2><p>Key 只用于本次请求，不写入数据库、日志或 Cookie。留空模型名时只读取 <code>/models</code>。</p></div><form onSubmit={submit}>
     <label>API Base URL<input name="endpoint" type="url" placeholder="https://example.com/v1" required maxLength={500} /></label>
     <label>API Key<input name="apiKey" type="password" autoComplete="off" required maxLength={4096} /></label>
     <label>可选模型<input name="model" placeholder="model-id" maxLength={200} /></label>
