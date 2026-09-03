@@ -890,7 +890,7 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .blue-engine-toolbar p { margin: 0; color: var(--blue-body); font-size: 13px; }
 .blue-engine-table { overflow: hidden; border: 1px solid var(--blue-line); border-radius: 8px; background: var(--color-panel); box-shadow: none; }
 .blue-engine-table-head,
-.blue-engine-row { display: grid; grid-template-columns: 1.9fr 1.1fr 1.9fr 1.6fr .9fr auto; gap: 16px; align-items: center; }
+.blue-engine-row { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1.1fr) minmax(0, 1.9fr) minmax(0, 1.6fr) minmax(0, .9fr) 97px; gap: 16px; align-items: center; }
 .blue-engine-table-head { padding: 14px 22px; border-bottom: 1px solid var(--blue-line); background: var(--color-surface); color: var(--blue-muted); font-size: 11px; font-weight: 500; }
 .blue-engine-row { min-height: 88px; padding: 20px 22px; border-bottom: 1px solid var(--blue-line); }
 .blue-engine-row:last-child { border-bottom: 0; }
