@@ -37,11 +37,11 @@ export function ResendCubeLogo() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.12;
+      renderer.toneMappingExposure = 0.96;
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(31, 1, 0.1, 30);
-      camera.position.set(0, 0.06, 7.2);
+      camera.position.set(0, 0.06, 6.25);
 
       const room = new RoomEnvironment();
       const pmrem = new THREE.PMREMGenerator(renderer);
@@ -52,39 +52,46 @@ export function ResendCubeLogo() {
 
       const cube = new THREE.Group();
       const geometry = new RoundedBoxGeometry(1.16, 1.16, 1.16, 4, 0.105);
-      const tileColors = [0xffffff, 0xf8f9fa, 0xf1f3f5, 0xfafafa] as const;
-      const iconColors = [
-        ["#008f6a", "#18b887"],
-        ["#bd4e2f", "#de714d"],
-        ["#2f6ff2", "#8745c6", "#d43e72"],
-        ["#d91f5f", "#ef4f32"],
-        ["#244cf0", "#0089ef"],
-        ["#5145cf", "#812cdb"],
-        ["#1264d6", "#009abb"],
-        ["#007f91", "#21a25e"],
-      ] as const;
-      const materials = MODEL_ICON_ENTRIES.map((_, index) => {
-        const tileColor = tileColors[index % tileColors.length] ?? tileColors[0];
-        return new THREE.MeshPhysicalMaterial({
-          color: tileColor,
-          metalness: 0.04,
-          roughness: 0.3,
-          clearcoat: 0.72,
-          clearcoatRoughness: 0.12,
-          envMapIntensity: 0.72,
-        });
+      const tileColors = [0xf7f8f9, 0xf1f3f5, 0xe9edf0, 0xf4f6f7] as const;
+      const createCubeMaterial = (color: number) => new THREE.MeshPhysicalMaterial({
+        color,
+        metalness: 0.08,
+        roughness: 0.36,
+        clearcoat: 0.62,
+        clearcoatRoughness: 0.16,
+        envMapIntensity: 0.56,
       });
+      const iconMaterials = MODEL_ICON_ENTRIES.map(() => {
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        material.toneMapped = false;
+        return material;
+      });
+      const neutralMaterials = tileColors.map((tileColor) => createCubeMaterial(tileColor));
       const cubelets: THREE.Mesh[] = [];
       const spacing = 1.27;
       const coordinates = [-0.5, 0.5] as const;
+      const iconFacesByCubelet: Record<number, Array<[face: number, icon: number]>> = {
+        0: [[2, 6]],
+        1: [[0, 4], [2, 7]],
+        3: [[0, 5]],
+        4: [[4, 0]],
+        5: [[4, 1]],
+        6: [[4, 2]],
+        7: [[4, 3]],
+      };
       let cubeletIndex = 0;
 
       for (const z of coordinates) {
         for (const y of [...coordinates].reverse()) {
           for (const x of coordinates) {
-            const material = materials[cubeletIndex];
-            if (!material) continue;
-            const mesh = new THREE.Mesh(geometry, material);
+            const neutralMaterial = neutralMaterials[cubeletIndex % neutralMaterials.length];
+            if (!neutralMaterial) continue;
+            const faceMaterials: THREE.Material[] = Array.from({ length: 6 }, () => neutralMaterial);
+            for (const [faceIndex, iconIndex] of iconFacesByCubelet[cubeletIndex] ?? []) {
+              const iconMaterial = iconMaterials[iconIndex];
+              if (iconMaterial) faceMaterials[faceIndex] = iconMaterial;
+            }
+            const mesh = new THREE.Mesh(geometry, faceMaterials);
             const base = new THREE.Vector3(x * spacing, y * spacing, z * spacing);
             mesh.position.copy(base);
             mesh.userData.base = base;
@@ -98,7 +105,7 @@ export function ResendCubeLogo() {
 
       const imageLoader = new THREE.ImageLoader();
       const maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      MODEL_ICON_ENTRIES.forEach(([, path], index) => {
+      MODEL_ICON_ENTRIES.forEach(([name, path], index) => {
         imageLoader.load(path, (image) => {
           if (disposed) return;
 
@@ -119,30 +126,22 @@ export function ResendCubeLogo() {
           const iconContext = iconLayer.getContext("2d");
           if (!iconContext) return;
 
+          if (name === "kimi") {
+            iconContext.fillStyle = "#111318";
+            iconContext.beginPath();
+            iconContext.roundRect(58, 58, 396, 396, 92);
+            iconContext.fill();
+          }
           iconContext.drawImage(image, 60, 60, 392, 392);
-          iconContext.globalCompositeOperation = "source-in";
-          const colors = iconColors[index] ?? iconColors[0];
-          const iconGradient = iconContext.createLinearGradient(92, 92, 420, 420);
-          colors.forEach((color, colorIndex) => {
-            iconGradient.addColorStop(colorIndex / Math.max(1, colors.length - 1), color);
-          });
-          iconContext.fillStyle = iconGradient;
-          iconContext.fillRect(0, 0, iconLayer.width, iconLayer.height);
           context.drawImage(iconLayer, 0, 0);
 
           const texture = new THREE.CanvasTexture(tile);
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.anisotropy = maxAnisotropy;
-          const emissiveTexture = new THREE.CanvasTexture(iconLayer);
-          emissiveTexture.colorSpace = THREE.SRGBColorSpace;
-          emissiveTexture.anisotropy = maxAnisotropy;
-          iconTextures.push(texture, emissiveTexture);
-          const material = materials[index];
+          iconTextures.push(texture);
+          const material = iconMaterials[index];
           if (!material) return;
           material.map = texture;
-          material.emissive.set(0xffffff);
-          material.emissiveMap = emissiveTexture;
-          material.emissiveIntensity = 0.46;
           material.needsUpdate = true;
         });
       });
@@ -150,17 +149,17 @@ export function ResendCubeLogo() {
       cube.rotation.set(-0.4, 0.58, -0.07);
       scene.add(cube);
 
-      const key = new THREE.RectAreaLight(0xffffff, 7.2, 4.5, 1.2);
+      const key = new THREE.RectAreaLight(0xffffff, 4.1, 4.5, 1.2);
       key.position.set(-3.6, 4.8, 4.2);
       key.lookAt(0, 0, 0);
       scene.add(key);
 
-      const rim = new THREE.RectAreaLight(0xb9d5ff, 3.4, 1.8, 4.4);
+      const rim = new THREE.RectAreaLight(0xb9d5ff, 1.8, 1.8, 4.4);
       rim.position.set(4.2, 1.1, -1.3);
       rim.lookAt(0, 0, 0);
       scene.add(rim);
 
-      const sweep = new THREE.PointLight(0xeaf3ff, 5.2, 11, 1.8);
+      const sweep = new THREE.PointLight(0xeaf3ff, 2.6, 11, 1.8);
       sweep.position.set(-3.2, 2.8, 4.3);
       scene.add(sweep);
 
@@ -183,7 +182,7 @@ export function ResendCubeLogo() {
         const elapsed = clock.getElapsedTime();
         const motionTime = reducedMotion ? 2.4 : elapsed;
         cube.rotation.x = -0.4 + Math.sin(motionTime * 0.24) * 0.055;
-        cube.rotation.y = 0.58 + motionTime * 0.28;
+        cube.rotation.y = 0.58 + Math.sin(motionTime * 0.25) * 0.13;
         cube.rotation.z = -0.07 + Math.sin(motionTime * 0.18) * 0.025;
         cube.position.y = Math.sin(motionTime * 0.52) * 0.045;
 
@@ -241,7 +240,8 @@ export function ResendCubeLogo() {
         intersectionObserver?.disconnect();
         geometry.dispose();
         iconTextures.forEach((texture) => texture.dispose());
-        materials.forEach((material) => material.dispose());
+        iconMaterials.forEach((material) => material.dispose());
+        neutralMaterials.forEach((material) => material.dispose());
         environmentTarget?.dispose();
         renderer?.dispose();
       };

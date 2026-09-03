@@ -1,12 +1,12 @@
 export const MODEL_ICON_PATHS = {
   openai: "/model-icons/openai.svg",
-  claude: "/model-icons/claude.svg",
-  gemini: "/model-icons/gemini.svg",
+  claude: "/model-icons/claude-official.svg",
+  gemini: "/model-icons/gemini-official.svg",
   grok: "/model-icons/grok.svg",
-  deepseek: "/model-icons/deepseek.svg",
-  qwen: "/model-icons/qwen.svg",
-  kimi: "/model-icons/kimi.svg",
-  zhipu: "/model-icons/zhipu.svg",
+  deepseek: "/model-icons/deepseek-official.svg",
+  qwen: "/model-icons/qwen-official.svg",
+  kimi: "/model-icons/kimi-official.svg",
+  zhipu: "/model-icons/zhipu-official.svg",
 } as const;
 
 export type ModelIconName = keyof typeof MODEL_ICON_PATHS;
