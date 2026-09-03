@@ -133,10 +133,16 @@ export function ResendCubeLogo() {
           const texture = new THREE.CanvasTexture(tile);
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.anisotropy = maxAnisotropy;
-          iconTextures.push(texture);
+          const emissiveTexture = new THREE.CanvasTexture(iconLayer);
+          emissiveTexture.colorSpace = THREE.SRGBColorSpace;
+          emissiveTexture.anisotropy = maxAnisotropy;
+          iconTextures.push(texture, emissiveTexture);
           const material = materials[index];
           if (!material) return;
           material.map = texture;
+          material.emissive.set(0xffffff);
+          material.emissiveMap = emissiveTexture;
+          material.emissiveIntensity = 0.46;
           material.needsUpdate = true;
         });
       });
