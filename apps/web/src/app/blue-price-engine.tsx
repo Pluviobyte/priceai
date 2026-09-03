@@ -1,133 +1,158 @@
 import Link from "next/link";
-import { ModelIcon, type ModelIconName } from "./model-icons";
+import { ModelIcon, MODEL_ICON_PATHS, type ModelIconName } from "./model-icons";
+import { OFFER_MODE_LABEL, type BaselineRow, type ChangeRow, type HomeSnapshot } from "@/lib/home-snapshot";
 
-const products = [
-  {
-    icon: "openai" as ModelIconName,
-    tone: "green",
-    name: "ChatGPT Plus",
-    spec: "1 个月 · 个人",
-    official: "¥142.6",
-    officialNote: "US$20 官网",
-    lowest: "¥75.9",
-    discount: "−47%",
-    lowestNote: "代充 · 订阅期质保",
-    rangeStart: "14%",
-    rangeWidth: "58%",
-    rangeMin: "¥29.9 共享",
-    rangeMax: "¥142.6 官方",
-    offers: "23",
-    vendors: "9 家有货",
-  },
-  {
-    icon: "claude" as ModelIconName,
-    tone: "orange",
-    name: "Claude Pro",
-    spec: "1 个月 · 个人",
-    official: "¥142.6",
-    officialNote: "US$20 官网",
-    lowest: "¥98",
-    discount: "−31%",
-    lowestNote: "成品号 · 仅保首登",
-    rangeStart: "40%",
-    rangeWidth: "50%",
-    rangeMin: "¥98",
-    rangeMax: "¥142.6 官方",
-    offers: "17",
-    vendors: "6 家有货",
-  },
-  {
-    icon: "gemini" as ModelIconName,
-    tone: "blue",
-    name: "Google AI Pro",
-    spec: "1 个月 · 个人",
-    official: "¥141.5",
-    officialNote: "US$19.99 官网",
-    lowest: "¥39.9",
-    discount: "−72%",
-    lowestNote: "兑换码 · 需海外邮箱",
-    rangeStart: "8%",
-    rangeWidth: "40%",
-    rangeMin: "¥39.9",
-    rangeMax: "¥141.5 官方",
-    offers: "12",
-    vendors: "5 家有货",
-  },
-  {
-    icon: "grok" as ModelIconName,
-    tone: "black",
-    name: "SuperGrok",
-    spec: "1 个月 · 个人",
-    official: "¥213.9",
-    officialNote: "US$30 官网",
-    lowest: "¥129",
-    discount: "−40%",
-    lowestNote: "代充 · 无质保",
-    rangeStart: "30%",
-    rangeWidth: "50%",
-    rangeMin: "¥129",
-    rangeMax: "¥213.9 官方",
-    offers: "9",
-    vendors: "3 家有货",
-  },
-] as const;
-
-const categories = ["全部", "ChatGPT", "Claude", "Gemini", "Grok"];
+const BRAND_TABS = [["全部", ""], ["ChatGPT", "OpenAI"], ["Claude", "Anthropic"], ["Gemini", "Google"], ["Grok", "xAI"]] as const;
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></svg>;
 }
 
-function PriceRow({ product }: { product: (typeof products)[number] }) {
-  return <div className="blue-engine-row">
-    <div className="blue-engine-product"><span className={`blue-engine-mark ${product.tone}`}><ModelIcon name={product.icon} label={product.name} /></span><div><strong>{product.name}</strong><small>{product.spec}</small></div></div>
-    <div className="blue-engine-official"><strong>{product.official}</strong><small>{product.officialNote}</small></div>
-    <div className="blue-engine-lowest"><div><strong>{product.lowest}</strong><span>{product.discount}</span></div><small>{product.lowestNote}</small></div>
-    <div className="blue-engine-range"><div className="blue-engine-range-track"><span className="blue-engine-range-fill" style={{ left: product.rangeStart, width: product.rangeWidth }} /><i className="min" style={{ left: product.rangeStart }} /><i className="max" /></div><small><span>{product.rangeMin}</span><span>{product.rangeMax}</span></small></div>
-    <div className="blue-engine-offers"><strong>{product.offers}</strong><small>{product.vendors}</small></div>
-    <Link className="blue-engine-view" href="/channels">看报价</Link>
+function cny(value: number) {
+  return `¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+}
+
+function iconOf(row: BaselineRow): ModelIconName | null {
+  return row.icon && row.icon in MODEL_ICON_PATHS ? (row.icon as ModelIconName) : null;
+}
+
+function relative(iso: string | null) {
+  if (!iso) return "尚未确认";
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 60) return `${minutes} 分钟前确认`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)} 小时前确认`;
+  return `${Math.round(minutes / 1440)} 天前确认`;
+}
+
+/** 价格分布条：官方价为右端 100%，最低价落点按比例定位。 */
+function Band({ row }: { row: BaselineRow }) {
+  if (!row.band || !row.official) return <span className="blue-engine-nodata">分布待补</span>;
+  const max = Math.max(row.official.cny, row.band.maxCny);
+  const left = Math.max(0, Math.min(100, (row.band.minCny / max) * 100));
+  const width = Math.max(2, Math.min(100 - left, ((row.band.maxCny - row.band.minCny) / max) * 100));
+  return <div className="blue-engine-range">
+    <div className="blue-engine-range-track"><span className="blue-engine-range-fill" style={{ left: `${left}%`, width: `${width}%` }} /><i className="min" style={{ left: `${left}%` }} /><i className="max" /></div>
+    <small><span>{cny(row.band.minCny)}</span><span>{cny(row.official.cny)} 官方</span></small>
   </div>;
 }
 
-export function BluePriceEngine() {
-  return <section className="blue-engine" aria-labelledby="blue-engine-title">
-    <div className="blue-engine-hero">
-      <div className="blue-engine-hero-inner">
-        <span className="blue-engine-eyebrow"><i /> AI 订阅比价引擎</span>
-        <h1 id="blue-engine-title">AI 会员到底该花多少钱？</h1>
-        <p>输入产品名，一屏看到官方价、卡网最低价和它们之间的差别在哪。</p>
-        <form className="blue-engine-search" action="/channels" method="get">
-          <label><SearchIcon /><input name="q" aria-label="搜索 AI 产品" placeholder="例如 ChatGPT Plus、Claude Pro、GPT-4o API…" /></label>
-          <select name="duration" aria-label="订阅周期" defaultValue="1m"><option value="1m">1 个月</option><option value="3m">3 个月</option><option value="1y">1 年</option></select>
-          <button type="submit">立即比价</button>
-        </form>
-        <div className="blue-engine-hot"><span>热门：</span>{products.map((product) => <Link href="/channels" key={product.name}>{product.name}</Link>)}<Link href="/channels">ChatGPT Team</Link></div>
-      </div>
+function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: boolean }) {
+  const icon = iconOf(row);
+  const discount = row.official && row.lowest ? Math.round((1 - row.lowest.cny / row.official.cny) * 100) : null;
+  return <div className="blue-engine-row">
+    <div className="blue-engine-product">
+      <span className="blue-engine-mark">{icon ? <ModelIcon name={icon} label={row.name} /> : <b>{row.name.slice(0, 1)}</b>}</span>
+      <div><strong>{row.name}</strong><small>{row.spec}</small></div>
     </div>
 
+    <div className="blue-engine-official">
+      {row.official
+        ? <><strong>{cny(row.official.cny)}</strong><small><a href={row.official.evidenceUrl} target="_blank" rel="noopener noreferrer">{row.official.note} ↗</a></small></>
+        : <span className="blue-engine-nodata">官方价待确认</span>}
+    </div>
+
+    <div className="blue-engine-lowest">
+      {row.lowest
+        ? <>
+            <div><strong>{cny(row.lowest.cny)}</strong>{discount !== null && discount > 0 && <span>−{discount}%</span>}</div>
+            <p className="blue-engine-mode"><em>{OFFER_MODE_LABEL[row.lowest.mode]}</em>{row.lowest.warrantyNote}</p>
+            <small>{row.lowest.merchantName ?? "渠道待确认"} · {relative(row.verifiedAt)}</small>
+          </>
+        : <span className="blue-engine-nodata">当前无有货报价</span>}
+    </div>
+
+    <Band row={row} />
+
+    <div className="blue-engine-offers">
+      {placeholder
+        ? <span className="blue-engine-nodata">待接入</span>
+        : <><strong>{row.offerCount}</strong><small>{row.inStockMerchantCount} 家有货</small></>}
+    </div>
+
+    <Link className="blue-engine-view" href={`/products/${row.slug}`}>看全部报价</Link>
+  </div>;
+}
+
+function ChangeLine({ change }: { change: ChangeRow }) {
+  const down = change.kind === "price-down" || change.kind === "restock";
+  return <div className="blue-engine-change">
+    <p><Link href={`/products/${change.productSlug}`}><strong>{change.productName}</strong></Link><span> · {change.merchantName}</span></p>
+    <p><s>{change.before}</s><strong>{change.after}</strong><em className={down ? "down" : "up"}>{change.delta}</em></p>
+    <time>{new Date(change.observedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>
+  </div>;
+}
+
+/** 首屏：说清这个站是做什么的，并给出两个页内出口。 */
+export function PriceBaselineHero() {
+  return <section className="blue-engine" aria-labelledby="hero-title">
+    <div className="blue-engine-hero">
+      <div className="blue-engine-hero-inner">
+        <span className="blue-engine-eyebrow"><i /> 不销售 · 不代收款 · 不替渠道站台</span>
+        <h1 id="hero-title"><span>AI 订阅充值与 API 中转</span><span>权威比价平台</span></h1>
+        <p>我们替你把散在各家卡网和官网的报价收在一处。想省钱，一眼看出官方价和渠道最低价差多少、这个价现在还买不买得到；还没想好该买订阅、API 还是共享账号，先看清它们的区别和代价，别花钱买错。</p>
+        {/* 两个出口都是页内跳转，各自对应下方一节，标签与该节标题一一对应。 */}
+        <div className="blue-engine-hero-actions">
+          <a className="blue-engine-cta primary" href="#delivery">四种订阅渠道 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta" href="#baseline">价格对照表 <span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+    </div>
+  </section>;
+}
+
+/**
+ * 价格表：不要求任何输入，直接给出「现在该花多少钱」的对照结论。
+ * 搜索是表格上方的次级工具，不是进入产品的门槛。
+ */
+export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
+  const { baseline, changes, coverage, placeholder } = snapshot;
+  return <section className="blue-engine" aria-labelledby="baseline-title">
     <div className="blue-engine-content">
-      <div className="blue-engine-stats"><span><strong>128</strong> 已验证报价</span><span><strong>14</strong> 活跃来源</span><span><strong>4</strong> 家官方价对照</span><span className="live"><i />持续更新中</span></div>
-      <div className="blue-engine-toolbar"><nav aria-label="产品筛选">{categories.map((category, index) => <Link className={index === 0 ? "active" : ""} href="/channels" key={category}>{category}</Link>)}</nav><p>最低价 = 有效、可买、同规格；灰色为官方价</p></div>
+      {!placeholder && <div className="blue-engine-stats">
+        <span><strong>{coverage.verifiedOfferCount}</strong> 条已验证报价</span>
+        <span><strong>{coverage.activeSourceCount}</strong> 个活跃来源</span>
+        <span><strong>{coverage.officialVendorCount}</strong> 家官方价对照</span>
+        <span className="live"><i />随采集持续更新</span>
+      </div>}
+
+      <div className="blue-engine-heading" id="baseline">
+        <p className="blue-engine-kicker">选价格</p>
+        <h2 id="baseline-title">选一个产品，看它现在值多少钱</h2>
+        <p>左边是官网原价，右边是渠道当前能买到的最低价，中间标出这个低价是用哪种交付方式换来的。</p>
+      </div>
+      <div className="blue-engine-toolbar">
+        <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <Link className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} key={label}>{label}</Link>)}</nav>
+        <form className="blue-engine-find" action="/search" method="get">
+          <label><SearchIcon /><input name="q" aria-label="查找表内没有的产品" placeholder="表里没有？搜产品名或商家" /></label>
+          <button type="submit">查找</button>
+        </form>
+      </div>
+
+      <p className="blue-engine-legend">{placeholder ? "数据接入中，下表暂不展示具体价格。" : "最低价口径：24 小时内验证过、标记有货、且与官方价同规格的报价。不同交付方式不合并计算。"}</p>
+
       <div className="blue-engine-table">
-        <div className="blue-engine-table-head"><span>标准商品</span><span>官方价（折人民币）</span><span>卡网最低价</span><span>价格分布</span><span>有效报价</span><span /></div>
-        {products.map((product) => <PriceRow product={product} key={product.name} />)}
+        <div className="blue-engine-table-head"><span>标准商品</span><span>官方价（折人民币）</span><span>渠道最低价与交付方式</span><span>价格分布</span><span>有效报价</span><span /></div>
+        {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
       </div>
 
       <div className="blue-engine-bottom">
         <article className="blue-engine-changes">
-          <header><h2>过去 24 小时的降价与补货</h2><Link href="/channels">全部异动 <span>→</span></Link></header>
-          <div className="blue-engine-change"><p><strong>ChatGPT Plus</strong><span> · 星河数卡</span></p><p><s>¥79</s><strong>¥75.9</strong><em className="down">↓ ¥3.1</em></p><time>21:10</time></div>
-          <div className="blue-engine-change"><p><strong>Claude Pro</strong><span> · 极客卡券</span></p><p><s>缺货</s><strong>有货 8</strong><em className="down">补货</em></p><time>18:42</time></div>
-          <div className="blue-engine-change"><p><strong>SuperGrok</strong><span> · AI 优选</span></p><p><s>¥119</s><strong>¥129</strong><em className="up">↑ ¥10</em></p><time>09:15</time></div>
+          <header><h2>最近 24 小时的降价与补货</h2><Link href="/changes">全部异动 <span>→</span></Link></header>
+          {changes.length
+            ? changes.map((change) => <ChangeLine change={change} key={`${change.productSlug}-${change.merchantName}-${change.observedAt}`} />)
+            : <p className="blue-engine-nodata">这段时间没有记录到价格或库存变化。</p>}
         </article>
         <aside className="blue-engine-guide">
-          <span className="blue-engine-guide-label">购买前必读</span>
-          <h2>为什么低价不一定能买</h2>
-          <ol><li><span>01</span>成品号、代充、共享、反代是 4 种不同的东西。</li><li><span>02</span>每条报价都应核对原站链接、库存和最后确认时间。</li><li><span>03</span>平台不收款、不担保，付款和售后都在商家原站。</li></ol>
-          <Link href="/guides">2 分钟读懂比价规则 <span>→</span></Link>
+          <span className="blue-engine-guide-label">读表提醒</span>
+          <h2>最低价不等于你能买到的价</h2>
+          <ol>
+            <li><span>01</span>先看交付方式：账号归谁，决定了这个价格值不值。</li>
+            <li><span>02</span>再看确认时间：长期没更新的低价通常已经不可买。</li>
+            <li><span>03</span>最后回原站核对：价格、库存和售后规则以商家页面为准。</li>
+          </ol>
+          <Link href="/methodology">我们怎么算最低价 <span>→</span></Link>
         </aside>
       </div>
-      <a className="blue-engine-continue" href="#paths"><span>继续了解 PriceAI</span><strong>选择适合你的购买路径</strong><i>↓</i></a>
     </div>
   </section>;
 }

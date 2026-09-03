@@ -7,11 +7,11 @@ const deploymentOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.en
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.PUBLIC_BASE_URL ?? (deploymentOrigin ? `https://${deploymentOrigin}` : "http://localhost:3000")),
-  title: "PriceAI | AI 低价卡网订阅与中转 API 比价雷达",
-  description: "购买 AI 订阅或接入 API 前，先理解官方订阅、卡网订阅、官方 API 和中转 API 的价格差异、来源、库存与风险边界。",
+  title: "PriceAI | AI 订阅充值与 API 中转权威比价平台",
+  description: "AI 会员充值、成品号、兑换码与模型接口中转的价格对照：官方价附厂商页面证据，渠道报价标注交付方式、库存与最后确认时间。不销售、不代收款、不替渠道背书。",
   openGraph: {
-    title: "PriceAI | AI 低价卡网订阅与中转 API 比价雷达",
-    description: "先看清 AI 订阅和 API 的购买路径，再进入卡网订阅、官方订阅、官方 API 或中转 API 比价。",
+    title: "PriceAI | AI 订阅充值与 API 中转权威比价平台",
+    description: "官方价对照渠道最低价，并标出这个低价是用哪种交付方式换来的。每条报价可回溯到原站。",
   },
 };
 

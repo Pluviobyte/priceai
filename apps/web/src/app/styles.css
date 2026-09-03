@@ -13,6 +13,8 @@
 * { box-sizing: border-box; }
 
 html { scroll-padding-top: 92px; background: var(--paper); }
+/* 首屏两个按钮是页内跳转，滑过去比瞬间跳更容易看清落到了哪一节。 */
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
 body {
   margin: 0;
@@ -695,7 +697,7 @@ html[data-theme="dark"] {
 
 html[data-theme="dark"] .priceai-notice { border-color: oklch(34% 0.035 257); background: oklch(22% 0.028 257); color: oklch(78% 0.045 257); }
 html[data-theme="dark"] .priceai-notice > a > span { border-color: oklch(40% 0.045 257); background: oklch(22% 0.028 257 / 76%); }
-html[data-theme="dark"] .priceai-hero-section { background: var(--color-page); }
+html[data-theme="dark"] .priceai-delivery-section { background: var(--color-page); }
 html[data-theme="dark"] .blue-engine {
   --blue-ink: oklch(93% 0.012 255);
   --blue-body: oklch(76% 0.02 255);
@@ -706,14 +708,13 @@ html[data-theme="dark"] .blue-engine {
 }
 html[data-theme="dark"] .blue-engine-hero { background: linear-gradient(180deg, oklch(23% 0.035 257) 0%, oklch(18% 0.025 257) 100%); }
 html[data-brand-theme="blue"]:not([data-theme="dark"]) .priceai-header { background: rgba(233, 239, 252, .94); }
-html[data-theme="dark"] .blue-engine-search,
-html[data-theme="dark"] .blue-engine-hot a,
+html[data-theme="dark"] .blue-engine-find,
 html[data-theme="dark"] .blue-engine-toolbar nav a.active,
 html[data-theme="dark"] .blue-engine-table,
 html[data-theme="dark"] .blue-engine-row,
-html[data-theme="dark"] .blue-engine-changes,
-html[data-theme="dark"] .blue-engine-continue i { background: #151d31; }
-html[data-theme="dark"] .blue-engine-search select { background: #151d31; color: var(--blue-body); }
+html[data-theme="dark"] .blue-engine-changes { background: #151d31; }
+html[data-theme="dark"] .blue-engine-mark { background: #202d49; }
+html[data-theme="dark"] .blue-engine-mode em { border-color: #33415f; background: #1d2740; }
 html[data-theme="dark"] .blue-engine-toolbar nav { background: #202d49; }
 html[data-theme="dark"] .blue-engine-table-head { background: #18223a; }
 html[data-theme="dark"] .blue-engine-range-track { background: #25324d; }
@@ -780,7 +781,7 @@ html[data-brand-theme="green"][data-theme="dark"] {
 }
 html[data-brand-theme="green"] .priceai-notice { border-color: #d4e9dc; background: #eff9f3; color: #355f45; }
 html[data-brand-theme="green"] .priceai-notice > a > span { border-color: #bed8c8; }
-html[data-brand-theme="green"] .priceai-hero-section { background: var(--color-page); }
+html[data-brand-theme="green"] .priceai-delivery-section { background: var(--color-page); }
 html[data-brand-theme="green"] .priceai-nav a.active { box-shadow: 0 0 0 4px #2d34350a; }
 html[data-brand-theme="green"] .priceai-catalog-toolbar nav a.apply,
 html[data-brand-theme="green"] .priceai-transit-actions a.apply { box-shadow: 0 0 0 1px #b9d8c9; }
@@ -796,16 +797,15 @@ html[data-brand-theme="green"] .blue-engine {
 }
 html[data-brand-theme="green"] .blue-engine-hero { background: var(--color-page); }
 html[data-brand-theme="green"] .blue-engine-eyebrow i { box-shadow: 0 0 0 5px rgba(47, 122, 75, .1); }
-html[data-brand-theme="green"] .blue-engine-search button,
-html[data-brand-theme="green"] .blue-engine-search button:hover { box-shadow: none; }
-html[data-brand-theme="green"] .blue-engine-hot a:hover { border-color: #b8d8c5; }
+html[data-brand-theme="green"] .blue-engine-find button,
+html[data-brand-theme="green"] .blue-engine-find button:hover { box-shadow: none; }
 html[data-brand-theme="green"] .blue-engine-range-fill { background: #c8dfd1; }
 html[data-brand-theme="green"] .blue-engine-guide { background: #202827; }
 html[data-brand-theme="green"] .blue-engine-guide-label,
 html[data-brand-theme="green"] .blue-engine-guide li span,
 html[data-brand-theme="green"] .blue-engine-guide > a { color: #77d59c; }
 html[data-brand-theme="green"][data-theme="dark"] .priceai-notice { border-color: #2d4939; background: #17211e; color: #b9d8c5; }
-html[data-brand-theme="green"][data-theme="dark"] .priceai-hero-section { background: var(--color-page); }
+html[data-brand-theme="green"][data-theme="dark"] .priceai-delivery-section { background: var(--color-page); }
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine {
   --blue-ink: #d7e1de;
   --blue-body: #a5b0ad;
@@ -815,14 +815,12 @@ html[data-brand-theme="green"][data-theme="dark"] .blue-engine {
   background: #111718;
 }
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-hero { background: var(--color-page); }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-search,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-hot a,
+html[data-brand-theme="green"][data-theme="dark"] .blue-engine-find,
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-toolbar nav a.active,
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-table,
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-row,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-changes,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-continue i { background: #182122; }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-search select { background: #182122; }
+html[data-brand-theme="green"][data-theme="dark"] .blue-engine-changes { background: #182122; }
+html[data-brand-theme="green"][data-theme="dark"] .blue-engine-mark { background: #263233; }
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-toolbar nav { background: #263233; }
 html[data-brand-theme="green"][data-theme="dark"] .blue-engine-table-head { background: #1b2526; }
 
@@ -842,34 +840,49 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
   color: var(--blue-ink);
   font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
 }
-.blue-engine-hero { position: relative; overflow: hidden; padding: 76px 32px 72px; background: linear-gradient(180deg, var(--blue-gradient-start) 0%, var(--blue-gradient-end) 100%); }
+.blue-engine-hero { position: relative; overflow: hidden; padding: 76px 32px 56px; background: linear-gradient(180deg, var(--blue-gradient-start) 0%, var(--blue-gradient-end) 100%); }
 .blue-engine-hero::before,
 .blue-engine-hero::after { display: none; content: ""; position: absolute; border-radius: 999px; pointer-events: none; }
 .blue-engine-hero::before { width: 470px; height: 470px; left: -220px; top: -300px; background: oklch(70% 0.08 257 / 7%); }
 .blue-engine-hero::after { width: 380px; height: 380px; right: -170px; bottom: -270px; background: oklch(60% 0.08 257 / 5%); }
 .blue-engine-hero-inner { position: relative; z-index: 1; max-width: 896px; margin: 0 auto; text-align: center; }
-.blue-engine-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--blue-brand); font-size: 13px; font-weight: 600; letter-spacing: .08em; }
+.blue-engine-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--blue-brand); font-size: 13px; font-weight: 600; letter-spacing: .08em; animation: blue-engine-breathe 4.5s ease-in-out infinite; }
+/* 缓慢呼吸而不是硬闪：最低仍保持 .5 不透明度，避免这三条承诺在半个周期里读不清。 */
+@keyframes blue-engine-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .blue-engine-eyebrow { animation: none; } }
 .blue-engine-eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue-brand); box-shadow: 0 0 0 4px oklch(52% 0.11 257 / 9%); }
 .blue-engine h1 { margin: 0; font: 600 54px/1.22 "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: 0; }
-.blue-engine-hero-inner > p { max-width: 720px; margin: 25px auto 34px; color: var(--blue-body); font-size: 15px; line-height: 30px; }
-.blue-engine-search { display: flex; gap: 8px; width: min(720px, 100%); margin: 0 auto; padding: 6px; border: 1px solid var(--blue-line); border-radius: 999px; background: var(--color-panel); box-shadow: 0 5px 16px oklch(25% 0.032 255 / 5%); }
-.blue-engine-search label { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; padding: 0 13px; }
-.blue-engine-search svg { width: 18px; flex: 0 0 18px; fill: none; stroke: var(--blue-muted); stroke-width: 2; stroke-linecap: round; }
-.blue-engine-search input { width: 100%; border: 0; outline: 0; color: var(--blue-ink); background: transparent; font-size: 15px; }
-.blue-engine-search input::placeholder { color: var(--blue-muted); }
-.blue-engine-search select { width: 116px; padding: 0 14px; border: 0; border-left: 1px solid var(--blue-line); outline: 0; background: oklch(99.2% 0.003 255); color: var(--blue-body); font-size: 13px; }
-.blue-engine-search button { height: 48px; padding: 0 25px; border: 0; border-radius: 999px; background: var(--blue-brand); color: oklch(98.5% 0.003 255); cursor: pointer; font-size: 14px; font-weight: 600; box-shadow: none; transition: background .2s cubic-bezier(.25,.8,.25,1); }
-.blue-engine-search button:hover { background: var(--color-primary-hover); }
-.blue-engine-hot { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 7px 16px; margin-top: 19px; font-size: 12px; }
-.blue-engine-hot > span { color: var(--blue-muted); }
-.blue-engine-hot a { padding: 4px 0; border-bottom: 1px solid transparent; color: var(--blue-body); transition: border-color .2s ease, color .2s ease; }
-.blue-engine-hot a:nth-of-type(n+5) { display: none; }
-.blue-engine-hot a:hover { color: var(--blue-brand); border-color: currentColor; }
-.blue-engine-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 30px; margin: 0 0 44px; padding: 17px 0; border-top: 1px solid var(--blue-line); border-bottom: 1px solid var(--blue-line); color: var(--blue-body); font-size: 12px; }
+.blue-engine h1 span { display: block; }
+.blue-engine h1 span:last-child { color: var(--blue-brand); }
+/* 首屏必须给出口：一个要答案，一个要解释。 */
+.blue-engine-hero-actions { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.blue-engine-cta { min-height: 46px; display: inline-flex; align-items: center; gap: 8px; padding: 0 24px; border: 1px solid var(--blue-line); border-radius: 999px; background: var(--color-panel); color: var(--blue-ink); font-size: 14px; font-weight: 600; transition: background .2s ease, color .2s ease; }
+.blue-engine-cta:hover { background: var(--color-surface-hover); }
+.blue-engine-cta.primary { border-color: transparent; background: var(--blue-brand); color: oklch(98.5% 0.003 255); }
+.blue-engine-cta.primary:hover { background: var(--color-primary-hover); }
+.blue-engine-hero-inner > p { max-width: 700px; margin: 24px auto 0; color: var(--blue-body); font-size: 15px; line-height: 30px; }
+/* 查找是表格上方的次级工具，不是进入内容的门槛。 */
+.blue-engine-find { display: flex; gap: 6px; min-width: 0; flex: 0 1 340px; padding: 4px; border: 1px solid var(--blue-line); border-radius: 999px; background: var(--color-panel); }
+.blue-engine-find label { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.blue-engine-find svg { width: 16px; flex: 0 0 16px; fill: none; stroke: var(--blue-muted); stroke-width: 2; stroke-linecap: round; }
+.blue-engine-find input { width: 100%; border: 0; outline: 0; color: var(--blue-ink); background: transparent; font-size: 13px; }
+.blue-engine-find input::placeholder { color: var(--blue-muted); }
+.blue-engine-find button { height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--blue-brand); color: oklch(98.5% 0.003 255); cursor: pointer; font-size: 13px; font-weight: 600; transition: background .2s cubic-bezier(.25,.8,.25,1); }
+.blue-engine-find button:hover { background: var(--color-primary-hover); }
+.blue-engine-heading { max-width: 720px; margin: 0 auto 30px; text-align: center; }
+.blue-engine-kicker { margin: 0 0 8px; color: var(--blue-brand); font-size: 13px; font-weight: 600; }
+.blue-engine-heading h2 { margin: 0; color: var(--blue-ink); font: 600 32px/40px "Songti SC", STSong, SimSun, Georgia, serif; }
+.blue-engine-heading > p:last-child { margin: 12px 0 0; color: var(--blue-body); font-size: 14px; line-height: 24px; }
+.blue-engine-legend { margin: 0 0 12px; color: var(--blue-muted); font-size: 12px; line-height: 20px; }
+.blue-engine-nodata { color: var(--blue-muted); font-size: 12px; }
+/* 缺数据提示不套用最低价单元格里的折扣徽章样式。 */
+.blue-engine-lowest > .blue-engine-nodata,
+.blue-engine-official > .blue-engine-nodata { padding: 0; border-radius: 0; background: none; color: var(--blue-muted); font-weight: 400; }
+.blue-engine-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px 30px; margin: 0 0 32px; padding: 17px 0; border-top: 1px solid var(--blue-line); border-bottom: 1px solid var(--blue-line); color: var(--blue-body); font-size: 12px; }
 .blue-engine-stats strong { margin-right: 4px; color: var(--blue-ink); font: 650 14px/1 "DM Sans", system-ui, sans-serif; }
 .blue-engine-stats .live { display: inline-flex; align-items: center; gap: 7px; }
 .blue-engine-stats .live i { width: 7px; height: 7px; border-radius: 50%; background: #23a26d; box-shadow: 0 0 0 4px rgba(35, 162, 109, .12); }
-.blue-engine-content { width: min(1152px, calc(100% - 40px)); margin: 0 auto; padding: 0 0 84px; }
+.blue-engine-content { width: min(1152px, calc(100% - 40px)); margin: 0 auto; padding: 64px 0 84px; }
 .blue-engine-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
 .blue-engine-toolbar nav { display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--color-surface-muted); font-size: 12px; font-weight: 600; }
 .blue-engine-toolbar nav a { padding: 7px 14px; border-radius: 999px; color: var(--blue-body); }
@@ -877,20 +890,21 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .blue-engine-toolbar p { margin: 0; color: var(--blue-body); font-size: 13px; }
 .blue-engine-table { overflow: hidden; border: 1px solid var(--blue-line); border-radius: 8px; background: var(--color-panel); box-shadow: none; }
 .blue-engine-table-head,
-.blue-engine-row { display: grid; grid-template-columns: 2fr 1.2fr 1.4fr 2fr 1.05fr auto; gap: 16px; align-items: center; }
+.blue-engine-row { display: grid; grid-template-columns: 1.9fr 1.1fr 1.9fr 1.6fr .9fr auto; gap: 16px; align-items: center; }
 .blue-engine-table-head { padding: 14px 22px; border-bottom: 1px solid var(--blue-line); background: var(--color-surface); color: var(--blue-muted); font-size: 11px; font-weight: 500; }
 .blue-engine-row { min-height: 88px; padding: 20px 22px; border-bottom: 1px solid var(--blue-line); }
 .blue-engine-row:last-child { border-bottom: 0; }
 .blue-engine-product { display: flex; align-items: center; gap: 12px; }
-.blue-engine-mark { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 11px; font: 750 14px "DM Sans", system-ui, sans-serif; }
-.blue-engine-mark.green { background: #e6f4ee; color: #137a52; }
-.blue-engine-mark.orange { background: #f7ebdd; color: #9a5316; }
-.blue-engine-mark.blue { background: #e3ecfa; color: #1f4f8a; }
-.blue-engine-mark.black { background: #ececef; color: #333; }
+.blue-engine-mark { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 11px; background: var(--color-surface-muted); color: var(--blue-ink); font: 750 14px "DM Sans", system-ui, sans-serif; }
 .blue-engine-mark img { width: 21px; height: 21px; display: block; opacity: .82; }
 .blue-engine-row strong { display: block; color: var(--blue-ink); font-size: 15px; line-height: 1.25; }
 .blue-engine-row small { display: block; margin-top: 4px; color: var(--blue-muted); font-size: 11px; line-height: 1.35; }
 .blue-engine-official strong { color: var(--blue-body); font: 650 16px "DM Sans", system-ui, sans-serif; }
+.blue-engine-official a { color: var(--blue-muted); text-decoration: underline; text-underline-offset: 2px; }
+.blue-engine-official a:hover { color: var(--blue-brand); }
+/* 交付方式决定这个价格值不值，所以和价格同级显示，而不是当脚注。 */
+.blue-engine-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; color: var(--blue-body); font-size: 11px; line-height: 1.35; }
+.blue-engine-mode em { padding: 2px 7px; border: 1px solid var(--blue-line); border-radius: 5px; background: var(--color-surface); color: var(--blue-ink); font-style: normal; font-weight: 700; }
 .blue-engine-lowest > div { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .blue-engine-lowest strong { color: var(--blue-green); font: 750 20px "DM Sans", system-ui, sans-serif; }
 .blue-engine-lowest span { padding: 3px 6px; border-radius: 5px; background: #e6f4ee; color: var(--blue-green); font-size: 11px; font-weight: 700; }
@@ -927,19 +941,18 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .blue-engine-guide li { display: flex; gap: 10px; }
 .blue-engine-guide li span { color: #8fb0ff; font: 700 13px "DM Sans", system-ui, sans-serif; }
 .blue-engine-guide > a { margin-top: auto; color: #8fb0ff; font-size: 13px; font-weight: 700; }
-.blue-engine-continue { display: flex; align-items: center; justify-content: center; gap: 12px; width: fit-content; margin: 64px auto -18px; color: var(--blue-body); font-size: 13px; }
-.blue-engine-continue strong { color: var(--blue-ink); }
-.blue-engine-continue i { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--blue-line); border-radius: 50%; background: var(--color-panel); color: var(--blue-brand); font-style: normal; }
 
 @media (max-width: 900px) {
   .blue-engine-table-head { display: none; }
   .blue-engine-table { display: grid; gap: 10px; overflow: visible; border: 0; background: transparent; box-shadow: none; }
   .blue-engine-row { grid-template-columns: auto 1fr auto; gap: 12px; padding: 15px; border: 1px solid var(--blue-line); border-radius: 8px; background: var(--color-panel); }
   .blue-engine-row:last-child { border-bottom: 1px solid var(--blue-line); }
-  .blue-engine-product { grid-column: 1 / 3; }
-  .blue-engine-official { display: none; }
-  .blue-engine-lowest { grid-column: 3; grid-row: 1; text-align: right; }
+  .blue-engine-product { grid-column: 1 / 4; }
+  .blue-engine-official { grid-column: 1 / 3; }
+  .blue-engine-official::before { content: "官方价"; display: block; margin-bottom: 2px; color: var(--blue-muted); font-size: 11px; }
+  .blue-engine-lowest { grid-column: 3; grid-row: 2; text-align: right; }
   .blue-engine-lowest > div { justify-content: flex-end; }
+  .blue-engine-mode { justify-content: flex-end; }
   .blue-engine-range { grid-column: 1 / 4; }
   .blue-engine-offers { grid-column: 1 / 3; }
   .blue-engine-view { grid-column: 3; }
@@ -949,37 +962,31 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 @media (max-width: 680px) {
   .blue-engine-hero { padding: 40px 16px 29px; }
   .blue-engine-eyebrow { margin-bottom: 13px; font-size: 11px; }
-  .blue-engine h1 { font-size: 34px; line-height: 1.18; letter-spacing: -.035em; }
+  .blue-engine h1 { font-size: 32px; line-height: 1.22; letter-spacing: -.02em; }
+  .blue-engine-hero-actions { flex-direction: column; align-items: stretch; margin-top: 22px; }
+  .blue-engine-cta { justify-content: center; }
   .blue-engine-hero-inner > p { max-width: 330px; margin: 11px auto 20px; font-size: 13px; line-height: 1.6; }
-  .blue-engine-search { padding: 6px; border-radius: 14px; }
-  .blue-engine-search label { padding: 0 9px; }
-  .blue-engine-search input { font-size: 13px; }
-  .blue-engine-search select { display: none; }
-  .blue-engine-search button { height: 42px; padding: 0 16px; border-radius: 10px; font-size: 14px; }
-  .blue-engine-hot { justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; margin-inline: -16px; padding-inline: 16px; scrollbar-width: none; }
-  .blue-engine-hot::-webkit-scrollbar { display: none; }
-  .blue-engine-hot a { white-space: nowrap; }
+  .blue-engine-find { flex: 1 1 auto; margin-top: 10px; }
   .blue-engine-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 18px; text-align: left; }
   .blue-engine-stats span { padding: 4px 0; }
-  .blue-engine-content { width: calc(100% - 32px); padding: 18px 0 48px; }
+  .blue-engine-content { width: calc(100% - 32px); padding: 54px 0 48px; }
+  .blue-engine-heading { margin-bottom: 22px; }
+  .blue-engine-heading h2 { font-size: 25px; line-height: 34px; }
   .blue-engine-toolbar { display: block; overflow: hidden; }
   .blue-engine-toolbar nav { overflow-x: auto; scrollbar-width: none; }
   .blue-engine-toolbar nav::-webkit-scrollbar { display: none; }
   .blue-engine-toolbar nav a { min-width: fit-content; flex: 1; padding-inline: 11px; text-align: center; }
   .blue-engine-toolbar p { margin-top: 10px; font-size: 11px; }
-  .blue-engine-range,
-  .blue-engine-offers,
-  .blue-engine-view { display: none; }
+  .blue-engine-range { display: none; }
   .blue-engine-row { grid-template-columns: auto 1fr auto; }
-  .blue-engine-product { grid-column: 1 / 3; }
-  .blue-engine-lowest { grid-column: 3; }
+  .blue-engine-product { grid-column: 1 / 4; }
+  .blue-engine-offers { grid-column: 1 / 3; }
+  .blue-engine-view { grid-column: 3; }
   .blue-engine-change { grid-template-columns: 1fr auto; gap: 7px 10px; }
   .blue-engine-change time { display: none; }
   .blue-engine-change p:nth-child(2) { gap: 6px; font-size: 12px; }
   .blue-engine-changes,
   .blue-engine-guide { padding: 18px; }
-  .blue-engine-continue { flex-wrap: wrap; margin-top: 34px; text-align: center; }
-  .blue-engine-continue span { display: none; }
 }
 .priceai-container { width: min(1152px, calc(100% - 40px)); margin-inline: auto; }
 
@@ -1024,41 +1031,38 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
 
 .priceai-home { background: var(--color-page); }
 .priceai-home > section { border-bottom: 1px solid var(--color-border); }
-.priceai-hero-section { min-height: 955px; overflow: hidden; background: var(--color-page); }
-.priceai-hero { padding-top: 56px; text-align: center; }
 .priceai-kicker { margin: 0; color: var(--accent-deep); font-size: 14px; font-weight: 600; line-height: 20px; }
-.priceai-hero h1 { width: fit-content; margin: 20px auto 0; color: var(--color-text-primary); font: 600 60px/1.25 "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: 0; }
-.priceai-hero h1 span { display: block; }
-.priceai-hero h1 span:last-child { color: var(--accent-deep); }
-.priceai-lead { max-width: 720px; margin: 27px auto 0; color: var(--color-text-muted); font-size: 16px; line-height: 32px; }
-.priceai-hero-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 28px; }
 .priceai-btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 24px; border: 0; border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); font-size: 14px; font-weight: 600; transition: background .15s ease, transform .15s ease; }
 .priceai-btn:hover { background: var(--color-surface-hover); }
 .priceai-btn.primary { color: var(--color-text-on-primary); background: var(--color-primary); box-shadow: none; }
 .priceai-btn.primary:hover { background: var(--color-primary-hover); }
-.priceai-paths { padding-top: 38px; }
+.priceai-delivery-section { padding: 64px 0 62px; background: var(--color-page); }
 .priceai-section-heading { max-width: 896px; margin: 0 auto 36px; text-align: center; }
 .priceai-section-heading.compact { margin-bottom: 27px; }
 .priceai-section-heading h2 { margin: 8px 0 0; color: var(--color-text-primary); font: 600 36px/40px "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: 0; }
 .priceai-section-heading.compact h2 { font-size: 30px; line-height: 36px; }
 .priceai-section-heading > p:last-child { margin: 13px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 22px; }
-.priceai-path-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.priceai-path-grid article { height: 320px; display: flex; flex-direction: column; padding: 20px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
-.priceai-card-top { display: flex; align-items: center; justify-content: space-between; }
+.priceai-delivery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: stretch; }
+.priceai-delivery-grid article { display: flex; flex-direction: column; padding: 20px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
+.priceai-card-top { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .priceai-icon { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
-.priceai-pill { padding: 4px 12px; border-radius: 999px; color: var(--color-text-muted); background: var(--color-surface-muted); font-size: 12px; font-weight: 500; }
-.priceai-path-grid h3 { margin: 22px 0 0; color: var(--color-text-primary); font-size: 18px; line-height: 27px; font-weight: 700; }
-.priceai-path-grid article > p { margin: 12px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 26px; }
-.priceai-card-actions { display: grid; gap: 10px; margin-top: auto; }
-.priceai-card-actions .priceai-btn { width: 100%; min-height: 44px; }
+.priceai-pill { padding: 4px 12px; border-radius: 999px; color: var(--color-text-muted); background: var(--color-surface-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.priceai-delivery-grid h3 { margin: 20px 0 10px; color: var(--color-text-primary); font-size: 17px; line-height: 26px; font-weight: 700; }
+.priceai-delivery-grid .priceai-pill { align-self: flex-start; }
+/* 账号归属是这一节的分类依据，视觉上要压过价格带。 */
+.priceai-delivery-own { margin: 8px 0 0; padding-bottom: 12px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); font-size: 13px; font-weight: 600; line-height: 20px; }
+.priceai-delivery-grid article > p:last-of-type { margin: 12px 0 20px; color: var(--color-text-muted); font-size: 13px; line-height: 24px; }
+.priceai-delivery-grid .priceai-btn { width: 100%; margin-top: auto; }
+.priceai-delivery-note { max-width: 720px; margin: 28px auto 0; text-align: center; color: var(--color-text-muted); font-size: 13px; line-height: 24px; }
 
 .priceai-module-section { min-height: 633px; padding: 64px 0 62px; background: var(--color-panel); }
 .priceai-module-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .priceai-module-grid > a { min-height: 154px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
 .priceai-module-grid > a:hover { background: var(--color-surface-hover); }
 .priceai-module-grid > a > div { display: flex; justify-content: space-between; align-items: center; color: var(--color-text-soft); }
-.priceai-module-grid h3 { margin: 21px 0 0; color: var(--color-text-primary); font-size: 18px; font-weight: 700; }
+.priceai-module-grid h3 { margin: 4px 0 0; color: var(--color-text-primary); font-size: 18px; font-weight: 700; }
 .priceai-module-grid p { margin: 7px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 22px; }
+.priceai-module-grid .priceai-module-need { margin-top: 21px; color: var(--color-text-primary); font-size: 13px; font-weight: 600; }
 .priceai-brand-title { margin-top: 39px; text-align: center; color: var(--color-text-muted); font-size: 13px; }
 .priceai-brand-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; margin-top: 19px; }
 .priceai-brand-grid > div { height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); color: var(--color-text-primary); font-size: 12px; }
@@ -1066,11 +1070,17 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
 
 .priceai-boundary-section { min-height: 585px; padding: 64px 0; }
 .priceai-boundary-section > .priceai-container, .priceai-faq-section > .priceai-container { width: min(1024px, calc(100% - 40px)); }
-.priceai-boundary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.priceai-boundary-grid article { min-height: 185px; padding: 20px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
-.priceai-boundary-grid h3 { margin: 20px 0 0; color: var(--color-text-primary); font-size: 16px; line-height: 24px; font-weight: 700; }
-.priceai-boundary-grid p, .priceai-return-card p { margin: 7px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 24px; }
-.priceai-return-card { min-height: 92px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; margin-top: 36px; padding: 18px 20px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
+.priceai-boundary-split { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.priceai-boundary-split article { padding: 22px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
+.priceai-boundary-split h3 { margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); font-size: 16px; line-height: 24px; font-weight: 700; }
+.priceai-boundary-split ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+/* 状态不只靠颜色：做与不做各自带一个字形标记。 */
+.priceai-boundary-split li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; color: var(--color-text-muted); font-size: 14px; line-height: 24px; }
+.priceai-boundary-split li::before { color: var(--color-text-soft); font-weight: 700; }
+.priceai-boundary-split .do li::before { content: "✓"; color: var(--accent-deep); }
+.priceai-boundary-split .dont li::before { content: "✕"; }
+.priceai-return-card p { margin: 7px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 24px; }
+.priceai-return-card { min-height: 92px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; margin-top: 36px; padding: 18px 20px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
 .priceai-return-card h3 { margin: 0; color: var(--color-text-primary); font-size: 16px; }
 
 .priceai-faq-section { min-height: 745px; padding: 64px 0 56px; }
@@ -1160,7 +1170,7 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
   .priceai-nav { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
   .priceai-header-actions { grid-column: 2; grid-row: 1; }
   .priceai-social { display: none !important; }
-  .priceai-hero-section { min-height: auto; padding-bottom: 64px; }
+  .priceai-delivery-section { padding: 54px 0; }
 }
 
 @media (max-width: 760px) {
@@ -1182,19 +1192,12 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
   .priceai-color-switch button span { display: none; }
   .priceai-nav { order: 3; width: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
   .priceai-nav a { flex: 0 0 auto; padding: 7px 10px; font-size: 13px; }
-  .priceai-hero { padding-top: 48px; }
-  .priceai-hero h1 { font-size: clamp(38px, 11vw, 52px); line-height: 1.2; }
-  .priceai-lead { font-size: 14px; line-height: 26px; }
-  .priceai-hero-actions { flex-direction: column; }
   .priceai-btn { width: 100%; }
-  .priceai-paths { padding-top: 46px; }
   .priceai-section-heading h2, .priceai-section-heading.compact h2 { font-size: 29px; line-height: 38px; }
-  .priceai-path-grid, .priceai-module-grid, .priceai-boundary-grid { grid-template-columns: 1fr; }
-  .priceai-path-grid article { height: 310px; }
+  .priceai-delivery-grid, .priceai-module-grid, .priceai-boundary-split { grid-template-columns: 1fr; }
   .priceai-module-section, .priceai-boundary-section, .priceai-faq-section { padding: 54px 0; }
   .priceai-brand-grid { grid-template-columns: repeat(4, 1fr); }
-  .priceai-return-card { grid-template-columns: auto 1fr; }
-  .priceai-return-card .priceai-btn { grid-column: 1 / -1; }
+  .priceai-return-card { grid-template-columns: 1fr; }
   .priceai-faq-list article { grid-template-columns: 1fr; gap: 8px; }
   .priceai-sponsors { margin: 12px; }
   .priceai-sponsor-grid { grid-template-columns: 1fr; }

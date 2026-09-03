@@ -2,20 +2,62 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { SiteHeader } from "./site-header";
 import { SiteFooter } from "./site-footer";
-import { BluePriceEngine } from "./blue-price-engine";
+import { PriceBaselineHero, PriceBaselineTable } from "./blue-price-engine";
 import { ModelIcon, type ModelIconName } from "./model-icons";
+import { getHomeSnapshot } from "@/lib/home-snapshot";
 
-const paths = [
-  { icon: "shield", label: "订阅新手", title: "我只是想买一个 AI 订阅", text: "先看官方价、地区价和支付门槛；如果需要现货、更低价或代开通，再去看卡网订阅。", primary: ["先看官方订阅", "/official-prices"], secondary: ["再看卡网订阅", "/channels"] },
-  { icon: "money", label: "资深买家", title: "我想找更低价或更灵活的方案", text: "先看卡网订阅里的低价现货、渠道和更新时间；如果要接 GPT、Claude、Gemini、Grok 等模型，再看中转 API。", primary: ["看卡网订阅", "/channels"], secondary: ["看中转 API", "/api-transit"] },
-  { icon: "database", label: "开发接入", title: "我想接 API 做产品或工具", text: "先看 DeepSeek、千问、Kimi、GLM 等官方 API 的免费额度、Token Plan 和限制；再对比中转 API。", primary: ["比较官方 API", "/official-api"], secondary: ["查看中转 API", "/api-transit"] },
+export const dynamic = "force-dynamic";
+
+/**
+ * 差价的来源。组织轴是「账号最后归谁」，不是「你是什么用户」——
+ * 用户不必先给自己贴标签，只需要认出自己愿意接受哪一种交付形态。
+ * 四档与 DELIVERY_FAMILY_OF 的分组一一对应。
+ */
+const deliveryFamilies = [
+  {
+    icon: "badge",
+    title: "官网自己付款",
+    ownership: "账号完全属于你",
+    band: "基准价",
+    cost: "需要可用的海外支付方式，部分产品还有地区和实名门槛。",
+    href: "/official-prices",
+    cta: "看官方价与地区价",
+  },
+  {
+    icon: "shield",
+    title: "代充 · 团队席位",
+    ownership: "你的账号，别人替你付款",
+    band: "约为官方价的 5–8 折",
+    cost: "要把账号临时交给对方一次；对方的支付渠道出问题，会波及你的订阅。",
+    href: "/channels",
+    cta: "去卡网订阅找代充",
+  },
+  {
+    icon: "package",
+    title: "成品账号 · 兑换码",
+    ownership: "对方建好后交给你",
+    band: "约为官方价的 3–7 折",
+    cost: "注册信息不在你手上，找回和申诉能力弱；质保常常只覆盖首次登录。",
+    href: "/channels",
+    cta: "去卡网订阅找成品号",
+  },
+  {
+    icon: "key",
+    title: "共享 · 镜像 · 反代",
+    ownership: "账号不归你，你买的是使用权",
+    band: "约为官方价的 1–4 折",
+    cost: "多人共用、随时可能失效，通常不能用于 API 或官方客户端登录。",
+    href: "/channels",
+    cta: "去卡网订阅找共享类",
+  },
 ] as const;
 
-const modules = [
-  { icon: "package", title: "卡网订阅", text: "第三方渠道里的 AI 会员、账号、邮箱、卡密、CDK、Kiro 等，重点看有货价和交付方式。", href: "/channels" },
-  { icon: "badge", title: "官方订阅", text: "ChatGPT、Claude、Gemini、Grok 等会员的官网正价、地区价、资格价和支付门槛。", href: "/official-prices" },
-  { icon: "database", title: "官方 API", text: "DeepSeek、千问、Kimi、GLM 等国产模型官方 API，包含免费额度、Token Plan 和限制。", href: "/official-api" },
-  { icon: "key", title: "中转 API", text: "面向 GPT、Claude、Gemini、Grok 等模型的第三方中转站，重点看倍率、稳定性和披露信息。", href: "/api-transit" },
+/** 频道入口。按「你要买的东西」组织，不按用户身份组织。 */
+const channels = [
+  { icon: "package", need: "我要一个能自己登录的会员账号", title: "卡网订阅", text: "第三方渠道的会员、成品号、兑换码和席位。看有货价、交付方式和最后确认时间。", href: "/channels" },
+  { icon: "badge", need: "我想先知道官网到底收多少钱", title: "官方订阅", text: "厂商公开页面的正价、地区价和资格价，标明币种、汇率日期和证据链接。", href: "/official-prices" },
+  { icon: "database", need: "我要按用量付费的模型接口", title: "官方 API", text: "各厂商官方 API 的计费单价、免费额度和速率限制，按模型逐条对照。", href: "/official-api" },
+  { icon: "key", need: "我想用更便宜的第三方接口", title: "中转 API", text: "第三方中转站的倍率、近期成功率、延迟和样本量，以及它们披露了多少信息。", href: "/api-transit" },
 ] as const;
 
 const modelFamilies: Array<{ icon: ModelIconName; label: string }> = [
@@ -29,31 +71,126 @@ const modelFamilies: Array<{ icon: ModelIconName; label: string }> = [
   { icon: "zhipu", label: "GLM" },
 ];
 
+const weDo = [
+  "记录每条报价的原始标题、原始价格文本、来源渠道和确认时间。",
+  "官方价单独取自厂商公开页面，只有精确价参与对照，区间价不参与最低价。",
+  "标注库存状态和最后一次确认时间，长期未更新的报价不当作可买价。",
+  "保留纠错和举报入口，证据成立后下架异常报价或整个渠道。",
+];
+
+const weDont = [
+  "不销售、不代收款、不参与任何环节的交付。",
+  "不给渠道做信用背书；采集连通性良好不等于商家可靠。",
+  "不把不同交付方式混在一起凑出更好看的最低价。",
+  "不隐藏风险事实，让某条报价显得比实际更划算。",
+];
+
 const faqs = [
-  ["PriceAI 是卖 AI 订阅的吗？", "不是。PriceAI 不卖货、不收款、不参与交易，只聚合购买前可以核验的价格、来源、库存、更新时间和原始链接。"],
-  ["这些渠道靠谱吗？", "渠道只是信息源。你可以在卡网完成交付，也可以联系店主转到闲鱼等第三方平台交易；无论哪种方式，都要回到原平台确认商品描述、售后规则和最终价格。"],
-  ["如何买到适合自己的订阅？", "先确定你要官方账号、自己账号开通、成品号还是团队席位。新手优先看官方订阅和指南，准备走第三方渠道时建议先小额试单，不要只看最低价。"],
-  ["如何尽量避免被骗？", "看店铺是否有联系方式、售后入口、Telegram 群或售后群，群是否活跃；再看商品数量、历史经营痕迹、描述是否清楚，金额较大时优先选择可投诉或可担保的平台。"],
-  ["买到异常商品或疑似被骗怎么办？", "先联系店铺售后；售后无响应时，去对应卡网平台投诉。之后可以回到 PriceAI，在商品右侧点击举报并补充证据，审核通过后会下架异常商品或渠道。"],
+  ["表里的最低价，我现在就能买到吗？", "最低价只统计 24 小时内验证过、且标记为有货的报价。但从我们采集到你下单之间仍有时间差，价格和库存最终以原站为准。发现不一致时，可以在商品页提交纠错。"],
+  ["为什么同一个订阅能差三四倍？", "因为交付方式不同。代充、成品号、兑换码和共享号交付给你的东西不是一回事，账号归属和售后能力也不同。上面「差价的来源」列了四种形态各自的价位和代价。"],
+  ["你们收渠道的钱吗？", "页面上有明确标注的赞助位。赞助不改变排序、不影响最低价计算，也不会让某条报价被优先展示。完整的排序和计算规则写在数据说明页。"],
+  ["第一次买，应该从哪种方式开始？", "建议从官方订阅或代充开始，账号在你自己手上，出问题可控。价格敏感再考虑成品号，并尽量先小额试单。共享和反代更适合只做临时验证的场景。"],
+  ["买到货不对板怎么办？", "先走原平台的售后流程——交易关系在你和商家之间。同时可以在商品页提交纠错并附上截图；证据成立后我们会下架该报价，反复出问题的渠道会整体停止收录。"],
 ] as const;
 
 function LineIcon({ name }: { name: string }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   const glyphs: Record<string, ReactNode> = {
-    shield: <><path d="M20 13c0 5-3.5 7.5-7.7 9C8 20.5 4 18 4 13V6c3 0 6-1.5 8-3 2 1.5 5 3 8 3z" /><path d="m9 12 2 2 4-4" /></>, money: <><circle cx="12" cy="12" r="9" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" /></>, database: <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.7 4 3 9 3M21 5v3M3 12c0 1.7 4 3 9 3M21 12l-3 5h4l-3 5" /></>, package: <><path d="M12 22V12M3.3 7 12 12l8.7-5M4 6l7-4a2 2 0 0 1 2 0l7 4a2 2 0 0 1 1 1.7v3.4M3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0" /><path d="m16 17 2 2 4-4" /></>, badge: <><path d="M3.9 8.6a4 4 0 0 1 4.7-4.7 4 4 0 0 1 6.8 0 4 4 0 0 1 4.7 4.7 4 4 0 0 1 0 6.8 4 4 0 0 1-4.7 4.7 4 4 0 0 1-6.8 0 4 4 0 0 1-4.7-4.7 4 4 0 0 1 0-6.8z" /><path d="m9 12 2 2 4-4" /></>, key: <><path d="M2.6 17.4A2 2 0 0 0 2 18.8V21h4v-1a1 1 0 0 1 1-1h2v-2h2.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></>, clipboard: <><rect x="4" y="4" width="16" height="18" rx="2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="m9 14 2 2 4-4" /></>, question: <><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z" /><path d="M9 10a3 3 0 1 1 4 2.8c-1 .4-1 1.2-1 2M12 18h.01" /></>,
+    shield: <><path d="M20 13c0 5-3.5 7.5-7.7 9C8 20.5 4 18 4 13V6c3 0 6-1.5 8-3 2 1.5 5 3 8 3z" /><path d="m9 12 2 2 4-4" /></>,
+    database: <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.7 4 3 9 3M21 5v3M3 12c0 1.7 4 3 9 3M21 12l-3 5h4l-3 5" /></>,
+    package: <><path d="M12 22V12M3.3 7 12 12l8.7-5M4 6l7-4a2 2 0 0 1 2 0l7 4a2 2 0 0 1 1 1.7v3.4M3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0" /><path d="m16 17 2 2 4-4" /></>,
+    badge: <><path d="M3.9 8.6a4 4 0 0 1 4.7-4.7 4 4 0 0 1 6.8 0 4 4 0 0 1 4.7 4.7 4 4 0 0 1 0 6.8 4 4 0 0 1-4.7 4.7 4 4 0 0 1-6.8 0 4 4 0 0 1-4.7-4.7 4 4 0 0 1 0-6.8z" /><path d="m9 12 2 2 4-4" /></>,
+    key: <><path d="M2.6 17.4A2 2 0 0 0 2 18.8V21h4v-1a1 1 0 0 1 1-1h2v-2h2.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></>,
   };
   return <svg width="18" height="18" viewBox="0 0 24 24" {...common} aria-hidden="true">{glyphs[name]}</svg>;
 }
 
-function Arrow() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>; }
+function Arrow() {
+  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>;
+}
 
-export default function HomePage() {
+export default async function HomePage() {
+  const snapshot = await getHomeSnapshot();
+
   return <div className="priceai-page"><SiteHeader /><main className="priceai-home">
-    <BluePriceEngine />
-    <section className="priceai-hero-section"><div className="priceai-container priceai-hero"><p className="priceai-kicker">PriceAI</p><h1><span>AI 低价卡网订阅</span><span>与中转 API 比价雷达</span></h1><p className="priceai-lead">PriceAI 把官方订阅、卡网订阅、官方 API 和中转 API 放在同一个入口里。你先选择购买路径，再进入对应页面比较价格、来源、库存和更新时间。</p><div className="priceai-hero-actions"><a className="priceai-btn primary" href="#paths">先选购买路径 <Arrow /></a><Link className="priceai-btn" href="/channels">直接看有货低价</Link></div></div>
-      <div className="priceai-container priceai-paths" id="paths"><div className="priceai-section-heading compact"><p className="priceai-kicker">购买路径</p><h2>先回答一个问题：你现在要买什么？</h2><p>首页只负责分流。具体价格、库存、来源和购买链接，回到对应工具页完成。</p></div><div className="priceai-path-grid">{paths.map((item) => <article key={item.title}><div className="priceai-card-top"><span className="priceai-icon"><LineIcon name={item.icon} /></span><span className="priceai-pill">{item.label}</span></div><h3>{item.title}</h3><p>{item.text}</p><div className="priceai-card-actions"><Link className="priceai-btn primary" href={item.primary[1]}>{item.primary[0]} <Arrow /></Link><Link className="priceai-btn" href={item.secondary[1]}>{item.secondary[0]}</Link></div></article>)}</div></div></section>
-    <section className="priceai-module-section"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">四个模块</p><h2>选完路径，再进入对应工具。</h2><p>新手按购买问题走，老用户可以直接进入熟悉的模块。</p></div><div className="priceai-module-grid">{modules.map((item) => <Link href={item.href} key={item.title}><div><span className="priceai-icon"><LineIcon name={item.icon} /></span><Arrow /></div><h3>{item.title}</h3><p>{item.text}</p></Link>)}</div><div className="priceai-brand-title">覆盖常见 AI 订阅、模型与开发者入口</div><div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div></div></section>
-    <section className="priceai-boundary-section"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">核验边界</p><h2>PriceAI 提供信息，不替任何渠道背书。</h2><p>我们保留能被回看的事实，最终交易仍然发生在原平台。</p></div><div className="priceai-boundary-grid">{[["来源能不能回看？","保留原始渠道名、商品标题和购买链接，方便你回到原平台核验。"],["库存和时间是否可核验？","重点看有货/缺货状态和最近更新时间，长期未更新的低价不应直接当成可买价。"],["交付和售后谁负责？","PriceAI 不参与交易。付款、交付、售后、退款和账号风险都按原平台规则判断。"]].map(([title,text])=><article key={title}><span className="priceai-icon"><LineIcon name="clipboard" /></span><h3>{title}</h3><p>{text}</p></article>)}</div><div className="priceai-return-card"><span className="priceai-icon"><LineIcon name="question" /></span><div><h3>购买前回到原平台确认</h3><p>付款、交付、售后、退款和账号风险都要按原平台规则判断。</p></div><a className="priceai-btn" href="#faq">看常见问题</a></div></div></section>
-    <section className="priceai-faq-section" id="faq"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">常见问题</p><h2>买之前，先看这几条。</h2><p>首页只保留购买前最容易踩坑的问题。更细的背景说明放到指南里继续维护。</p></div><div className="priceai-faq-list">{faqs.map(([q,a])=><article key={q}><h3>{q}</h3><p>{a}</p></article>)}</div></div></section>
+    <PriceBaselineHero />
+
+    <section className="priceai-delivery-section" id="delivery">
+      <div className="priceai-container">
+        <div className="priceai-section-heading">
+          <p className="priceai-kicker">差价的来源</p>
+          <h2>同一个会员，为什么有人付全价，有人付两折</h2>
+          <p>不是渠道谁更良心。价格差主要来自四种交付方式，它们交到你手上的东西根本不是一回事。下面按「账号最后归谁」从强到弱排列。</p>
+        </div>
+        <div className="priceai-delivery-grid">
+          {deliveryFamilies.map((item) => <article key={item.title}>
+            <div className="priceai-card-top"><span className="priceai-icon"><LineIcon name={item.icon} /></span></div>
+            <h3>{item.title}</h3>
+            <span className="priceai-pill">{item.band}</span>
+            <p className="priceai-delivery-own">{item.ownership}</p>
+            <p>{item.cost}</p>
+            <Link className="priceai-btn" href={item.href}>{item.cta} <Arrow /></Link>
+          </article>)}
+        </div>
+        <p className="priceai-delivery-note">下面表格里的最低价可能来自其中任何一种。比价之前先确认你要哪一种——同规格才有可比性。</p>
+      </div>
+    </section>
+
+    <PriceBaselineTable snapshot={snapshot} />
+
+    <section className="priceai-module-section" id="channels">
+      <div className="priceai-container">
+        <div className="priceai-section-heading">
+          <p className="priceai-kicker">四个频道</p>
+          <h2>想清楚要哪种交付方式之后，去这里比价</h2>
+          <p>按你要买的东西进入，不需要先判断自己算新手还是老手。</p>
+        </div>
+        <div className="priceai-module-grid">
+          {channels.map((item) => <Link href={item.href} key={item.title}>
+            <div><span className="priceai-icon"><LineIcon name={item.icon} /></span><Arrow /></div>
+            <p className="priceai-module-need">{item.need}</p>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </Link>)}
+        </div>
+        <div className="priceai-brand-title">目前已纳入对照的会员与模型厂商</div>
+        <div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div>
+      </div>
+    </section>
+
+    <section className="priceai-boundary-section">
+      <div className="priceai-container">
+        <div className="priceai-section-heading">
+          <p className="priceai-kicker">边界</p>
+          <h2>这个站做什么，不做什么</h2>
+          <p>我们只负责让每个数字可以被回看。交易发生在原平台，判断权在你手上。</p>
+        </div>
+        <div className="priceai-boundary-split">
+          <article className="do">
+            <h3>我们做</h3>
+            <ul>{weDo.map((line) => <li key={line}>{line}</li>)}</ul>
+          </article>
+          <article className="dont">
+            <h3>我们不做</h3>
+            <ul>{weDont.map((line) => <li key={line}>{line}</li>)}</ul>
+          </article>
+        </div>
+        <div className="priceai-return-card">
+          <div><h3>完整的采集、归一和排序规则</h3><p>包括最低价怎么算、什么样的报价会被排除、异常数据怎么处理。</p></div>
+          <Link className="priceai-btn" href="/methodology">看数据说明 <Arrow /></Link>
+        </div>
+      </div>
+    </section>
+
+    <section className="priceai-faq-section" id="faq">
+      <div className="priceai-container">
+        <div className="priceai-section-heading">
+          <p className="priceai-kicker">常见问题</p>
+          <h2>下单之前，这几条值得先看</h2>
+          <p>只保留最容易造成实际损失的问题。更细的背景说明在指南里维护。</p>
+        </div>
+        <div className="priceai-faq-list">{faqs.map(([q, a]) => <article key={q}><h3>{q}</h3><p>{a}</p></article>)}</div>
+      </div>
+    </section>
   </main><SiteFooter /></div>;
 }
