@@ -995,10 +995,10 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .priceai-brand { display: flex; align-items: center; gap: 10px; justify-self: start; }
 .priceai-brand-logo { width: 40px; height: 40px; display: block; color: var(--color-text-primary); }
 .priceai-brand-logo svg { width: 100%; height: 100%; }
-.priceai-cube-logo { position: relative; width: 44px; height: 44px; display: block; flex: 0 0 44px; overflow: visible; isolation: isolate; background: transparent; }
-.priceai-cube-logo::before { position: absolute; z-index: 0; inset: 9px; border-radius: 50%; background: color-mix(in oklab, var(--color-brand) 19%, transparent); filter: blur(6px); content: ""; opacity: .78; pointer-events: none; }
-.priceai-cube-logo-canvas { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; display: block; filter: drop-shadow(0 3px 5px rgba(29, 38, 48, .24)); transform: scale(1.13); transform-origin: center; transition: filter .18s ease, transform .18s ease; pointer-events: none; }
-.priceai-brand:hover .priceai-cube-logo-canvas { filter: drop-shadow(0 5px 8px rgba(29, 38, 48, .3)); transform: scale(1.18); }
+.priceai-cube-logo { position: relative; width: 40px; height: 40px; display: block; flex: 0 0 40px; overflow: visible; isolation: isolate; background: transparent; }
+.priceai-cube-logo::before { position: absolute; z-index: 0; inset: 10px; border-radius: 50%; background: color-mix(in oklab, var(--color-brand) 14%, transparent); filter: blur(5px); content: ""; opacity: .58; pointer-events: none; }
+.priceai-cube-logo-canvas { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; display: block; filter: drop-shadow(0 2px 4px rgba(29, 38, 48, .21)); transform: scale(1.01); transform-origin: center; transition: filter .18s ease, transform .18s ease; pointer-events: none; }
+.priceai-brand:hover .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 6px rgba(29, 38, 48, .27)); transform: scale(1.05); }
 .priceai-cube-logo-fallback { position: absolute; z-index: 1; inset: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; transform: rotate(-8deg) skewY(4deg); }
 .priceai-cube-logo-fallback img { width: 100%; height: 100%; padding: 2px; border: 1px solid rgba(79,97,117,.12); border-radius: 2px; background: #f7f8f8; opacity: .82; }
 html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7px rgba(0, 0, 0, .42)); }
@@ -1172,7 +1172,7 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
   .priceai-notice > button { right: 10px; width: 30px; height: 30px; }
   .priceai-header { display: flex; flex-wrap: wrap; justify-content: space-between; min-height: 70px; padding: 10px 16px; }
   .priceai-brand-logo { width: 34px; height: 34px; }
-  .priceai-cube-logo { width: 42px; height: 42px; flex-basis: 42px; border-radius: 10px; }
+  .priceai-cube-logo { width: 38px; height: 38px; flex-basis: 38px; }
   .priceai-brand strong { font-size: 22px; line-height: 24px; }
   .priceai-header-actions { gap: 6px; }
   .priceai-header-actions > a, .priceai-header-actions > button { width: 38px; height: 38px; }

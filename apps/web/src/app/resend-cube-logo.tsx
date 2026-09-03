@@ -38,11 +38,11 @@ export function ResendCubeLogo() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 0.96;
+      renderer.toneMappingExposure = 1.02;
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(31, 1, 0.1, 30);
-      camera.position.set(0, 0.06, 6.25);
+      camera.position.set(0, 0.06, 6.95);
 
       const room = new RoomEnvironment();
       const pmrem = new THREE.PMREMGenerator(renderer);
@@ -52,20 +52,25 @@ export function ResendCubeLogo() {
       pmrem.dispose();
 
       const cube = new THREE.Group();
-      const geometry = new RoundedBoxGeometry(1.16, 1.16, 1.16, 4, 0.105);
-      const tileColors = [0xf7f8f9, 0xf1f3f5, 0xe9edf0, 0xf4f6f7] as const;
+      const geometry = new RoundedBoxGeometry(1.16, 1.16, 1.16, 4, 0.072);
+      const tileColors = [0xe7ecef, 0xdce3e7, 0xf0f3f4, 0xd5dde2] as const;
       const createCubeMaterial = (color: number) => new THREE.MeshPhysicalMaterial({
         color,
-        metalness: 0.08,
-        roughness: 0.36,
-        clearcoat: 0.62,
-        clearcoatRoughness: 0.16,
-        envMapIntensity: 0.56,
+        metalness: 0.48,
+        roughness: 0.3,
+        clearcoat: 0.16,
+        clearcoatRoughness: 0.34,
+        envMapIntensity: 1.08,
       });
       const iconMaterials = MODEL_ICON_ENTRIES.map(() => {
-        const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        material.toneMapped = false;
-        return material;
+        return new THREE.MeshPhysicalMaterial({
+          color: 0xffffff,
+          metalness: 0.2,
+          roughness: 0.34,
+          clearcoat: 0.12,
+          clearcoatRoughness: 0.38,
+          envMapIntensity: 0.78,
+        });
       });
       const neutralMaterials = tileColors.map((tileColor) => createCubeMaterial(tileColor));
       const cubelets: THREE.Mesh[] = [];
@@ -150,17 +155,17 @@ export function ResendCubeLogo() {
       cube.rotation.set(-0.4, 0.58, -0.07);
       scene.add(cube);
 
-      const key = new THREE.RectAreaLight(0xffffff, 4.1, 4.5, 1.2);
+      const key = new THREE.RectAreaLight(0xffffff, 4.8, 4.5, 1.2);
       key.position.set(-3.6, 4.8, 4.2);
       key.lookAt(0, 0, 0);
       scene.add(key);
 
-      const rim = new THREE.RectAreaLight(0xb9d5ff, 1.8, 1.8, 4.4);
+      const rim = new THREE.RectAreaLight(0xb9d5ff, 2.25, 1.8, 4.4);
       rim.position.set(4.2, 1.1, -1.3);
       rim.lookAt(0, 0, 0);
       scene.add(rim);
 
-      const sweep = new THREE.PointLight(0xeaf3ff, 2.6, 11, 1.8);
+      const sweep = new THREE.PointLight(0xeaf3ff, 3.1, 11, 1.8);
       sweep.position.set(-3.2, 2.8, 4.3);
       scene.add(sweep);
 
