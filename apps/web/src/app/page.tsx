@@ -18,8 +18,8 @@ const deliveryFamilies = [
     icon: "badge",
     title: "官网自己付款",
     ownership: "账号完全属于你",
-    band: "基准价",
-    cost: "需要可用的海外支付方式，部分产品还有地区和实名门槛。",
+    band: "官方正价",
+    cost: "需要可用的海外支付方式与网络环境。自持最高管理权限，使用最稳妥。",
     href: "/official-prices",
     cta: "看官方价与地区价",
   },
@@ -28,7 +28,7 @@ const deliveryFamilies = [
     title: "代充 · 团队席位",
     ownership: "你的账号，别人替你付款",
     band: "约为官方价的 5–8 折",
-    cost: "要把账号临时交给对方一次；对方的支付渠道出问题，会波及你的订阅。",
+    cost: "需提取账号 Session 或交由对方代付，渠道异常可能波及订阅。下单时尽量选择信誉卡网与有售后保障的商家。",
     href: "/channels",
     cta: "去卡网订阅找代充",
   },
@@ -37,7 +37,7 @@ const deliveryFamilies = [
     title: "成品账号 · 兑换码",
     ownership: "对方建好后交给你",
     band: "约为官方价的 3–7 折",
-    cost: "注册信息不在你手上，找回和申诉能力弱；质保常常只覆盖首次登录。",
+    cost: "拍下即得新账号密码或官方兑换码，开箱即用。免去注册门槛，质保以各商家承诺期限为准。",
     href: "/channels",
     cta: "去卡网订阅找成品号",
   },
@@ -46,7 +46,7 @@ const deliveryFamilies = [
     title: "共享 · 镜像 · 反代",
     ownership: "账号不归你，你买的是使用权",
     band: "约为官方价的 1–4 折",
-    cost: "多人共用、随时可能失效，通常不能用于 API 或官方客户端登录。",
+    cost: "多人共用账号或镜像，可用额度会随人数分摊而相应减少。单价极低、开箱即用，适合轻度尝鲜与短期临时使用。",
     href: "/channels",
     cta: "去卡网订阅找共享类",
   },
@@ -119,8 +119,8 @@ export default async function HomePage() {
       <div className="priceai-container">
         <div className="priceai-section-heading">
           <p className="priceai-kicker">差价的来源</p>
-          <h2>同一个会员，为什么有人付全价，有人付两折</h2>
-          <p>不是渠道谁更良心。价格差主要来自四种交付方式，它们交到你手上的东西根本不是一回事。下面按「账号最后归谁」从强到弱排列。</p>
+          <h2>同一个 ChatGPT Plus 会员，为什么有人付全价，有人只要两折？</h2>
+          <p>不是渠道谁更良心，价格差主要来自四种供货渠道：从官方独享、他人代充，到现成号与共享使用，交付形态不同，价格自然不同。下面按「账号最终归谁」为你分类拆解：</p>
         </div>
         <div className="priceai-delivery-grid">
           {deliveryFamilies.map((item) => <article key={item.title}>
