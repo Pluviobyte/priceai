@@ -53,15 +53,25 @@ export function ResendCubeLogo() {
       const cube = new THREE.Group();
       const geometry = new RoundedBoxGeometry(1.16, 1.16, 1.16, 4, 0.105);
       const tileColors = [0xffffff, 0xf8f9fa, 0xf1f3f5, 0xfafafa] as const;
+      const iconColors = [
+        ["#008f6a", "#18b887"],
+        ["#bd4e2f", "#de714d"],
+        ["#2f6ff2", "#8745c6", "#d43e72"],
+        ["#d91f5f", "#ef4f32"],
+        ["#244cf0", "#0089ef"],
+        ["#5145cf", "#812cdb"],
+        ["#1264d6", "#009abb"],
+        ["#007f91", "#21a25e"],
+      ] as const;
       const materials = MODEL_ICON_ENTRIES.map((_, index) => {
         const tileColor = tileColors[index % tileColors.length] ?? tileColors[0];
         return new THREE.MeshPhysicalMaterial({
           color: tileColor,
-          metalness: 0.14,
-          roughness: 0.24,
-          clearcoat: 1,
-          clearcoatRoughness: 0.09,
-          envMapIntensity: 1.08,
+          metalness: 0.04,
+          roughness: 0.3,
+          clearcoat: 0.72,
+          clearcoatRoughness: 0.12,
+          envMapIntensity: 0.72,
         });
       });
       const cubelets: THREE.Mesh[] = [];
@@ -102,7 +112,23 @@ export function ResendCubeLogo() {
           const baseColor = `#${tileColor.toString(16).padStart(6, "0")}`;
           context.fillStyle = baseColor;
           context.fillRect(0, 0, tile.width, tile.height);
-          context.drawImage(image, 94, 94, 324, 324);
+
+          const iconLayer = document.createElement("canvas");
+          iconLayer.width = tile.width;
+          iconLayer.height = tile.height;
+          const iconContext = iconLayer.getContext("2d");
+          if (!iconContext) return;
+
+          iconContext.drawImage(image, 60, 60, 392, 392);
+          iconContext.globalCompositeOperation = "source-in";
+          const colors = iconColors[index] ?? iconColors[0];
+          const iconGradient = iconContext.createLinearGradient(92, 92, 420, 420);
+          colors.forEach((color, colorIndex) => {
+            iconGradient.addColorStop(colorIndex / Math.max(1, colors.length - 1), color);
+          });
+          iconContext.fillStyle = iconGradient;
+          iconContext.fillRect(0, 0, iconLayer.width, iconLayer.height);
+          context.drawImage(iconLayer, 0, 0);
 
           const texture = new THREE.CanvasTexture(tile);
           texture.colorSpace = THREE.SRGBColorSpace;
