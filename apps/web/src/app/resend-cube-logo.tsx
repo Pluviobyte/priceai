@@ -22,6 +22,7 @@ export function ResendCubeLogo() {
     let disposed = false;
     let isVisible = true;
     let pageVisible = document.visibilityState !== "hidden";
+    let isEngaged = false;
     const iconTextures: THREE.CanvasTexture[] = [];
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -164,6 +165,13 @@ export function ResendCubeLogo() {
       scene.add(sweep);
 
       const clock = new THREE.Clock();
+      let motionTime = reducedMotion ? 2.4 : 0;
+      let yawRotation = 0.58;
+      let engagement = 0;
+      const brandLink = canvas.closest<HTMLElement>(".priceai-brand");
+
+      const engage = () => { isEngaged = true; };
+      const disengage = () => { isEngaged = false; };
 
       const resize = () => {
         if (!renderer) return;
@@ -179,12 +187,15 @@ export function ResendCubeLogo() {
         animationFrame = 0;
         if (disposed || !renderer || !isVisible || !pageVisible) return;
 
-        const elapsed = clock.getElapsedTime();
-        const motionTime = reducedMotion ? 2.4 : elapsed;
-        cube.rotation.x = -0.4 + Math.sin(motionTime * 0.24) * 0.055;
-        cube.rotation.y = 0.58 + Math.sin(motionTime * 0.25) * 0.13;
-        cube.rotation.z = -0.07 + Math.sin(motionTime * 0.18) * 0.025;
-        cube.position.y = Math.sin(motionTime * 0.52) * 0.045;
+        const delta = reducedMotion ? 0 : Math.min(clock.getDelta(), 0.05);
+        engagement += ((isEngaged ? 1 : 0) - engagement) * Math.min(1, delta * 4.5);
+        motionTime += delta * (1 + engagement * 0.32);
+        yawRotation += delta * (0.15 + engagement * 0.07);
+
+        cube.rotation.x = -0.4 + Math.sin(motionTime * 0.36) * 0.065;
+        cube.rotation.y = yawRotation + Math.sin(motionTime * 0.48) * 0.035;
+        cube.rotation.z = -0.07 + Math.sin(motionTime * 0.27) * 0.028;
+        cube.position.y = Math.sin(motionTime * 0.62) * 0.038;
 
         for (const mesh of cubelets) {
           const base = mesh.userData.base as THREE.Vector3;
@@ -228,6 +239,10 @@ export function ResendCubeLogo() {
       });
       intersectionObserver.observe(canvas);
 
+      brandLink?.addEventListener("pointerenter", engage);
+      brandLink?.addEventListener("pointerleave", disengage);
+      brandLink?.addEventListener("focus", engage);
+      brandLink?.addEventListener("blur", disengage);
       document.addEventListener("visibilitychange", handleVisibility);
       resize();
       startRendering();
@@ -236,6 +251,10 @@ export function ResendCubeLogo() {
         disposed = true;
         stopRendering();
         document.removeEventListener("visibilitychange", handleVisibility);
+        brandLink?.removeEventListener("pointerenter", engage);
+        brandLink?.removeEventListener("pointerleave", disengage);
+        brandLink?.removeEventListener("focus", engage);
+        brandLink?.removeEventListener("blur", disengage);
         resizeObserver?.disconnect();
         intersectionObserver?.disconnect();
         geometry.dispose();
