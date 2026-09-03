@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-*/
 dist/
 coverage/
 .turbo/
@@ -12,3 +13,5 @@ coverage/
 playwright-report/
 test-results/
 drizzle/meta/_journal.json.tmp
+.vercel
+.env*

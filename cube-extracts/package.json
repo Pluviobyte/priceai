@@ -1,0 +1,17 @@
+{
+  "name": "cube-extracts-webgl",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:vivid && npm run build:resend",
+    "build:vivid": "esbuild src/vivid-webgl.js --bundle --format=iife --target=es2020 --minify --outfile=assets/vivid-webgl.js",
+    "build:resend": "esbuild src/resend-webgl.js --bundle --format=iife --target=es2020 --minify --outfile=assets/resend-webgl.js"
+  },
+  "dependencies": {
+    "three": "0.185.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

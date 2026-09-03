@@ -1,29 +1,80 @@
-import { getOfficialApiPrices } from "@/lib/public-pricing";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { getOfficialApiPrices, getOfficialSubscriptionPrices, type OfficialApiPrice } from "@/lib/public-pricing";
 import { SiteHeader } from "../site-header";
+import { SiteFooter } from "../site-footer";
 
 export const dynamic = "force-dynamic";
 
-function money(value: string | null): string { return value === null ? "—" : `$${Number(value).toLocaleString("en-US", { maximumFractionDigits: 8 })}`; }
-function first(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
+export const metadata: Metadata = {
+  title: "官方 API | PriceAI",
+  description: "比较 AI 厂商官方 API 模型、输入输出 token 价格与来源渠道。",
+};
+
+const vendorAliases: Record<string, string> = { Anthropic: "Claude", Google: "Gemini", OpenAI: "OpenAI", SpaceXAI: "Grok" };
+const vendorIcons: Record<string, string> = { Anthropic: "claude.svg", Google: "gemini.svg", OpenAI: "chatgpt.svg", SpaceXAI: "grok.svg" };
+const categoryVendors: ReadonlyArray<readonly [string, string]> = [
+  ["全部", ""], ["OpenAI", "OpenAI"], ["Claude", "Anthropic"], ["Gemini", "Google"], ["Grok", "SpaceXAI"],
+  ["DeepSeek", "DeepSeek"], ["Qwen", "Qwen"], ["Kimi", "Kimi"], ["GLM", "GLM"], ["MiniMax", "MiniMax"],
+  ["MiMo", "MiMo"], ["StepFun", "StepFun"], ["图片生成", "image"], ["视频生成", "video"],
+];
+
+function first(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function money(value: string | null, currency = "USD"): string {
+  if (value === null) return "—";
+  const prefix = currency === "USD" ? "$" : `${currency} `;
+  return `${prefix}${Number(value).toLocaleString("en-US", { maximumFractionDigits: 8 })}`;
+}
+
+function date(value: Date | null): string {
+  if (!value) return "未记录";
+  return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(value).replaceAll("/", "-");
+}
+
+function groupByVendor(prices: OfficialApiPrice[]): Array<{ vendor: string; rows: OfficialApiPrice[]; latest: Date | null }> {
+  const groups = new Map<string, OfficialApiPrice[]>();
+  for (const row of prices) groups.set(row.vendor, [...(groups.get(row.vendor) ?? []), row]);
+  return [...groups.entries()].map(([vendor, rows]) => ({
+    vendor,
+    rows,
+    latest: rows.reduce<Date | null>((current, row) => !current || row.verifiedAt > current ? row.verifiedAt : current, null),
+  }));
+}
 
 export default async function OfficialApiPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const raw = await searchParams;
   const q = first(raw.q).trim();
-  const selectedVendor = first(raw.vendor).trim();
+  const vendor = first(raw.vendor).trim();
   const allPrices = await getOfficialApiPrices();
-  const vendorOptions = [...new Set(allPrices.map((row) => row.vendor))];
+  const subscriptions = await getOfficialSubscriptionPrices();
+  const query = q.toLocaleLowerCase("zh-CN");
   const prices = allPrices.filter((row) => {
-    const text = `${row.vendor} ${row.modelName} ${row.modelCode} ${row.modality} ${row.priceTier}`.toLocaleLowerCase("zh-CN");
-    return (!selectedVendor || row.vendor === selectedVendor) && (!q || text.includes(q.toLocaleLowerCase("zh-CN")));
+    const vendorMatch = !vendor || row.vendor === vendor || (vendor === "image" && row.modality.includes("image")) || (vendor === "video" && row.modality.includes("video"));
+    const haystack = `${row.vendor} ${vendorAliases[row.vendor] ?? ""} ${row.modelName} ${row.modelCode} ${row.modality} ${row.priceTier}`.toLocaleLowerCase("zh-CN");
+    return vendorMatch && (!query || haystack.includes(query));
   });
-  return <main><SiteHeader active="api" /><section className="listing-shell pricing-shell">
-    <div className="channel-title-row"><div><span className="section-kicker">Official API</span><h1>官方 API 定价</h1><p className="listing-lead">输入、缓存输入、输出、批处理和多模态费用拆开记录。每条数据均指向厂商文档，定价变化时追加历史快照。</p></div><dl className="channel-stats"><div><dt>模型价格</dt><dd>{allPrices.length}</dd></div><div><dt>厂商</dt><dd>{vendorOptions.length}</dd></div><div><dt>历史版本</dt><dd>{allPrices.reduce((sum, row) => sum + row.historyCount, 0)}</dd></div></dl></div>
-    <aside className="guide-strip"><div><span>阅读提示</span><b>输入价、缓存价和输出价要分开看</b></div><p>模型名相近也可能对应不同上下文、批处理或多模态计费，最终以厂商文档为准。</p><Link href="/methodology">了解核验规则</Link></aside>
-    <div className="catalog-toolbar"><form className="compact-search" action="/official-api"><label className="sr-only" htmlFor="api-query">搜索厂商或模型</label><input id="api-query" name="q" defaultValue={q} placeholder="搜索 OpenAI、Claude、Gemini、模型名…" />{selectedVendor && <input type="hidden" name="vendor" value={selectedVendor} />}<button type="submit">搜索</button></form><nav className="filter-links" aria-label="按 API 厂商筛选"><Link className={!selectedVendor ? "active" : undefined} href="/official-api">全部</Link>{vendorOptions.map((vendor) => <Link className={selectedVendor === vendor ? "active" : undefined} href={`/official-api?vendor=${encodeURIComponent(vendor)}`} key={vendor}>{vendor}</Link>)}</nav></div>
-    <div className="pricing-table-wrap"><table className="pricing-table api-pricing-table"><thead><tr><th>厂商 / 模型</th><th>层级</th><th>输入</th><th>缓存输入</th><th>输出</th><th>多模态 / 限制</th><th>证据</th></tr></thead><tbody>
-      {prices.map((row) => <tr key={row.id}><td><b>{row.vendor}</b><strong>{row.modelName}</strong><small>{row.modelCode} · {row.modality}{row.contextWindow ? ` · ${(row.contextWindow / 1000).toLocaleString()}K context` : ""}</small></td><td><span className="quality-pill exact">{row.priceTier}</span><small>{row.unit}</small></td><td>{money(row.inputPrice)}</td><td>{money(row.cachedInputPrice)}</td><td>{money(row.outputPrice)}</td><td><details><summary>查看结构化计费</summary><pre>{JSON.stringify({ additionalPrices: row.additionalPrices, freeTier: row.freeTier, rateLimits: row.rateLimits }, null, 2)}</pre></details></td><td><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">官方文档 ↗</a><small>{row.documentVersion ?? "无文档版本"} · {row.historyCount} 版</small></td></tr>)}
-    </tbody></table></div>
-    {!prices.length && <div className="empty-state">没有匹配的官方 API 定价，请调整搜索或厂商筛选。</div>}
-  </section></main>;
+  const groups = groupByVendor(prices);
+  const uniqueModels = new Set(allPrices.map((row) => `${row.vendor}:${row.modelCode}`)).size;
+  const uniqueSubscriptionPlans = new Set(subscriptions.map((row) => `${row.vendor}:${row.planCode}:${row.billingPeriod}`)).size;
+  const latest = allPrices.reduce<Date | null>((current, row) => !current || row.verifiedAt > current ? row.verifiedAt : current, null);
+  const categoryHref = (nextVendor: string) => nextVendor ? `/official-api?vendor=${encodeURIComponent(nextVendor)}` : "/official-api";
+
+  return <div className="priceai-page priceai-api-page"><SiteHeader active="api" />
+    <nav className="priceai-category-rail priceai-api-categories" aria-label="按厂商或模型类型筛选">{categoryVendors.map(([label, value]) => <Link className={vendor === value ? "active" : undefined} href={categoryHref(value)} key={label}>{label}</Link>)}</nav>
+    <main className="priceai-catalog-shell priceai-api-shell">
+      <section className="priceai-catalog-hero priceai-official-hero priceai-api-hero"><div><h1>官方订阅与 Token Plan</h1><p className="priceai-catalog-intro">标准模型是一套官方 API 基准价格库：文本模型按输入、输出和缓存 token 看，图片/视频生成按官方公开的图片或视频计费单位展示；来源渠道页用来查看官方订阅与 Token Plan 额度。</p><p className="priceai-catalog-meta">数据库同步：{date(latest)}　·　当前显示：{groups.length} 个官方来源渠道　·　价格单位以厂商文档为准</p></div><dl><div><dt>模型</dt><dd>{uniqueModels}</dd></div><div><dt>渠道</dt><dd>{new Set(allPrices.map((row) => row.vendor)).size}</dd></div><div><dt>报价</dt><dd>{allPrices.length}</dd></div><div><dt>订阅</dt><dd>{uniqueSubscriptionPlans}</dd></div></dl></section>
+      <section className="priceai-api-sponsor" aria-label="官方 API 合作位广告位"><div><b>赞助商</b><Link href="/commercial#slots">成为赞助商</Link></div><a href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer nofollow"><img src="https://priceai.cc/api/sponsor-assets?ref=r2%3A%2F%2Fsponsor-assets%2Fsponsor-assets%2Fapimodels%2Fapi-models-toolkit%2Ff7ff1f3c-d15b-4f12-a50b-73646359cf94.png" alt="OpenCode Go 国产模型编程订阅" /><span><strong>OpenCode Go：国产模型编程订阅</strong><em>推广</em></span><p>支持 GLM、Kimi、Qwen、MiniMax、DeepSeek 等主流国产开放模型。提供月度上限约 $60 用量。</p></a></section>
+      <section className="priceai-api-toolbar"><div className="priceai-api-toolbar-main"><form action="/official-api"><label className="sr-only" htmlFor="api-query">搜索官方 API 模型</label><input id="api-query" name="q" defaultValue={q} placeholder="搜索 ChatGPT、Claude、Gemini、OpenCode Go" />{vendor && <input type="hidden" name="vendor" value={vendor} />}</form><nav aria-label="官方 API 数据视图"><Link href="/official-api?view=models">◈ 标准模型</Link><Link href="/official-api?view=quotes">▤ 全部报价</Link><Link className="active" href="/official-api">◉ 来源渠道</Link></nav><div className="priceai-currency-switch"><button className="active" type="button">美元</button><button type="button">人民币</button></div><Link className="priceai-api-submit" href="/submit">⌁　提交 API 渠道</Link></div><div className="priceai-api-type-filters"><Link className="active" href="/official-api">订阅/Token Plan</Link><Link href="/official-api?type=official">官方 API</Link><Link href="/official-api?type=free">免费/测试</Link><Link href="/official-api?type=all">全部类型</Link></div></section>
+      {groups.length ? <div className="priceai-api-table-wrap"><table className="priceai-api-table"><thead><tr><th>渠道/订阅</th><th>类型</th><th>套餐额度</th><th>覆盖/边界</th><th>最近更新</th></tr></thead><tbody>{groups.map((group) => {
+        const models = [...new Map(group.rows.map((row) => [row.modelCode, row])).values()];
+        const label = vendorAliases[group.vendor] ?? group.vendor;
+        return <tr key={group.vendor}><td><Link href={`/official-api/providers/${group.vendor.toLowerCase()}`}><span className="priceai-provider-name"><img src={`https://priceai.cc/brand-icons/${vendorIcons[group.vendor] ?? "chatgpt.svg"}`} alt="" /><b>{label} 官方 API</b></span><small>{group.vendor} 官方模型与公开计费文档。</small></Link></td><td><span className="priceai-type-pill">官方 API</span></td><td><div className="priceai-api-plans">{group.rows.map((row) => <a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow" key={row.id}><span><b>{row.modelName}</b><strong>{money(row.inputPrice, row.currency)} / {money(row.outputPrice, row.currency)}</strong></span><p>{row.priceTier === "batch" ? "批处理" : "标准计费"} · 输入 / 输出 · {row.unit.replaceAll("_", " ")}</p>{row.cachedInputPrice && <em>缓存输入 {money(row.cachedInputPrice, row.currency)}</em>}</a>)}</div></td><td><b>{models.length} 个覆盖项</b><p>{models.map((row) => row.modelName).join("、")}</p><small>{group.rows.some((row) => row.modality.includes("image")) ? "包含图片或多模态输入；" : ""}具体上下文、速率限制与可用地区以官方文档为准。</small></td><td><p>{date(group.latest)}</p><a className="priceai-row-button" href={group.rows[0]?.evidenceUrl ?? "/official-api"} target="_blank" rel="noopener noreferrer nofollow">查看　›</a></td></tr>;
+      })}</tbody></table></div> : <div className="empty-state">没有匹配的官方 API 来源渠道，请尝试其他关键词或模型分类。</div>}
+      <aside className="priceai-official-note priceai-api-note"><b>API 价格阅读提示</b><p>输入、缓存输入、输出与批处理价格不能直接混在一起比较。上下文长度、免费额度、地域与速率限制也可能影响实际成本。</p></aside>
+      <p className="priceai-api-disclaimer">免责声明：PriceAI 只整理公开文档和公开页面中的 API 渠道信息，不售卖 API、不承诺可用性，也不替任何渠道提供 SLA。</p>
+    </main><SiteFooter />
+  </div>;
 }

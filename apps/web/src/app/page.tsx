@@ -1,283 +1,59 @@
-import { getPublicCatalog, type PublicProductSummary } from "@/lib/public-catalog";
-import { getActiveSponsorships } from "@/lib/public-sponsorships";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { SiteHeader } from "./site-header";
+import { SiteFooter } from "./site-footer";
+import { BluePriceEngine } from "./blue-price-engine";
+import { ModelIcon, type ModelIconName } from "./model-icons";
 
-export const dynamic = "force-dynamic";
-
-const tones = ["mint", "sand", "sky", "lilac"] as const;
-
-const capabilities = [
-  ["来源可追溯", "保留原始标题、原站链接与最后确认时间"],
-  ["库存与新鲜度分离", "采集失败不会被误判成商品缺货"],
-  ["同规格再比价", "代充、成品号、共享和反代不会混成一个最低价"],
-];
-
-const purchasePaths = [
-  {
-    audience: "第一次购买",
-    title: "我想开通一个 AI 会员",
-    description: "先看官网和应用商店的标准价，再决定是否需要更低价的代充、卡密或成品号。",
-    primary: ["先看官方订阅", "/official-prices"],
-    secondary: ["比较卡网报价", "/subscriptions"],
-  },
-  {
-    audience: "熟悉卡网",
-    title: "我想找现货或更低价方案",
-    description: "从标准商品进入，重点核对账号归属、接码、可用端、质保和最后确认时间。",
-    primary: ["进入卡网比价", "/subscriptions"],
-    secondary: ["查看来源目录", "/channels"],
-  },
-  {
-    audience: "开发接入",
-    title: "我需要调用模型 API",
-    description: "先用官方 API 建立价格基准，再比较中转站的模型价、可用性和证据来源。",
-    primary: ["查看官方 API", "/official-api"],
-    secondary: ["比较中转 API", "/api-transit"],
-  },
+const paths = [
+  { icon: "shield", label: "订阅新手", title: "我只是想买一个 AI 订阅", text: "先看官方价、地区价和支付门槛；如果需要现货、更低价或代开通，再去看卡网订阅。", primary: ["先看官方订阅", "/official-prices"], secondary: ["再看卡网订阅", "/channels"] },
+  { icon: "money", label: "资深买家", title: "我想找更低价或更灵活的方案", text: "先看卡网订阅里的低价现货、渠道和更新时间；如果要接 GPT、Claude、Gemini、Grok 等模型，再看中转 API。", primary: ["看卡网订阅", "/channels"], secondary: ["看中转 API", "/api-transit"] },
+  { icon: "database", label: "开发接入", title: "我想接 API 做产品或工具", text: "先看 DeepSeek、千问、Kimi、GLM 等官方 API 的免费额度、Token Plan 和限制；再对比中转 API。", primary: ["比较官方 API", "/official-api"], secondary: ["查看中转 API", "/api-transit"] },
 ] as const;
 
 const modules = [
-  ["01", "卡网订阅", "第三方渠道中的会员、代充、成品号与卡密，重点看同规格最低价、库存和交付方式。", "/subscriptions", "比较卡网报价"],
-  ["02", "官方订阅", "官网、App Store 与 Google Play 的地区价、原币价、支付门槛和证据精度。", "/official-prices", "核对官方价格"],
-  ["03", "官方 API", "模型厂商公布的输入、缓存、输出、多模态费用与免费层限制。", "/official-api", "建立官方基准"],
-  ["04", "中转 API", "第三方网关的公开模型价格、近 7 日监测与一次性自带 Key 检测。", "/api-transit", "比较中转服务"],
+  { icon: "package", title: "卡网订阅", text: "第三方渠道里的 AI 会员、账号、邮箱、卡密、CDK、Kiro 等，重点看有货价和交付方式。", href: "/channels" },
+  { icon: "badge", title: "官方订阅", text: "ChatGPT、Claude、Gemini、Grok 等会员的官网正价、地区价、资格价和支付门槛。", href: "/official-prices" },
+  { icon: "database", title: "官方 API", text: "DeepSeek、千问、Kimi、GLM 等国产模型官方 API，包含免费额度、Token Plan 和限制。", href: "/official-api" },
+  { icon: "key", title: "中转 API", text: "面向 GPT、Claude、Gemini、Grok 等模型的第三方中转站，重点看倍率、稳定性和披露信息。", href: "/api-transit" },
 ] as const;
+
+const modelFamilies: Array<{ icon: ModelIconName; label: string }> = [
+  { icon: "openai", label: "ChatGPT" },
+  { icon: "claude", label: "Claude" },
+  { icon: "gemini", label: "Gemini" },
+  { icon: "grok", label: "Grok" },
+  { icon: "deepseek", label: "DeepSeek" },
+  { icon: "qwen", label: "Qwen" },
+  { icon: "kimi", label: "Kimi" },
+  { icon: "zhipu", label: "GLM" },
+];
 
 const faqs = [
-  ["平台会代我购买或收款吗？", "不会。平台只整理公开报价和证据，付款、交付、退款与售后都在原站完成。"],
-  ["为什么同一个产品价格差很多？", "名称相同不代表规格相同。成品号、自己账号充值、共享、短期体验和反代的成本与风险完全不同。"],
-  ["最低价就是最推荐的吗？", "不是。默认排序会优先有效且新鲜的可购买报价，但仍要核对质保、账号归属、接码状态与风险事实。"],
-  ["发现价格或库存不对怎么办？", "每条报价都提供举报入口。提交后会进入运营审核，错误数据可被隔离或下架。"],
+  ["PriceAI 是卖 AI 订阅的吗？", "不是。PriceAI 不卖货、不收款、不参与交易，只聚合购买前可以核验的价格、来源、库存、更新时间和原始链接。"],
+  ["这些渠道靠谱吗？", "渠道只是信息源。你可以在卡网完成交付，也可以联系店主转到闲鱼等第三方平台交易；无论哪种方式，都要回到原平台确认商品描述、售后规则和最终价格。"],
+  ["如何买到适合自己的订阅？", "先确定你要官方账号、自己账号开通、成品号还是团队席位。新手优先看官方订阅和指南，准备走第三方渠道时建议先小额试单，不要只看最低价。"],
+  ["如何尽量避免被骗？", "看店铺是否有联系方式、售后入口、Telegram 群或售后群，群是否活跃；再看商品数量、历史经营痕迹、描述是否清楚，金额较大时优先选择可投诉或可担保的平台。"],
+  ["买到异常商品或疑似被骗怎么办？", "先联系店铺售后；售后无响应时，去对应卡网平台投诉。之后可以回到 PriceAI，在商品右侧点击举报并补充证据，审核通过后会下架异常商品或渠道。"],
 ] as const;
 
-const modeLabels: Record<string, string> = {
-  recharge: "代充",
-  finished_account: "成品账号",
-  redeem_code: "兑换码",
-  team_seat: "团队席位",
-  shared_account: "共享账号",
-  web_mirror: "网页镜像",
-  reverse_proxy: "反代",
-  api_credit: "API 额度",
-  short_term: "短期商品",
-  unknown: "待确认",
-};
-
-function formatPrice(product: PublicProductSummary): string {
-  if (!product.lowestPrice) return "暂无有效报价";
-  const amount = Number(product.lowestPrice);
-  const symbol = product.currency === "CNY" ? "¥" : `${product.currency ?? ""} `;
-  return `${symbol}${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`;
+function LineIcon({ name }: { name: string }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  const glyphs: Record<string, ReactNode> = {
+    shield: <><path d="M20 13c0 5-3.5 7.5-7.7 9C8 20.5 4 18 4 13V6c3 0 6-1.5 8-3 2 1.5 5 3 8 3z" /><path d="m9 12 2 2 4-4" /></>, money: <><circle cx="12" cy="12" r="9" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8M12 18V6" /></>, database: <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14c0 1.7 4 3 9 3M21 5v3M3 12c0 1.7 4 3 9 3M21 12l-3 5h4l-3 5" /></>, package: <><path d="M12 22V12M3.3 7 12 12l8.7-5M4 6l7-4a2 2 0 0 1 2 0l7 4a2 2 0 0 1 1 1.7v3.4M3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0" /><path d="m16 17 2 2 4-4" /></>, badge: <><path d="M3.9 8.6a4 4 0 0 1 4.7-4.7 4 4 0 0 1 6.8 0 4 4 0 0 1 4.7 4.7 4 4 0 0 1 0 6.8 4 4 0 0 1-4.7 4.7 4 4 0 0 1-6.8 0 4 4 0 0 1-4.7-4.7 4 4 0 0 1 0-6.8z" /><path d="m9 12 2 2 4-4" /></>, key: <><path d="M2.6 17.4A2 2 0 0 0 2 18.8V21h4v-1a1 1 0 0 1 1-1h2v-2h2.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></>, clipboard: <><rect x="4" y="4" width="16" height="18" rx="2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="m9 14 2 2 4-4" /></>, question: <><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8l6 6v12a2 2 0 0 1-2 2z" /><path d="M9 10a3 3 0 1 1 4 2.8c-1 .4-1 1.2-1 2M12 18h.01" /></>,
+  };
+  return <svg width="18" height="18" viewBox="0 0 24 24" {...common} aria-hidden="true">{glyphs[name]}</svg>;
 }
 
-function formatPublishedAt(value: Date | null): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Shanghai",
-  }).format(value);
-}
+function Arrow() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>; }
 
-export default async function HomePage() {
-  const [catalog, sponsorships] = await Promise.all([getPublicCatalog(), getActiveSponsorships("home_after_hero")]);
-
-  return (
-    <main>
-      <SiteHeader />
-
-      <section className="hero">
-        <div className="eyebrow">公开来源 · 独立核验 · 不参与交易</div>
-        <h1>先看清怎么买，<br />再比较多少钱。</h1>
-        <p>
-          将零散的 AI 订阅、代充、成品号和卡密整理成可比较的权益产品，
-          同时保留每条报价的来源、库存与新鲜度。
-        </p>
-        <div className="hero-actions">
-          <a className="primary-cta" href="#paths">先选购买路径</a>
-          <Link className="secondary-cta" href="/subscriptions">直接看卡网低价</Link>
-        </div>
-        <form className="search" action="/search">
-          <label className="sr-only" htmlFor="query">搜索 AI 产品或商家</label>
-          <input id="query" name="q" placeholder="搜索 ChatGPT Plus、Claude Max、商家…" />
-          <button type="submit">搜索</button>
-        </form>
-        <nav className="hero-quick-search" aria-label="搜索示例">
-          <span>热门搜索</span>
-          <Link href="/subscriptions?q=ChatGPT+Plus">ChatGPT Plus</Link>
-          <Link href="/subscriptions?q=Claude+Pro">Claude Pro</Link>
-          <Link href="/subscriptions?q=Google+AI+Pro">Gemini Pro</Link>
-          <Link href="/subscriptions?q=SuperGrok">SuperGrok</Link>
-          <Link href="/subscriptions?q=Team">Team</Link>
-        </nav>
-        <div className="status-row">
-          <span><b>{catalog.verifiedOfferCount}</b> 已验证报价</span>
-          <span><b>{catalog.activeSourceCount}</b> 活跃来源</span>
-          <span><b>{formatPublishedAt(catalog.publishedAt)}</b> 最近发布</span>
-        </div>
-      </section>
-
-      {sponsorships.length > 0 && <aside className="sponsorship-strip" aria-label="赞助内容">{sponsorships.map((item) => <a key={item.id} href={item.destination_url} target="_blank" rel="noopener noreferrer sponsored nofollow"><span>{item.label}</span><b>{item.name}</b><small>{item.disclosure}</small></a>)}</aside>}
-
-      <section className="section path-section" id="paths" aria-labelledby="paths-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">购买路径</span>
-            <h2 id="paths-heading">你现在要解决哪一种问题？</h2>
-          </div>
-          <span className="section-note">先选路径，能避开大多数不可比的低价</span>
-        </div>
-        <div className="path-grid">
-          {purchasePaths.map((path, index) => (
-            <article className={index === 0 ? "featured" : undefined} key={path.title}>
-              <span className="path-audience">{path.audience}</span>
-              <h3>{path.title}</h3>
-              <p>{path.description}</p>
-              <div className="path-actions">
-                <Link href={path.primary[1]}>{path.primary[0]}</Link>
-                <Link href={path.secondary[1]}>{path.secondary[0]}</Link>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="section module-section" aria-labelledby="modules-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">四个频道</span>
-            <h2 id="modules-heading">从问题进入对应工具</h2>
-          </div>
-        </div>
-        <div className="module-list">
-          {modules.map(([number, title, description, href, action]) => (
-            <Link href={href} key={number}>
-              <span>{number}</span>
-              <div><h3>{title}</h3><p>{description}</p></div>
-              <b>{action} <span aria-hidden="true">→</span></b>
-            </Link>
-          ))}
-        </div>
-        <div className="brand-rail" aria-label="常见 AI 平台">
-          <span>常见平台</span>
-          <Link href="/brands/openai">ChatGPT</Link>
-          <Link href="/brands/anthropic">Claude</Link>
-          <Link href="/brands/google">Gemini</Link>
-          <Link href="/brands/xai">Grok</Link>
-          <Link href="/official-api">DeepSeek</Link>
-          <Link href="/official-api">Qwen</Link>
-          <Link href="/official-api">Kimi</Link>
-        </div>
-      </section>
-
-      <section className="section" aria-labelledby="products-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">热门权益</span>
-            <h2 id="products-heading">从标准产品开始比较</h2>
-          </div>
-          <span className="section-note">仅统计可购买且通过校验的报价</span>
-        </div>
-        <div className="product-grid">
-          {catalog.products.map((product, index) => (
-            <a className={`product-card ${tones[index] ?? "mint"}`} href={`/products/${product.slug}`} key={product.slug}>
-              <div className="product-meta">
-                <span>{product.platform}</span>
-                <span>{product.offerCount} 条报价</span>
-              </div>
-              <h3>{product.name}</h3>
-              <p className="price-label">最低有效价</p>
-              <strong>{formatPrice(product)}</strong>
-              <div className="card-footer">
-                <span>库存、规格与来源均已核验</span>
-                <span aria-hidden="true">↗</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      <section className="section offers-section" aria-labelledby="offers-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">实时样本</span>
-            <h2 id="offers-heading">最新有效报价</h2>
-          </div>
-          <Link className="section-link" href="/changes">查看价格与库存异动 →</Link>
-        </div>
-        <div className="offer-list">
-          {catalog.offers.length === 0 ? (
-            <div className="empty-state">尚无通过完整性、分类和库存校验的报价。</div>
-          ) : catalog.offers.map((offer) => (
-            <a
-              className="offer-row"
-              href={`/out/${offer.id}`}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-              key={offer.id}
-            >
-              <span className="offer-product">
-                <b>{offer.productName}</b>
-                <small>{offer.merchantName}</small>
-              </span>
-              <span className="offer-tags">
-                <em>{modeLabels[offer.offerMode] ?? offer.offerMode}</em>
-                <em>{offer.stockCount === null ? "库存未知" : `库存 ${offer.stockCount}`}</em>
-                {offer.riskFacts.slice(0, 1).map((risk) => (
-                  <em className="risk" key={risk}>{risk}</em>
-                ))}
-              </span>
-              <strong>¥{Number(offer.price).toFixed(2)}</strong>
-              <span aria-hidden="true">↗</span>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      <section className="section trust-section" aria-labelledby="trust-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">数据承诺</span>
-            <h2 id="trust-heading">每个数字都能回到原始证据</h2>
-          </div>
-        </div>
-        <div className="trust-list">
-          {capabilities.map(([title, description], index) => (
-            <article key={title}>
-              <span className="capability-number">0{index + 1}</span>
-              <div><h3>{title}</h3><p>{description}</p></div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="section faq-section" id="faq" aria-labelledby="faq-heading">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">买前必读</span>
-            <h2 id="faq-heading">先把容易踩坑的地方说清楚</h2>
-          </div>
-          <Link className="section-link" href="/methodology">查看完整数据说明</Link>
-        </div>
-        <div className="faq-list">
-          {faqs.map(([question, answer], index) => (
-            <details key={question} open={index === 0}>
-              <summary>{question}<span aria-hidden="true">＋</span></summary>
-              <p>{answer}</p>
-            </details>
-          ))}
-        </div>
-      </section>
-
-      <footer>
-        <span>AI 价格雷达</span>
-        <p>价格仅供参考，交易在第三方原站完成。平台不代收款、不为商家担保。</p>
-        <nav aria-label="页脚导航"><Link href="/changes">价格异动</Link><Link href="/methodology">数据说明</Link><Link href="/channels">来源目录</Link><Link href="/status">系统健康</Link><Link href="/submit">提交渠道</Link></nav>
-      </footer>
-    </main>
-  );
+export default function HomePage() {
+  return <div className="priceai-page"><SiteHeader /><main className="priceai-home">
+    <BluePriceEngine />
+    <section className="priceai-hero-section"><div className="priceai-container priceai-hero"><p className="priceai-kicker">PriceAI</p><h1><span>AI 低价卡网订阅</span><span>与中转 API 比价雷达</span></h1><p className="priceai-lead">PriceAI 把官方订阅、卡网订阅、官方 API 和中转 API 放在同一个入口里。你先选择购买路径，再进入对应页面比较价格、来源、库存和更新时间。</p><div className="priceai-hero-actions"><a className="priceai-btn primary" href="#paths">先选购买路径 <Arrow /></a><Link className="priceai-btn" href="/channels">直接看有货低价</Link></div></div>
+      <div className="priceai-container priceai-paths" id="paths"><div className="priceai-section-heading compact"><p className="priceai-kicker">购买路径</p><h2>先回答一个问题：你现在要买什么？</h2><p>首页只负责分流。具体价格、库存、来源和购买链接，回到对应工具页完成。</p></div><div className="priceai-path-grid">{paths.map((item) => <article key={item.title}><div className="priceai-card-top"><span className="priceai-icon"><LineIcon name={item.icon} /></span><span className="priceai-pill">{item.label}</span></div><h3>{item.title}</h3><p>{item.text}</p><div className="priceai-card-actions"><Link className="priceai-btn primary" href={item.primary[1]}>{item.primary[0]} <Arrow /></Link><Link className="priceai-btn" href={item.secondary[1]}>{item.secondary[0]}</Link></div></article>)}</div></div></section>
+    <section className="priceai-module-section"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">四个模块</p><h2>选完路径，再进入对应工具。</h2><p>新手按购买问题走，老用户可以直接进入熟悉的模块。</p></div><div className="priceai-module-grid">{modules.map((item) => <Link href={item.href} key={item.title}><div><span className="priceai-icon"><LineIcon name={item.icon} /></span><Arrow /></div><h3>{item.title}</h3><p>{item.text}</p></Link>)}</div><div className="priceai-brand-title">覆盖常见 AI 订阅、模型与开发者入口</div><div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div></div></section>
+    <section className="priceai-boundary-section"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">核验边界</p><h2>PriceAI 提供信息，不替任何渠道背书。</h2><p>我们保留能被回看的事实，最终交易仍然发生在原平台。</p></div><div className="priceai-boundary-grid">{[["来源能不能回看？","保留原始渠道名、商品标题和购买链接，方便你回到原平台核验。"],["库存和时间是否可核验？","重点看有货/缺货状态和最近更新时间，长期未更新的低价不应直接当成可买价。"],["交付和售后谁负责？","PriceAI 不参与交易。付款、交付、售后、退款和账号风险都按原平台规则判断。"]].map(([title,text])=><article key={title}><span className="priceai-icon"><LineIcon name="clipboard" /></span><h3>{title}</h3><p>{text}</p></article>)}</div><div className="priceai-return-card"><span className="priceai-icon"><LineIcon name="question" /></span><div><h3>购买前回到原平台确认</h3><p>付款、交付、售后、退款和账号风险都要按原平台规则判断。</p></div><a className="priceai-btn" href="#faq">看常见问题</a></div></div></section>
+    <section className="priceai-faq-section" id="faq"><div className="priceai-container"><div className="priceai-section-heading"><p className="priceai-kicker">常见问题</p><h2>买之前，先看这几条。</h2><p>首页只保留购买前最容易踩坑的问题。更细的背景说明放到指南里继续维护。</p></div><div className="priceai-faq-list">{faqs.map(([q,a])=><article key={q}><h3>{q}</h3><p>{a}</p></article>)}</div></div></section>
+  </main><SiteFooter /></div>;
 }

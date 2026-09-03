@@ -20,10 +20,17 @@ export interface PublicProductSummary {
   slug: string;
   name: string;
   platform: string;
+  planFamily?: string;
   offerCount: number;
+  totalOfferCount?: number;
+  inStockCount?: number;
+  outOfStockCount?: number;
   lowestPrice: string | null;
   currency: string | null;
   warrantyLowestPrice?: string | null;
+  lowestMerchantName?: string | null;
+  lowestRawTitle?: string | null;
+  latestVerifiedAt?: Date | null;
 }
 
 export interface PublicOfferDetail extends PublicOffer {
@@ -159,10 +166,17 @@ interface ProductSummaryRow {
   slug: string;
   name: string;
   platform: string;
+  plan_family: string;
   offer_count: string;
+  total_offer_count: string;
+  in_stock_count: string;
+  out_of_stock_count: string;
   lowest_price: string | null;
   warranty_lowest_price: string | null;
   currency: string | null;
+  lowest_merchant_name: string | null;
+  lowest_raw_title: string | null;
+  latest_verified_at: Date | null;
 }
 
 interface ProductRow {
@@ -460,13 +474,21 @@ export async function getProductSummaries(brand?: string): Promise<PublicProduct
   const values: unknown[] = [publication?.generation_id ?? null];
   const brandCondition = brand ? `and lower(cp.brand)=lower($${values.push(brand)})` : "";
   const rows = await query<ProductSummaryRow>(
-    `select cp.slug,cp.display_name name,cp.brand platform,
+    `select cp.slug,cp.display_name name,cp.brand platform,cp.plan_family,
             count(o.id) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours')::text offer_count,
+            count(o.id)::text total_offer_count,
+            count(o.id) filter (where o.stock_state in ('in_stock','low_stock'))::text in_stock_count,
+            count(o.id) filter (where o.stock_state='out_of_stock' or o.availability_state='unavailable')::text out_of_stock_count,
             min(o.price) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours') lowest_price,
             min(o.price) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours' and oa.warranty_type not in ('none','unknown')) warranty_lowest_price,
-            min(o.currency) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours') currency
+            min(o.currency) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours') currency,
+            (array_agg(m.name order by o.price asc nulls last) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours'))[1] lowest_merchant_name,
+            (array_agg(ros.raw_title order by o.price asc nulls last) filter (where o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours'))[1] lowest_raw_title,
+            max(o.offer_verified_at) latest_verified_at
        from canonical_products cp
        left join offers o on o.canonical_product_id=cp.id and o.publish_generation_id=$1
+       left join sources s on s.id=o.source_id
+       left join merchants m on m.id=s.merchant_id
        left join raw_offer_snapshots ros on ros.id=o.latest_raw_snapshot_id
        left join offer_matches om on om.raw_offer_snapshot_id=ros.id
        left join offer_attributes oa on oa.offer_match_id=om.id
@@ -478,10 +500,17 @@ export async function getProductSummaries(brand?: string): Promise<PublicProduct
     slug: row.slug,
     name: row.name,
     platform: row.platform,
+    planFamily: row.plan_family,
     offerCount: Number(row.offer_count),
+    totalOfferCount: Number(row.total_offer_count),
+    inStockCount: Number(row.in_stock_count),
+    outOfStockCount: Number(row.out_of_stock_count),
     lowestPrice: row.lowest_price,
     warrantyLowestPrice: row.warranty_lowest_price,
     currency: row.currency,
+    lowestMerchantName: row.lowest_merchant_name,
+    lowestRawTitle: row.lowest_raw_title,
+    latestVerifiedAt: row.latest_verified_at,
   }));
 }
 

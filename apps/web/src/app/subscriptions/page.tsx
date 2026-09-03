@@ -1,189 +1,68 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { getProductSummaries, getPublicCatalog, type PublicProductSummary } from "@/lib/public-catalog";
+import { getProductSummaries, type PublicProductSummary } from "@/lib/public-catalog";
 import { SiteHeader } from "../site-header";
+import { SiteFooter } from "../site-footer";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "卡网订阅比价 | AI 价格雷达",
-  description: "按标准商品比较 AI 订阅、成品号、充值和卡密的有效报价、库存与质保。",
+  title: "卡网订阅比价 | PriceAI",
+  description: "PriceAI 聚合 AI 订阅卡网渠道报价，比较标准商品、最低价、库存、质保与渠道更新时间。",
 };
 
-function first(value: string | string[] | undefined): string {
-  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
-}
+function first(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
 
 function formatPrice(product: PublicProductSummary, price: string | null | undefined): string {
-  if (!price) return "暂无";
+  if (!price) return "暂无价格";
   const amount = Number(price);
-  const symbol = product.currency === "CNY" ? "¥" : `${product.currency ?? ""} `;
-  return `${symbol}${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`;
+  return `${product.currency === "CNY" ? "¥" : `${product.currency ?? ""} `}${amount.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
 }
 
-function formatPublishedAt(value: Date | null): string {
-  if (!value) return "尚未发布";
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "numeric",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Shanghai",
-  }).format(value);
+function relative(value: Date | null | undefined): string {
+  if (!value) return "未记录";
+  const minutes = Math.max(1, Math.round((Date.now() - value.getTime()) / 60000));
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours}小时前` : `${Math.round(hours / 24)}天前`;
 }
 
-const platformLabels: Record<string, string> = {
-  OpenAI: "ChatGPT",
-  Anthropic: "Claude",
-  Google: "Gemini",
-  xAI: "Grok",
-};
+const platformLabels: Record<string, string> = { OpenAI: "ChatGPT", Anthropic: "Claude", Google: "Gemini", xAI: "Grok" };
+const familyLabels: Record<string, string> = { subscription: "订阅/会员", account: "成品账号", api: "API/额度", email: "邮箱/账号", phone: "接码/验证", tool: "工具账号" };
 
-export default async function SubscriptionsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function SubscriptionsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const raw = await searchParams;
   const q = first(raw.q).trim();
   const platform = first(raw.platform).trim();
-  const minPrice = Number(first(raw.minPrice));
-  const maxPrice = Number(first(raw.maxPrice));
-  const hasMinPrice = Number.isFinite(minPrice) && minPrice >= 0 && first(raw.minPrice) !== "";
-  const hasMaxPrice = Number.isFinite(maxPrice) && maxPrice >= 0 && first(raw.maxPrice) !== "";
   const sort = first(raw.sort) || "recommended";
-  const [allProducts, catalog] = await Promise.all([getProductSummaries(), getPublicCatalog()]);
-  const platforms = [...new Set(allProducts.map((product) => product.platform))];
+  const allProducts = await getProductSummaries();
   const query = q.toLocaleLowerCase("zh-CN");
-  const products = allProducts.filter((product) => {
-    const matchesPlatform = !platform || product.platform.toLocaleLowerCase("zh-CN") === platform.toLocaleLowerCase("zh-CN");
-    const matchesQuery = !query || `${product.name} ${product.platform}`.toLocaleLowerCase("zh-CN").includes(query);
-    const price = product.lowestPrice === null ? null : Number(product.lowestPrice);
-    const matchesMin = !hasMinPrice || (price !== null && price >= minPrice);
-    const matchesMax = !hasMaxPrice || (price !== null && price <= maxPrice);
-    return matchesPlatform && matchesQuery && matchesMin && matchesMax;
-  });
-  products.sort((a, b) => {
-    if (sort === "price") return (a.lowestPrice === null ? Number.POSITIVE_INFINITY : Number(a.lowestPrice)) - (b.lowestPrice === null ? Number.POSITIVE_INFINITY : Number(b.lowestPrice));
-    if (sort === "warranty") return (a.warrantyLowestPrice == null ? Number.POSITIVE_INFINITY : Number(a.warrantyLowestPrice)) - (b.warrantyLowestPrice == null ? Number.POSITIVE_INFINITY : Number(b.warrantyLowestPrice));
-    if (sort === "offers") return b.offerCount - a.offerCount;
-    return Number(b.offerCount > 0) - Number(a.offerCount > 0) || b.offerCount - a.offerCount;
-  });
-  const offerCount = allProducts.reduce((sum, product) => sum + product.offerCount, 0);
-  const pricedProductCount = allProducts.filter((product) => product.lowestPrice).length;
+  const products = allProducts.filter((product) => (!platform || product.platform.toLowerCase() === platform.toLowerCase()) && (!query || `${product.name} ${product.platform} ${product.planFamily ?? ""}`.toLocaleLowerCase("zh-CN").includes(query)));
+  products.sort((a, b) => sort === "price" ? (Number(a.lowestPrice) || Infinity) - (Number(b.lowestPrice) || Infinity) : sort === "offers" ? (b.totalOfferCount ?? b.offerCount) - (a.totalOfferCount ?? a.offerCount) : b.offerCount - a.offerCount);
+  const totalOffers = allProducts.reduce((sum, product) => sum + (product.totalOfferCount ?? product.offerCount), 0);
+  const inStock = allProducts.reduce((sum, product) => sum + (product.inStockCount ?? 0), 0);
+  const outOfStock = allProducts.reduce((sum, product) => sum + (product.outOfStockCount ?? 0), 0);
+  const lastUpdated = allProducts.reduce<Date | null>((latest, product) => !product.latestVerifiedAt ? latest : !latest || product.latestVerifiedAt > latest ? product.latestVerifiedAt : latest, null);
 
-  const filterHref = (nextPlatform: string) => {
+  const filterHref = (nextPlatform: string, nextQuery = q) => {
     const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (hasMinPrice) params.set("minPrice", String(minPrice));
-    if (hasMaxPrice) params.set("maxPrice", String(maxPrice));
-    if (sort !== "recommended") params.set("sort", sort);
+    if (nextQuery) params.set("q", nextQuery);
     if (nextPlatform) params.set("platform", nextPlatform);
-    const suffix = params.toString();
-    return suffix ? `/subscriptions?${suffix}` : "/subscriptions";
+    if (sort !== "recommended") params.set("sort", sort);
+    return params.size ? `/channels?${params}` : "/channels";
   };
 
-  return (
-    <main>
-      <SiteHeader active="subscriptions" />
-      <div className="platform-rail" aria-label="按平台筛选">
-        <Link className={!platform ? "active" : undefined} href={filterHref("")}>全部</Link>
-        {platforms.map((item) => (
-          <Link
-            className={platform.toLocaleLowerCase("zh-CN") === item.toLocaleLowerCase("zh-CN") ? "active" : undefined}
-            href={filterHref(item)}
-            key={item}
-          >
-            {platformLabels[item] ?? item}
-          </Link>
-        ))}
-      </div>
+  const categories = [["全部", ""], ["ChatGPT", "OpenAI"], ["Claude", "Anthropic"], ["Gemini", "Google"], ["Grok", "xAI"]] as const;
 
-      <section className="listing-shell subscription-shell">
-        <div className="channel-title-row">
-          <div>
-            <span className="section-kicker">Card shop subscriptions</span>
-            <h1>卡网订阅比价</h1>
-            <p className="listing-lead">先按标准商品聚合，再进入详情比较交付方式、库存、质保、风险事实和原始渠道。</p>
-          </div>
-          <dl className="channel-stats" aria-label="卡网订阅数据概况">
-            <div><dt>标准商品</dt><dd>{allProducts.length}</dd></div>
-            <div><dt>有效报价</dt><dd>{offerCount}</dd></div>
-            <div><dt>当前有价</dt><dd>{pricedProductCount}</dd></div>
-            <div><dt>活跃来源</dt><dd>{catalog.activeSourceCount}</dd></div>
-          </dl>
-        </div>
-
-        <aside className="guide-strip" aria-label="购买前提示">
-          <div><span>买前提示</span><b>最低价不一定是同一种商品</b></div>
-          <p>成品号、自己账号充值、共享与反代必须分开比较，进入详情后再按需求筛选。</p>
-          <Link href="/methodology">查看比价口径</Link>
-        </aside>
-
-        <div className="catalog-toolbar">
-          <form className="catalog-filter-form" action="/subscriptions">
-            <label className="sr-only" htmlFor="subscription-query">搜索标准商品或平台</label>
-            <input id="subscription-query" name="q" defaultValue={q} placeholder="搜索 ChatGPT Plus、Claude、Gemini…" />
-            {platform && <input type="hidden" name="platform" value={platform} />}
-            <label><span>最低价</span><input name="minPrice" type="number" min="0" step="0.01" defaultValue={hasMinPrice ? minPrice : undefined} placeholder="不限" /></label>
-            <label><span>最高价</span><input name="maxPrice" type="number" min="0" step="0.01" defaultValue={hasMaxPrice ? maxPrice : undefined} placeholder="不限" /></label>
-            <label><span>排序</span><select name="sort" defaultValue={sort}><option value="recommended">推荐</option><option value="price">价格最低</option><option value="warranty">有质保最低</option><option value="offers">报价最多</option></select></label>
-            <button type="submit">应用</button>
-          </form>
-          <nav className="view-switch" aria-label="订阅频道视图">
-            <Link className="active" href="/subscriptions">标准商品</Link>
-            <Link href="/channels">卡网商家</Link>
-            <Link href="/submit">申请收录</Link>
-          </nav>
-        </div>
-
-        <nav className="quick-filters" aria-label="常搜订阅">
-          <span>试试：</span>
-          <Link href="/subscriptions?q=ChatGPT+Plus">ChatGPT Plus</Link>
-          <Link href="/subscriptions?q=Claude+Pro">Claude Pro</Link>
-          <Link href="/subscriptions?q=Google+AI+Pro">Gemini Pro</Link>
-          <Link href="/subscriptions?q=SuperGrok">SuperGrok</Link>
-          <Link href="/subscriptions?q=Team">Team</Link>
-        </nav>
-
-        <div className="catalog-status">
-          <span>{products.length} 个匹配商品</span>
-          <span>最近发布 {formatPublishedAt(catalog.publishedAt)}</span>
-          {(q || platform || hasMinPrice || hasMaxPrice || sort !== "recommended") ? <Link href="/subscriptions">清空全部条件</Link> : <span>默认只把有效、可购买报价计入最低价</span>}
-        </div>
-
-        {products.length ? (
-          <div className="subscription-table-wrap">
-            <table className="subscription-table">
-              <thead>
-                <tr>
-                  <th>标准商品</th>
-                  <th>平台</th>
-                  <th>最低有效价</th>
-                  <th>有质保最低</th>
-                  <th>报价</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.slug}>
-                    <td data-label="标准商品"><Link href={`/products/${product.slug}`}><b>{product.name}</b><small>同规格报价聚合</small></Link></td>
-                    <td data-label="平台"><span className="platform-pill">{platformLabels[product.platform] ?? product.platform}</span></td>
-                    <td data-label="最低有效价"><strong>{formatPrice(product, product.lowestPrice)}</strong><small>{product.lowestPrice ? "可购买" : "等待有效报价"}</small></td>
-                    <td data-label="有质保最低"><strong>{formatPrice(product, product.warrantyLowestPrice)}</strong></td>
-                    <td data-label="报价"><b>{product.offerCount}</b><small>条有效报价</small></td>
-                    <td data-label="操作"><Link className="row-action" href={`/products/${product.slug}`}>查看报价</Link></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">没有匹配的标准商品，请尝试其他关键词或平台。</div>
-        )}
-      </section>
-    </main>
-  );
+  return <div className="priceai-page priceai-catalog-page"><SiteHeader active="channels" />
+    <nav className="priceai-category-rail" aria-label="按平台筛选">{categories.map(([label,value]) => <Link className={platform === value && !q ? "active" : undefined} href={filterHref(value, "")} key={label}>{label}</Link>)}<Link className={q === "邮箱" ? "active" : undefined} href={filterHref("", "邮箱")}>✉ 邮箱</Link><Link className={q === "接码" ? "active" : undefined} href={filterHref("", "接码")}>◌ 接码</Link><Link className={q === "其他" ? "active" : undefined} href={filterHref("", "其他")}>▱ 其他</Link></nav>
+    <main className="priceai-catalog-shell">
+      <section className="priceai-catalog-hero"><div><h1>卡网订阅比价</h1><p className="priceai-catalog-meta">最近更新：{relative(lastUpdated)}　·　{allProducts.length} 个商品　·　主价格优先取有货最低价，缺货会明显标注</p><p className="priceai-catalog-intro">PriceAI 聚合 AI 订阅卡网渠道报价。本站不卖货、不担保，价格仅供参考，实际交易和售后规则以原平台为准。</p></div><dl><div><dt>标准商品</dt><dd>{allProducts.length}</dd></div><div><dt>报价</dt><dd>{totalOffers}</dd></div><div><dt>有货</dt><dd>{inStock}</dd></div><div><dt>缺货</dt><dd>{outOfStock}</dd></div></dl></section>
+      <aside className="priceai-guide-strip" aria-label="买前指南"><span>▣ 买前指南</span><Link href="/guides/are-ai-subscription-card-shops-reliable">卡网渠道靠谱吗？</Link><b>·</b><Link href="/guides/why-ai-subscription-prices-differ">价格为什么差很多？</Link><b>·</b><Link href="/guides/chatgpt-subscription-options">ChatGPT 获取方式</Link><b>·</b><small>下单前先核验原店铺的交付、售后和投诉入口。</small><Link className="priceai-guide-button" href="/guides">入门指南 →</Link></aside>
+      <div className="priceai-catalog-toolbar"><form action="/channels"><label className="sr-only" htmlFor="catalog-query">搜索标准商品</label><input id="catalog-query" name="q" defaultValue={q} placeholder="搜索标准商品，如 ChatGPT Plus、Gemini Pro、邮箱" /><button type="submit">⌕　筛选</button>{platform && <input type="hidden" name="platform" value={platform} />}</form><nav aria-label="订阅频道视图"><Link className="active" href="/channels">◈ 标准商品</Link><Link href="/channels?view=offers">▤ 全部报价</Link><Link href="/channels?view=merchants">▱ 卡网商家</Link><Link className="apply" href="/submit">▱ 申请收录</Link></nav></div>
+      <div className="priceai-catalog-status"><span>{products.length} 个匹配商品</span><label>排序 <select defaultValue={sort} name="sort"><option value="recommended">推荐</option><option value="price">价格最低</option><option value="offers">报价最多</option></select></label>{(q || platform || sort !== "recommended") && <Link href="/channels">清空全部条件</Link>}</div>
+      {products.length ? <div className="priceai-data-table-wrap"><table className="priceai-data-table"><thead><tr><th>标准商品</th><th>平台</th><th>类型</th><th>最低价</th><th>质保最低价</th><th>库存</th><th>渠道</th><th>最低渠道</th><th>最近更新</th><th>操作</th></tr></thead><tbody>{products.map(product => <tr key={product.slug}><td><Link href={`/products/${product.slug}`}><b>{product.name}</b><small>{product.planFamily ?? "标准商品"}</small></Link></td><td>{platformLabels[product.platform] ?? product.platform}</td><td>{familyLabels[product.planFamily ?? ""] ?? product.planFamily ?? "其他"}</td><td><Link href={`/products/${product.slug}`}><strong>{formatPrice(product, product.lowestPrice)}</strong><em className={product.lowestPrice ? "stock" : "sold"}>{product.lowestPrice ? "有货" : "缺货"}</em></Link></td><td><Link href={`/products/${product.slug}`}><strong>{product.warrantyLowestPrice ? formatPrice(product, product.warrantyLowestPrice) : "–"}</strong>{product.warrantyLowestPrice && <em className="warranty">质保</em>}</Link></td><td><span className="stock-count">有货 {product.inStockCount ?? 0}</span><span className="sold-count">缺货 {product.outOfStockCount ?? 0}</span></td><td>{product.totalOfferCount ?? product.offerCount}</td><td><b>{product.lowestMerchantName ?? "未记录"}</b><small>{product.lowestRawTitle ?? "暂无原始商品名"}</small></td><td>{relative(product.latestVerifiedAt)}</td><td><Link className="priceai-row-button" href={`/products/${product.slug}`}>查看　›</Link></td></tr>)}</tbody></table></div> : <div className="empty-state">没有匹配的标准商品，请尝试其他关键词或平台。</div>}
+      <p className="priceai-catalog-disclaimer">价格仅供参考，实际价格、库存和售后规则以原平台为准。本工具不构成购买建议。</p>
+    </main><SiteFooter />
+  </div>;
 }
