@@ -1042,7 +1042,7 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
 .priceai-section-heading h2 { margin: 8px 0 0; color: var(--color-text-primary); font: 600 36px/40px "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: 0; }
 .priceai-section-heading.compact h2 { font-size: 30px; line-height: 36px; }
 .priceai-section-heading > p:last-child { margin: 13px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 22px; }
-.priceai-delivery-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; align-items: stretch; }
+.priceai-delivery-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: stretch; }
 .priceai-delivery-grid article { display: flex; flex-direction: column; padding: 20px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
 .priceai-card-top { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .priceai-icon { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
@@ -1171,7 +1171,6 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
   .priceai-header-actions { grid-column: 2; grid-row: 1; }
   .priceai-social { display: none !important; }
   .priceai-delivery-section { padding: 54px 0; }
-  .priceai-delivery-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 760px) {

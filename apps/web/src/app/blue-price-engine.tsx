@@ -92,7 +92,7 @@ export function PriceBaselineHero() {
         <p>我们替你把散在各家卡网和官网的报价收在一处。想省钱，一眼看出官方价和渠道最低价差多少、这个价现在还买不买得到；还没想好该买订阅、API 还是共享账号，先看清它们的区别和代价，别花钱买错。</p>
         {/* 两个出口都是页内跳转，各自对应下方一节，标签与该节标题一一对应。 */}
         <div className="blue-engine-hero-actions">
-          <a className="blue-engine-cta primary" href="#delivery">五种供货方式 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta primary" href="#delivery">四种供货方式 <span aria-hidden="true">↓</span></a>
           <a className="blue-engine-cta" href="#baseline">价格对照表 <span aria-hidden="true">↓</span></a>
         </div>
       </div>
