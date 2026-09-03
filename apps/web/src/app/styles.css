@@ -625,8 +625,10 @@ footer nav a { padding: 7px 9px; font-size: 12px; }
 
 /* PriceAI reference visual system ------------------------------------------------ */
 :root {
-  --color-page: oklch(97.8% 0.006 255);
-  --color-page-translucent: oklch(97.8% 0.006 255 / 94%);
+  --color-page: #f5f7fb;
+  --color-page-translucent: #f5f7fbf0;
+  --blue-gradient-start: #e9effc;
+  --blue-gradient-end: #f5f7fb;
   --color-panel: oklch(99.2% 0.003 255);
   --color-panel-soft: oklch(98.6% 0.004 255);
   --color-surface: oklch(96% 0.008 255);
@@ -703,6 +705,7 @@ html[data-theme="dark"] .blue-engine {
   background: oklch(18% 0.025 257);
 }
 html[data-theme="dark"] .blue-engine-hero { background: linear-gradient(180deg, oklch(23% 0.035 257) 0%, oklch(18% 0.025 257) 100%); }
+html[data-brand-theme="blue"]:not([data-theme="dark"]) .priceai-header { background: rgba(233, 239, 252, .94); }
 html[data-theme="dark"] .blue-engine-search,
 html[data-theme="dark"] .blue-engine-hot a,
 html[data-theme="dark"] .blue-engine-toolbar nav a.active,
@@ -835,11 +838,11 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
   --blue-line: oklch(89.8% 0.012 255);
   --blue-brand: oklch(52% 0.11 257);
   --blue-green: #137a52;
-  background: oklch(97.8% 0.006 255);
+  background: var(--blue-gradient-end);
   color: var(--blue-ink);
   font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
 }
-.blue-engine-hero { position: relative; overflow: hidden; padding: 76px 32px 72px; background: var(--color-page); }
+.blue-engine-hero { position: relative; overflow: hidden; padding: 76px 32px 72px; background: linear-gradient(180deg, var(--blue-gradient-start) 0%, var(--blue-gradient-end) 100%); }
 .blue-engine-hero::before,
 .blue-engine-hero::after { display: none; content: ""; position: absolute; border-radius: 999px; pointer-events: none; }
 .blue-engine-hero::before { width: 470px; height: 470px; left: -220px; top: -300px; background: oklch(70% 0.08 257 / 7%); }
