@@ -77,13 +77,14 @@ export function ResendCubeLogo() {
       const spacing = 1.27;
       const coordinates = [-0.5, 0.5] as const;
       const iconFacesByCubelet: Record<number, Array<[face: number, icon: number]>> = {
-        0: [[2, 6]],
-        1: [[0, 4], [2, 7]],
-        3: [[0, 5]],
+        0: [[1, 12], [5, 8]],
+        1: [[0, 4], [5, 9]],
+        2: [[1, 13], [5, 10]],
+        3: [[0, 5], [5, 11]],
         4: [[4, 0]],
-        5: [[4, 1]],
-        6: [[4, 2]],
-        7: [[4, 3]],
+        5: [[0, 6], [4, 1]],
+        6: [[1, 14], [4, 2]],
+        7: [[0, 7], [1, 15], [4, 3]],
       };
       let cubeletIndex = 0;
 
