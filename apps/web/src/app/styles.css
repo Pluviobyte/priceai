@@ -1166,6 +1166,11 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 .priceai-row-button { min-height: 38px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 999px; color: var(--color-text-on-primary); background: var(--color-primary); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .priceai-catalog-disclaimer { margin: 74px 0 0; color: var(--color-text-muted); text-align: center; font-size: 11px; }
 
+@media (min-width: 1000px) {
+  .priceai-delivery-section .priceai-section-heading { max-width: 1152px; }
+  .priceai-delivery-section .priceai-section-heading h2 { white-space: nowrap; }
+}
+
 @media (max-width: 1050px) {
   .priceai-catalog-hero { grid-template-columns: 1fr; }
   .priceai-catalog-hero dl { flex-wrap: wrap; }
