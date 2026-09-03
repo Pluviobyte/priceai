@@ -42,7 +42,7 @@ const deliveryFamilies = [
     cta: "去卡网订阅找成品号",
   },
   {
-    icon: "key",
+    icon: "users",
     title: "共享 · 镜像 · 反代",
     ownership: "账号不归你，你买的是使用权",
     band: "约为官方价的 1–4 折",
@@ -101,6 +101,7 @@ function LineIcon({ name }: { name: string }) {
     package: <><path d="M12 22V12M3.3 7 12 12l8.7-5M4 6l7-4a2 2 0 0 1 2 0l7 4a2 2 0 0 1 1 1.7v3.4M3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0" /><path d="m16 17 2 2 4-4" /></>,
     badge: <><path d="M3.9 8.6a4 4 0 0 1 4.7-4.7 4 4 0 0 1 6.8 0 4 4 0 0 1 4.7 4.7 4 4 0 0 1 0 6.8 4 4 0 0 1-4.7 4.7 4 4 0 0 1-6.8 0 4 4 0 0 1-4.7-4.7 4 4 0 0 1 0-6.8z" /><path d="m9 12 2 2 4-4" /></>,
     key: <><path d="M2.6 17.4A2 2 0 0 0 2 18.8V21h4v-1a1 1 0 0 1 1-1h2v-2h2.2a2 2 0 0 0 1.4-.6l.8-.8a6.5 6.5 0 1 0-4-4z" /><circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
   };
   return <svg width="18" height="18" viewBox="0 0 24 24" {...common} aria-hidden="true">{glyphs[name]}</svg>;
 }
