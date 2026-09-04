@@ -106,6 +106,13 @@
       "when": 1788503574807,
       "tag": "0014_abandoned_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788506568074,
+      "tag": "0015_plain_lenny_balinger",
+      "breakpoints": true
     }
   ]
 }

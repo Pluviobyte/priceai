@@ -1138,7 +1138,7 @@ export const siteAnnouncements = pgTable(
 export const siteAnnouncementSettings = pgTable("site_announcement_settings", {
   key: text("key").primaryKey().default("global"),
   rotationEnabled: boolean("rotation_enabled").notNull().default(true),
-  rotationIntervalSeconds: integer("rotation_interval_seconds").notNull().default(6),
+  rotationIntervalSeconds: integer("rotation_interval_seconds").notNull().default(4),
   updatedAt,
 });
 

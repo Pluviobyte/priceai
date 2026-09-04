@@ -238,5 +238,5 @@ export default async function HomePage() {
         <div className="priceai-faq-list">{faqs.map(([q, a]) => <article key={q}><h3>{q}</h3><p>{a}</p></article>)}</div>
       </div>
     </section>
-  </main><SiteFooter /></div>;
+  </main><SiteFooter showSponsors /></div>;
 }

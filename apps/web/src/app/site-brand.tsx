@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { IceCubeLogo } from "./cube-logo";
 import { ResendCubeLogo } from "./resend-cube-logo";
 
 /**
@@ -7,6 +8,8 @@ import { ResendCubeLogo } from "./resend-cube-logo";
  */
 export const SITE_NAME = "AI 价格雷达";
 export const SITE_TAGLINE = "价格情报与渠道核验";
+// Temporary rollout: set NEXT_PUBLIC_HEADER_LOGO_VARIANT=classic for an immediate rollback.
+const HEADER_LOGO_VARIANT = process.env.NEXT_PUBLIC_HEADER_LOGO_VARIANT === "classic" ? "classic" : "ice";
 
 /**
  * 品牌标记：一个雷达象限。原点在左下角，两道扫描弧线向右上展开，
@@ -28,7 +31,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
 export function BrandLockup({ tagline = true }: { tagline?: boolean }) {
   return (
     <Link className="site-brand" href="/" aria-label={`${SITE_NAME} 首页`}>
-      <ResendCubeLogo />
+      {HEADER_LOGO_VARIANT === "ice" ? <IceCubeLogo size={48} /> : <ResendCubeLogo />}
       <span className="site-brand-name">{SITE_NAME}</span>
       {tagline && <span className="site-brand-tagline">{SITE_TAGLINE}</span>}
     </Link>

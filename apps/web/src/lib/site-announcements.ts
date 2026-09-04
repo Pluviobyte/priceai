@@ -38,5 +38,5 @@ export const DEFAULT_ANNOUNCEMENT_CONFIG: SiteAnnouncementConfig = {
     },
   ],
   rotationEnabled: true,
-  rotationIntervalMs: 6_000,
+  rotationIntervalMs: 4_000,
 };

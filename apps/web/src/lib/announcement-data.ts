@@ -45,7 +45,7 @@ export async function getPublicAnnouncementConfig(): Promise<SiteAnnouncementCon
         kind: (["community", "service", "update"].includes(row.kind) ? row.kind : "update") as AnnouncementKind,
       })),
       rotationEnabled: settings[0]?.rotation_enabled ?? true,
-      rotationIntervalMs: Math.min(15, Math.max(4, settings[0]?.rotation_interval_seconds ?? 6)) * 1_000,
+      rotationIntervalMs: Math.min(15, Math.max(4, settings[0]?.rotation_interval_seconds ?? 4)) * 1_000,
     };
   } catch {
     // 数据库尚未迁移或暂时不可用时，首屏仍展示内置公告。

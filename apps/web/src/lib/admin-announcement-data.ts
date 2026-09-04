@@ -60,7 +60,7 @@ export async function getAdminAnnouncementSettings(): Promise<AdminAnnouncementS
   );
   return {
     rotationEnabled: rows[0]?.rotation_enabled ?? true,
-    rotationIntervalSeconds: rows[0]?.rotation_interval_seconds ?? 6,
+    rotationIntervalSeconds: rows[0]?.rotation_interval_seconds ?? 4,
   };
 }
 
