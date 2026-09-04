@@ -15,3 +15,4 @@ test-results/
 drizzle/meta/_journal.json.tmp
 .vercel
 .env*
+apps/web/src/app/dev-cube-studio/
