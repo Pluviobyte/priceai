@@ -1066,13 +1066,13 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 .priceai-delivery-note { max-width: 720px; margin: 28px auto 0; text-align: center; color: var(--color-text-muted); font-size: 13px; line-height: 24px; }
 
 .priceai-module-section { min-height: 633px; padding: 64px 0 62px; background: var(--color-panel); }
-.priceai-module-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.priceai-module-grid > a { min-height: 154px; display: flex; flex-direction: column; justify-content: space-between; padding: 20px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
-.priceai-module-grid > a:hover { background: var(--color-surface-hover); }
-.priceai-module-grid > a > div { display: flex; justify-content: space-between; align-items: center; color: var(--color-text-soft); }
-.priceai-module-grid h3 { margin: 4px 0 0; color: var(--color-text-primary); font-size: 18px; font-weight: 700; }
-.priceai-module-grid p { margin: 7px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 22px; }
-.priceai-module-grid .priceai-module-need { margin-top: 21px; color: var(--color-text-primary); font-size: 13px; font-weight: 600; }
+.priceai-module-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; }
+.priceai-module-grid > article, .priceai-path-card { min-height: 320px; display: flex; flex-direction: column; padding: 24px; border-radius: 8px; background: var(--color-surface); box-shadow: 0 0 0 1px var(--color-border-soft); }
+.priceai-module-top, .priceai-path-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--color-text-soft); }
+.priceai-module-grid h3 { margin: 18px 0 0; color: var(--color-text-primary); font-size: 19px; line-height: 28px; font-weight: 700; }
+.priceai-module-grid article > p { margin: 12px 0 24px; color: var(--color-text-muted); font-size: 14px; line-height: 24px; flex: 1 1 auto; }
+.priceai-module-actions, .priceai-path-actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.priceai-module-actions .priceai-btn, .priceai-path-actions .priceai-btn { width: 100%; min-height: 42px; text-align: center; }
 .priceai-brand-title { margin-top: 39px; text-align: center; color: var(--color-text-muted); font-size: 13px; }
 .priceai-brand-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 12px; margin-top: 19px; }
 .priceai-brand-grid > div { height: 78px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); color: var(--color-text-primary); font-size: 12px; }

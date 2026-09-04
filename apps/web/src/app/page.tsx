@@ -60,12 +60,38 @@ const deliveryFamilies = [
   },
 ] as const;
 
-/** 频道入口。按「你要买的东西」组织，不按用户身份组织。 */
-const channels = [
-  { icon: "package", need: "我要一个能自己登录的会员账号", title: "卡网订阅", text: "第三方渠道的会员、成品号、兑换码和席位。看有货价、交付方式和最后确认时间。", href: "/channels" },
-  { icon: "badge", need: "我想先知道官网到底收多少钱", title: "官方订阅", text: "厂商公开页面的正价、地区价和资格价，标明币种、汇率日期和证据链接。", href: "/official-prices" },
-  { icon: "database", need: "我要按用量付费的模型接口", title: "官方 API", text: "各厂商官方 API 的计费单价、免费额度和速率限制，按模型逐条对照。", href: "/official-api" },
-  { icon: "key", need: "我想用更便宜的第三方接口", title: "中转 API", text: "第三方中转站的倍率、近期成功率、延迟和样本量，以及它们披露了多少信息。", href: "/api-transit" },
+/** 购买路径分流卡片，直接对齐原版文案 */
+const decisionPaths = [
+  {
+    icon: "shield",
+    badge: "订阅新手",
+    title: "我只是想买一个 AI 订阅",
+    text: "先看官方价、地区价和支付门槛；如果需要现货、更低价或代开通，再去看卡网订阅。",
+    primaryHref: "/official-prices",
+    primaryCta: "先看官方订阅",
+    secondaryHref: "/channels",
+    secondaryCta: "再看卡网订阅",
+  },
+  {
+    icon: "badge",
+    badge: "资深买家",
+    title: "我想找更低价或更灵活的方案",
+    text: "先看卡网订阅里的低价现货、渠道和更新时间；如果要接 GPT、Claude、Gemini、Grok 等模型，再看中转 API。",
+    primaryHref: "/channels",
+    primaryCta: "看卡网订阅",
+    secondaryHref: "/api-transit",
+    secondaryCta: "看中转 API",
+  },
+  {
+    icon: "database",
+    badge: "开发接入",
+    title: "我想接 API 做产品或工具",
+    text: "先看 DeepSeek、千问、Kimi、GLM 等官方 API 的免费额度、Token Plan 和限制；再对比中转 API。",
+    primaryHref: "/official-api",
+    primaryCta: "比较官方 API",
+    secondaryHref: "/api-transit",
+    secondaryCta: "查看中转 API",
+  },
 ] as const;
 
 const modelFamilies: Array<{ icon: ModelIconName; label: string }> = [
@@ -80,25 +106,25 @@ const modelFamilies: Array<{ icon: ModelIconName; label: string }> = [
 ];
 
 const weDo = [
-  "记录每条报价的原始标题、原始价格文本、来源渠道和确认时间。",
-  "官方价单独取自厂商公开页面，只有精确价参与对照，区间价不参与最低价。",
-  "标注库存状态和最后一次确认时间，长期未更新的报价不当作可买价。",
-  "保留纠错和举报入口，证据成立后下架异常报价或整个渠道。",
+  "完整留存全网抓取的原始标题、原币种价格、供货店铺与验证时间戳，确保数据全程可追溯。",
+  "官方基准价一律实时采自厂商公开定价页，仅采纳精准单价参与换算，模糊区间价绝不计入行情。",
+  "严谨标记实时库存与巡检时效，对脱销断货或长期未验证的历史陈旧报价，一律剔除出在售底价。",
+  "常设开放纠错与用户举报通道，证据属实的虚假低价即刻下架，多次产生售后劣迹的渠道全站拉黑。",
 ];
 
 const weDont = [
-  "不销售、不代收款、不参与任何环节的交付。",
-  "不给渠道做信用背书；采集连通性良好不等于商家可靠。",
-  "不把不同交付方式混在一起凑出更好看的最低价。",
-  "不隐藏风险事实，让某条报价显得比实际更划算。",
+  "绝不自营商品、不经手任何代收代付，不介入买卖双方在原平台的实际交易与售后履约。",
+  "绝不替任何第三方渠道做信誉担保；系统采集顺畅仅代表数据可通达，不等于商家百分之百靠谱。",
+  "绝不打乱交付规格混淆比价；不会拿“多人共享”与“独享代充”混为一谈来拼凑虚假的全网低价。",
+  "绝不因商业合作隐瞒事实；赞助广告位绝不干预真实底价算法与排名，绝不诱导误导买家。",
 ];
 
 const faqs = [
-  ["表里的最低价，我现在就能买到吗？", "最低价只统计 24 小时内验证过、且标记为有货的报价。但从我们采集到你下单之间仍有时间差，价格和库存最终以原站为准。发现不一致时，可以在商品页提交纠错。"],
-  ["为什么同一个订阅能差三四倍？", "因为交付方式不同。代充、成品号、兑换码和共享号交付给你的东西不是一回事，账号归属和售后能力也不同。上面「差价的来源」列了四种形态各自的价位和代价。"],
-  ["你们收渠道的钱吗？", "页面上有明确标注的赞助位。赞助不改变排序、不影响最低价计算，也不会让某条报价被优先展示。完整的排序和计算规则写在数据说明页。"],
-  ["第一次买，应该从哪种方式开始？", "建议从官方订阅或代充开始，账号在你自己手上，出问题可控。价格敏感再考虑成品号，并尽量先小额试单。共享和反代更适合只做临时验证的场景。"],
-  ["买到货不对板怎么办？", "先走原平台的售后流程——交易关系在你和商家之间。同时可以在商品页提交纠错并附上截图；证据成立后我们会下架该报价，反复出问题的渠道会整体停止收录。"],
+  ["表里标的“最低价”，我现在点进去就能买到吗？", "最低价仅统计 24 小时内巡检验证过、且标记为有货的报价。但由于各卡网库存与价格波动频繁，从我们系统抓取到您实际点击下单之间存在短暂时间差，最终价格与有货状态以商家原站为准。若发现价格变动或缺货，可在商品页一键提交纠错。"],
+  ["同样是 AI 会员，为什么各渠道价格能相差三四倍？", "因为交付形态与账号归属本质完全不同。官网直付、个人账号代充、成品现成号和多人共享，虽然都能用上 AI，但交到你手里的使用权限、隐私安全和质保周期截然不同。页面上方「差价的来源」对这四种形态各自的价位和代价有详细拆解。"],
+  ["新手第一次买，建议从哪种方式入手？怎么防踩坑？", "建议优先选择“官方订阅”或“自己账号代充”——账号完全属于你，历史记录可留存，出问题最稳妥可控；预算有限再考虑成品号，且尽量先以单月小额试单，切忌贪便宜一次性买长期；共享号和镜像仅建议作为低频临时体验。下单前务必核对店铺客服与售后群，切勿私下微信/支付宝转账。"],
+  ["收录的卡网靠谱吗？买到货不对板或被骗了怎么办？", "平台收录仅代表公开信息索引，不等于官方信用背书，交易关系在您与商家之间。如果遇到异常：第一步（挽损）第一时间联系店铺客服，并在对应发卡平台发起工单投诉，争取交易平台介入拦截退款；第二步（举报）返回本站商品页提交纠错举报并附上凭证截图。证据核实后我们会即刻下架异常商品，反复出现售后劣迹的渠道将全站拉黑、永久停止收录。"],
+  ["你们自己卖号吗？会不会收商家的钱把他们排在前面？", "我们不卖货、不代收款，也坚决不收渠道的钱买排名。我们是一个纯粹的中立比价雷达。页面上仅设有明确标注的独立赞助广告位，赞助绝不影响价格排序、不干预最低价算法，更不会优先展示某条报价。全站统一的抓取与计算规则均公开写在数据说明页。"],
 ] as const;
 
 function LineIcon({ name }: { name: string }) {
@@ -123,6 +149,34 @@ export default async function HomePage() {
 
   return <div className="priceai-page"><SiteHeader /><main className="priceai-home">
     <PriceBaselineHero />
+
+    <section className="priceai-module-section" id="channels">
+      <div className="priceai-container">
+        <div className="priceai-section-heading">
+          <p className="priceai-kicker">购买路径</p>
+          <h2>先回答一个问题：你现在要买什么？</h2>
+          <p>首页只负责分流。具体价格、库存、来源和购买链接，回到对应工具页完成。</p>
+        </div>
+        <div className="priceai-module-grid">
+          {decisionPaths.map((item) => (
+            <article className="priceai-path-card" key={item.title}>
+              <div className="priceai-path-top">
+                <span className="priceai-icon"><LineIcon name={item.icon} /></span>
+                <span className="priceai-pill">{item.badge}</span>
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+              <div className="priceai-path-actions">
+                <Link className="priceai-btn primary" href={item.primaryHref}>{item.primaryCta} <Arrow /></Link>
+                <Link className="priceai-btn" href={item.secondaryHref}>{item.secondaryCta}</Link>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="priceai-brand-title">目前已纳入对照的会员与模型厂商</div>
+        <div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div>
+      </div>
+    </section>
 
     <section className="priceai-delivery-section" id="delivery">
       <div className="priceai-container">
@@ -150,46 +204,26 @@ export default async function HomePage() {
 
     <PriceBaselineTable snapshot={snapshot} />
 
-    <section className="priceai-module-section" id="channels">
-      <div className="priceai-container">
-        <div className="priceai-section-heading">
-          <p className="priceai-kicker">四个频道</p>
-          <h2>想清楚要哪种交付方式之后，去这里比价</h2>
-          <p>按你要买的东西进入，不需要先判断自己算新手还是老手。</p>
-        </div>
-        <div className="priceai-module-grid">
-          {channels.map((item) => <Link href={item.href} key={item.title}>
-            <div><span className="priceai-icon"><LineIcon name={item.icon} /></span><Arrow /></div>
-            <p className="priceai-module-need">{item.need}</p>
-            <h3>{item.title}</h3>
-            <p>{item.text}</p>
-          </Link>)}
-        </div>
-        <div className="priceai-brand-title">目前已纳入对照的会员与模型厂商</div>
-        <div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div>
-      </div>
-    </section>
-
     <section className="priceai-boundary-section">
       <div className="priceai-container">
         <div className="priceai-section-heading">
-          <p className="priceai-kicker">边界</p>
-          <h2>这个站做什么，不做什么</h2>
-          <p>我们只负责让每个数字可以被回看。交易发生在原平台，判断权在你手上。</p>
+          <p className="priceai-kicker">平台准则</p>
+          <h2>我们坚持做什么，坚决不做什么</h2>
+          <p>数据只讲客观事实，买家掌握最终决定权。我们致力于让每一个价格、来源与时效都有据可查。</p>
         </div>
         <div className="priceai-boundary-split">
           <article className="do">
-            <h3>我们做</h3>
+            <h3>我们坚持做</h3>
             <ul>{weDo.map((line) => <li key={line}>{line}</li>)}</ul>
           </article>
           <article className="dont">
-            <h3>我们不做</h3>
+            <h3>我们坚决不做</h3>
             <ul>{weDont.map((line) => <li key={line}>{line}</li>)}</ul>
           </article>
         </div>
         <div className="priceai-return-card">
-          <div><h3>完整的采集、归一和排序规则</h3><p>包括最低价怎么算、什么样的报价会被排除、异常数据怎么处理。</p></div>
-          <Link className="priceai-btn" href="/methodology">看数据说明 <Arrow /></Link>
+          <div><h3>查阅完整的数据采集与排序算法规则</h3><p>公开透明披露：最低价计算口径、陈旧报价清洗机制、异常纠错流程及赞助展示准则。</p></div>
+          <Link className="priceai-btn" href="/methodology">查看数据说明与算法细则 <Arrow /></Link>
         </div>
       </div>
     </section>
@@ -198,8 +232,8 @@ export default async function HomePage() {
       <div className="priceai-container">
         <div className="priceai-section-heading">
           <p className="priceai-kicker">常见问题</p>
-          <h2>下单之前，这几条值得先看</h2>
-          <p>只保留最容易造成实际损失的问题。更细的背景说明在指南里维护。</p>
+          <h2>关于 PriceAI、渠道和交易安全</h2>
+          <p>先了解平台边界和核验方法，再决定去哪里比价与交易。</p>
         </div>
         <div className="priceai-faq-list">{faqs.map(([q, a]) => <article key={q}><h3>{q}</h3><p>{a}</p></article>)}</div>
       </div>

@@ -87,13 +87,13 @@ export function PriceBaselineHero() {
   return <section className="blue-engine" aria-labelledby="hero-title">
     <div className="blue-engine-hero">
       <div className="blue-engine-hero-inner">
-        <span className="blue-engine-eyebrow"><i /> 不销售 · 不代收款 · 不替渠道站台</span>
-        <h1 id="hero-title"><span>AI 订阅充值与 API 中转</span><span>权威比价平台</span></h1>
-        <p>我们替你把散在各家卡网和官网的报价收在一处。想省钱，一眼看出官方价和渠道最低价差多少、这个价现在还买不买得到；还没想好该买订阅、API 还是共享账号，先看清它们的区别和代价，别花钱买错。</p>
-        {/* 两个出口都是页内跳转，各自对应下方一节，标签与该节标题一一对应。 */}
+        <span className="blue-engine-eyebrow"><i /> 中立比价雷达 · 不销售 · 不代收款 · 不替渠道背书</span>
+        <h1 id="hero-title"><span>AI 订阅充值与 API 中转</span><span>实时行情与比价雷达</span></h1>
+        <p>汇集全网卡网现货与官网公开报价。一眼看清官方正价与各渠道底价差多少、当前是否能买到；先理清自充、代充、成品号与 API 的真实区别，买前心里有底，不花冤枉钱。</p>
+        {/* 两个出口都是页内跳转：主按钮导向购买路径，次按钮导向底价大表 */}
         <div className="blue-engine-hero-actions">
-          <a className="blue-engine-cta primary" href="#delivery">四种供货方式 <span aria-hidden="true">↓</span></a>
-          <a className="blue-engine-cta" href="#baseline">价格对照表 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta primary" href="#channels">先选购买路径 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta" href="#baseline">直接看全网底价 <span aria-hidden="true">↓</span></a>
         </div>
       </div>
     </div>
@@ -116,9 +116,9 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
       </div>}
 
       <div className="blue-engine-heading" id="baseline">
-        <p className="blue-engine-kicker">选价格</p>
-        <h2 id="baseline-title">选一个产品，看它现在值多少钱</h2>
-        <p>左边是官网原价，右边是渠道当前能买到的最低价，中间标出这个低价是用哪种交付方式换来的。</p>
+        <p className="blue-engine-kicker">实时比价雷达</p>
+        <h2 id="baseline-title">官方原价 vs 渠道底价：一览全网真实行情</h2>
+        <p>不用再去各家卡网反复翻找比价。这里直接对照官方汇率正价与渠道最新现货底价，并清楚标注交付方式、来源商家与库存更新时间。</p>
       </div>
       <div className="blue-engine-toolbar">
         <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <Link className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} key={label}>{label}</Link>)}</nav>

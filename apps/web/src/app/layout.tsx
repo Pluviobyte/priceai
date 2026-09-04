@@ -21,7 +21,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   return (
     <html lang="zh-CN" data-brand-theme={colorTheme} suppressHydrationWarning>
-      <body><Script id="priceai-color-theme-init" strategy="beforeInteractive">{colorThemeInit}</Script><a className="skip-link" href="#main-content">跳到主要内容</a><div id="main-content">{children}</div></body>
+      <head>
+        <Script id="priceai-color-theme-init" strategy="beforeInteractive">{colorThemeInit}</Script>
+      </head>
+      <body>
+        <a className="skip-link" href="#main-content">跳到主要内容</a>
+        <div id="main-content">{children}</div>
+      </body>
     </html>
   );
 }
