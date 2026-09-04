@@ -846,11 +846,15 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .blue-engine-hero::before { width: 470px; height: 470px; left: -220px; top: -300px; background: oklch(70% 0.08 257 / 7%); }
 .blue-engine-hero::after { width: 380px; height: 380px; right: -170px; bottom: -270px; background: oklch(60% 0.08 257 / 5%); }
 .blue-engine-hero-inner { position: relative; z-index: 1; max-width: 896px; margin: 0 auto; text-align: center; }
-.blue-engine-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--blue-brand); font-size: 13px; font-weight: 600; letter-spacing: .08em; animation: blue-engine-breathe 4.5s ease-in-out infinite; }
-/* 缓慢呼吸而不是硬闪：最低仍保持 .5 不透明度，避免这三条承诺在半个周期里读不清。 */
-@keyframes blue-engine-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
-@media (prefers-reduced-motion: reduce) { .blue-engine-eyebrow { animation: none; } }
-.blue-engine-eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue-brand); box-shadow: 0 0 0 4px oklch(52% 0.11 257 / 9%); }
+.blue-engine-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; color: var(--blue-brand); font-size: 13px; font-weight: 600; letter-spacing: .08em; animation: blue-engine-breathe 2.2s ease-in-out infinite; }
+/* 更快、更清楚的呼吸节奏，文字仍保留足够可读性。 */
+@keyframes blue-engine-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .38; } }
+.blue-engine-eyebrow i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue-brand); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue-brand) 12%, transparent); animation: blue-engine-dot-pulse 1.1s ease-out infinite; }
+@keyframes blue-engine-dot-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue-brand) 12%, transparent); }
+  50% { transform: scale(1.24); box-shadow: 0 0 0 9px color-mix(in srgb, var(--blue-brand) 24%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .blue-engine-eyebrow, .blue-engine-eyebrow i { animation: none; } }
 .blue-engine h1 { margin: 0; font: 600 54px/1.22 "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: 0; }
 .blue-engine h1 span { display: block; }
 .blue-engine h1 span:last-child { color: var(--blue-brand); }
@@ -1104,6 +1108,11 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 .priceai-footer > nav { height: 77px; display: flex; align-items: flex-start; justify-content: center; gap: 5px; padding-top: 12px; border-bottom: 1px solid var(--color-border); }
 .priceai-footer > nav a { min-height: 36px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 6px; color: var(--color-text-muted); font-size: 13px; font-weight: 600; }
 .priceai-footer > nav a:hover { color: var(--color-text-primary); background: var(--color-surface-hover); }
+.priceai-footer > nav.priceai-footer-actions { height: auto; min-height: 92px; align-items: center; gap: 12px; padding: 20px 16px; }
+.priceai-footer > nav.priceai-footer-actions .priceai-footer-button { min-width: 210px; min-height: 46px; justify-content: center; padding: 0 22px; border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); font-size: 14px; }
+.priceai-footer > nav.priceai-footer-actions .priceai-footer-button:hover { color: var(--color-text-primary); background: var(--color-surface-hover); transform: translateY(-1px); }
+.priceai-footer > nav.priceai-footer-actions .priceai-footer-button.primary { color: var(--color-text-on-primary); background: var(--color-primary); box-shadow: 0 10px 24px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+.priceai-footer > nav.priceai-footer-actions .priceai-footer-button.primary:hover { color: var(--color-text-on-primary); background: var(--color-primary-hover); }
 .priceai-sponsors { margin: 0 32px 32px; padding: 16px; border-radius: 8px; background: var(--color-panel); box-shadow: 0 0 0 1px var(--color-border-soft); }
 .priceai-sponsor-head { height: 24px; display: flex; align-items: center; gap: 12px; }
 .priceai-sponsor-head h2 { margin: 0; color: var(--color-text-primary); font-size: 16px; font-weight: 800; }
@@ -1189,6 +1198,8 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 }
 
 @media (max-width: 760px) {
+  .priceai-footer > nav.priceai-footer-actions { align-items: stretch; flex-direction: column; }
+  .priceai-footer > nav.priceai-footer-actions .priceai-footer-button { width: 100%; min-width: 0; }
   .priceai-container, .priceai-boundary-section > .priceai-container, .priceai-faq-section > .priceai-container { width: min(100% - 32px, 1152px); }
   .priceai-notice { height: 42px; padding: 0 50px 0 12px; }
   .priceai-notice small, .priceai-notice em { display: none; }
