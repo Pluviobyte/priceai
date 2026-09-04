@@ -94,7 +94,7 @@ function writeStorage(key: string, value: string) {
   }
 }
 
-function Icon({ name, size = 18 }: { name: "search" | "moon" | "sun" | "menu" | "close" | "message" | "user"; size?: number }) {
+function Icon({ name, size = 18 }: { name: "search" | "moon" | "sun" | "menu" | "close" | "message" | "user" | "github"; size?: number }) {
   const paths = {
     search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
     moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
@@ -103,6 +103,7 @@ function Icon({ name, size = 18 }: { name: "search" | "moon" | "sun" | "menu" | 
     close: <path d="m6 6 12 12M18 6 6 18" />,
     message: <path d="M2.99 16.34a2 2 0 0 1 .1 1.17l-1.07 3.29a1 1 0 0 0 1.24 1.17l3.41-1a2 2 0 0 1 1.1.09 10 10 0 1 0-4.78-4.72Z" />,
     user: <><path d="M2 21a8 8 0 0 1 13.29-6" /><circle cx="10" cy="8" r="5" /><path d="M19 16v6M22 19h-6" /></>,
+    github: <path fill="currentColor" stroke="none" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.24c-3.22.7-3.9-1.36-3.9-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.78 1.19 1.78 1.19 1.04 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.29-5.27-5.68 0-1.25.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.16 1.18a10.98 10.98 0 0 1 5.75 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.09 0 4.4-2.71 5.38-5.29 5.67.42.36.78 1.06.78 2.14v3.18c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z" />,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
@@ -307,6 +308,9 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                 </Link>
                 <a className="site-icon-button site-social-button" href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer" aria-label="通过 Telegram 联系" title="Telegram">
                   <img src="/social-icons/telegram.svg" alt="" />
+                </a>
+                <a className="site-icon-button site-social-button site-github-button" href="https://github.com/Pluviobyte/priceai" target="_blank" rel="noopener noreferrer" aria-label="打开 PriceAI GitHub 仓库" title="GitHub">
+                  <Icon name="github" size={18} />
                 </a>
                 <Link className="site-icon-button site-social-button site-account-button" href={loginHref} aria-label="登录个人账户" title="登录个人账户">
                   <Icon name="user" size={17} />

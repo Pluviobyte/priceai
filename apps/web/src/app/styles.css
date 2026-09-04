@@ -986,7 +986,10 @@ html[data-brand-theme="green"][data-theme="dark"] .site-brand-mark { --site-mark
 .site-header-actions .site-social-button { border-color: var(--color-border-soft); border-radius: 999px; background: color-mix(in oklch, var(--color-panel) 90%, transparent); box-shadow: 0 2px 8px oklch(22% .025 257 / 4%); }
 .site-header-actions .site-social-button:hover { border-color: var(--color-border-muted); background: var(--color-panel); box-shadow: 0 4px 12px oklch(22% .025 257 / 8%); }
 .site-social-button img { width: 17px; height: 17px; display: block; object-fit: contain; }
+.site-social-button.site-github-button { color: var(--color-text-primary); }
 .site-social-button.site-account-button { color: var(--color-text-primary); }
+.site-header.is-stuck .site-desktop-actions { gap: 2px; }
+.site-header.is-stuck .site-social-button { width: 28px; height: 28px; }
 .site-nav-more { position: relative; flex: 0 0 auto; }
 .site-nav-more > button { display: inline-grid; }
 .site-nav-more > button:hover, .site-nav-more > button[aria-expanded="true"] { color: var(--color-text-primary); background: var(--color-surface-hover); }
