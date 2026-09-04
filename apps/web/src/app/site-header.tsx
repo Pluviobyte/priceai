@@ -2,65 +2,364 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ResendCubeLogo } from "./resend-cube-logo";
+import { useEffect, useId, useRef, useState } from "react";
+import { BrandLockup, SITE_NAME } from "./site-brand";
 
-type HeaderSection = "home" | "subscriptions" | "official" | "api" | "transit" | "channels" | "changes" | "submit" | "methodology" | "status";
+export type HeaderSection =
+  | "home"
+  | "subscriptions"
+  | "official"
+  | "api"
+  | "transit"
+  | "channels"
+  | "changes"
+  | "submit"
+  | "methodology"
+  | "status"
+  | "guides";
 
-function Icon({ name, size = 16 }: { name: "moon" | "message" | "user" | "handshake" | "megaphone" | "close" | "arrow"; size?: number }) {
-  const paths = {
-    moon: <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />,
-    message: <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" />,
-    user: <><path d="M2 21a8 8 0 0 1 13.292-6" /><circle cx="10" cy="8" r="5" /><path d="M19 16v6M22 19h-6" /></>,
-    handshake: <><path d="m11 17 2 2a1 1 0 1 0 3-3M14 14l2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.8 5.8 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4M21 3l1 11h-2M3 3 2 14l6.5 6.5a1 1 0 0 0 3-3" /></>,
-    megaphone: <><path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14M8 6v8" /></>,
-    close: <path d="M18 6 6 18M6 6l12 12" />,
-    arrow: <path d="M5 12h14m-7-7 7 7-7 7" />,
-  };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
+type NavKey = HeaderSection | "merchant-feed" | "wholesale" | "commercial" | "support";
+type NavLink = { key: NavKey; label: string; href: string; note?: string };
+type NavGroup = { id: string; kicker: string; summary: string; links: readonly NavLink[] };
+type Edition = "blue" | "green";
+
+const THEME_KEY = "priceai-theme";
+const EDITION_KEY = "priceai-color-theme";
+
+/**
+ * 主导航按购买路径分组，而不是平铺频道：
+ * 用户先认出“账号归谁、钱付给谁”这一层，再进入对应的比价工具页。
+ */
+const PURCHASE_GROUPS: readonly NavGroup[] = [
+  {
+    id: "subscription",
+    kicker: "订阅",
+    summary: "会员、成品号与代充",
+    links: [
+      { key: "official", label: "官方订阅", href: "/official-prices", note: "官网正价与地区价" },
+      { key: "channels", label: "卡网订阅", href: "/channels", note: "第三方渠道的有货价" },
+    ],
+  },
+  {
+    id: "api",
+    kicker: "API",
+    summary: "接口计费与中转站",
+    links: [
+      { key: "api", label: "官方 API", href: "/official-api", note: "厂商计费与额度限制" },
+      { key: "transit", label: "中转 API", href: "/api-transit", note: "倍率、稳定性与延迟" },
+    ],
+  },
+];
+
+const RESEARCH_LINKS: readonly NavLink[] = [
+  { key: "changes", label: "异动", href: "/changes", note: "降价、补货与售罄" },
+  { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
+  { key: "methodology", label: "数据说明", href: "/methodology", note: "排序口径与责任边界" },
+  { key: "status", label: "数据健康", href: "/status", note: "采集与发布状态" },
+];
+
+const PARTICIPATE_LINKS: readonly NavLink[] = [
+  { key: "submit", label: "提交店铺", href: "/submit", note: "公开店铺进入预检" },
+  { key: "merchant-feed", label: "商家 Feed", href: "/merchant-feed", note: "直连 Feed 提高时效" },
+  { key: "wholesale", label: "批发合作", href: "/wholesale" },
+  { key: "commercial", label: "赞助合作", href: "/commercial" },
+  { key: "support", label: "支持作者", href: "/support" },
+];
+
+const PRIMARY_LINKS: readonly NavLink[] = [
+  { key: "home", label: "首页", href: "/" },
+  ...PURCHASE_GROUPS.flatMap((group) => group.links),
+  { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
+];
+const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides");
+
+function isActive(active: HeaderSection, key: NavKey) {
+  if (key === "channels") return active === "channels" || active === "subscriptions";
+  return active === key;
 }
 
-export function PriceAILogo() {
-  return <span className="priceai-brand-logo" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="28" cy="28" r="20" fill="var(--color-logo-lens-bg)" stroke="currentColor" strokeWidth="5" /><path d="M15 33 23 25 30 30 41 19" fill="none" stroke="var(--color-brand)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" /><circle cx="41" cy="19" r="3.6" fill="var(--color-brand)" /><path d="M43 43 56 56" stroke="currentColor" strokeLinecap="round" strokeWidth="7" /></svg></span>;
+function readStorage(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // 隐私模式或禁用存储时静默失败，主题仍在当前页面生效。
+  }
+}
+
+function Icon({ name, size = 18 }: { name: "search" | "moon" | "sun" | "menu" | "close" | "message" | "user"; size?: number }) {
+  const paths = {
+    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+    moon: <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    close: <path d="m6 6 12 12M18 6 6 18" />,
+    message: <path d="M2.99 16.34a2 2 0 0 1 .1 1.17l-1.07 3.29a1 1 0 0 0 1.24 1.17l3.41-1a2 2 0 0 1 1.1.09 10 10 0 1 0-4.78-4.72Z" />,
+    user: <><path d="M2 21a8 8 0 0 1 13.29-6" /><circle cx="10" cy="8" r="5" /><path d="M19 16v6M22 19h-6" /></>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      {paths[name]}
+    </svg>
+  );
+}
+
+function SearchForm({ id, inputRef }: { id: string; inputRef?: React.RefObject<HTMLInputElement | null> }) {
+  return (
+    <form className="site-search" role="search" action="/search">
+      <label className="sr-only" htmlFor={id}>搜索产品、商家或原始标题</label>
+      <Icon name="search" size={16} />
+      <input ref={inputRef} id={id} name="q" type="search" placeholder="搜索产品、商家或原始标题" autoComplete="off" spellCheck={false} />
+      <kbd aria-hidden="true">/</kbd>
+    </form>
+  );
+}
+
+function EditionSwitch({ edition, onSelect }: { edition: Edition; onSelect: (next: Edition) => void }) {
+  return (
+    <div className="site-edition" role="group" aria-label="站点配色">
+      <button type="button" aria-pressed={edition === "blue"} onClick={() => onSelect("blue")}><i className="blue" />蓝色版</button>
+      <button type="button" aria-pressed={edition === "green"} onClick={() => onSelect("green")}><i className="green" />绿色版</button>
+    </div>
+  );
 }
 
 export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   const pathname = usePathname();
-  const [noticeOpen, setNoticeOpen] = useState(true);
+  const baseId = useId();
   const [dark, setDark] = useState(false);
-  const [colorTheme, setColorTheme] = useState<"blue" | "green">("blue");
+  const [edition, setEdition] = useState<Edition>("blue");
+  const [stuck, setStuck] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+
+  const moreId = `${baseId}-more`;
+  const drawerId = `${baseId}-drawer`;
+  const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
+
+  // 读取已保存的外观偏好。layout 里的内联脚本已在首屏前应用，这里只同步控件状态。
+  useEffect(() => {
+    const root = document.documentElement;
+    const nextDark = readStorage(THEME_KEY) === "dark";
+    const storedEdition = readStorage(EDITION_KEY);
+    const nextEdition: Edition = storedEdition === "green" || storedEdition === "blue" ? storedEdition : root.dataset.brandTheme === "green" ? "green" : "blue";
+    setDark(nextDark);
+    setEdition(nextEdition);
+    root.dataset.theme = nextDark ? "dark" : "light";
+    root.dataset.brandTheme = nextEdition;
+  }, []);
+
+  // 与 New API 一致：越过 20px 后将宽导航收拢为居中的轻量浮动栏。
+  useEffect(() => {
+    const update = () => setStuck(window.scrollY > 20);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
 
   useEffect(() => {
-    const nextDark = window.localStorage.getItem("priceai-theme") === "dark";
-    const savedColorTheme = window.localStorage.getItem("priceai-color-theme");
-    const nextColorTheme = savedColorTheme === "green" || savedColorTheme === "blue"
-      ? savedColorTheme
-      : document.documentElement.dataset.brandTheme === "green" ? "green" : "blue";
-    setDark(nextDark);
-    setColorTheme(nextColorTheme);
-    document.documentElement.dataset.theme = nextDark ? "dark" : "light";
-    document.documentElement.dataset.brandTheme = nextColorTheme;
+    setMoreOpen(false);
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (moreRef.current && !moreRef.current.contains(event.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      const toggle = menuToggleRef.current;
+      if (toggle && document.contains(toggle)) toggle.focus();
+    };
+  }, [drawerOpen]);
+
+  // 按 “/” 直接聚焦搜索框；正在输入时不拦截。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      const input = searchRef.current;
+      if (!input || !input.offsetParent) return;
+      event.preventDefault();
+      input.focus();
+      input.select();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
   function toggleTheme() {
     const next = !dark;
     setDark(next);
     document.documentElement.dataset.theme = next ? "dark" : "light";
-    window.localStorage.setItem("priceai-theme", next ? "dark" : "light");
+    writeStorage(THEME_KEY, next ? "dark" : "light");
   }
 
-  function selectColorTheme(next: "blue" | "green") {
-    setColorTheme(next);
+  function selectEdition(next: Edition) {
+    setEdition(next);
     document.documentElement.dataset.brandTheme = next;
-    window.localStorage.setItem("priceai-color-theme", next);
+    writeStorage(EDITION_KEY, next);
   }
 
-  return <>
-    {noticeOpen && <div className="priceai-notice" role="region" aria-label="全站顶部通知条广告位"><Link href="/?qqGroup=1"><span><Icon name="megaphone" size={14} /> 公告</span><b>PriceAI QQ 交流群已开放</b><em>/</em><small>欢迎进群交流功能建议、产品想法、数据问题和使用反馈</small><Icon name="arrow" size={14} /></Link><button type="button" aria-label="关闭顶部广告" onClick={() => setNoticeOpen(false)}><Icon name="close" size={16} /></button></div>}
-    <header className="priceai-header">
-      <Link className="priceai-brand" href="/?home=1" aria-label="PriceAI 首页"><ResendCubeLogo /><span><strong>PriceAI</strong><small>AI 比价雷达</small></span></Link>
-      <nav className="priceai-nav" aria-label="主导航"><Link className={active === "home" ? "active" : undefined} href="/?home=1">首页</Link><Link className={active === "subscriptions" || active === "channels" ? "active" : undefined} href="/channels">卡网订阅</Link><Link className={active === "official" ? "active" : undefined} href="/official-prices">官方订阅</Link><Link className={active === "api" ? "active" : undefined} href="/official-api">官方 API</Link><Link className={active === "transit" ? "active" : undefined} href="/api-transit">中转 API</Link><Link href="/guides">指南</Link></nav>
-      <div className="priceai-header-actions"><div className="priceai-color-switch" role="group" aria-label="首页配色"><button className={colorTheme === "blue" ? "active" : undefined} type="button" aria-label="切换到蓝色版" aria-pressed={colorTheme === "blue"} onClick={() => selectColorTheme("blue")}><i className="blue" /><span>蓝色</span></button><button className={colorTheme === "green" ? "active" : undefined} type="button" aria-label="切换到绿色版" aria-pressed={colorTheme === "green"} onClick={() => selectColorTheme("green")}><i className="green" /><span>绿色</span></button></div><Link className="priceai-wholesale" href="/wholesale"><Icon name="handshake" />批发合作</Link><button className="priceai-dark-switch" type="button" onClick={toggleTheme} aria-label={dark ? "切换到浅色模式" : "切换到深色模式"}><Icon name="moon" /></button><Link className="priceai-feedback" href="/support" aria-label="提交意见反馈"><Icon name="message" /></Link><a className="priceai-social qq" href="/?qqGroup=1" aria-label="查看 PriceAI QQ 交流群加入方式，群号 1106437080"><img src="https://priceai.cc/brand-icons/qq.svg?dpl=3b7255cafa5bfe60f6aecc223e1e7e716fda75f8" alt="" /></a><a className="priceai-social telegram" href="https://t.me/priceaicc" target="_blank" rel="noopener noreferrer" aria-label="加入 PriceAI Telegram 交流群"><img src="https://priceai.cc/brand-icons/telegram.svg?dpl=3b7255cafa5bfe60f6aecc223e1e7e716fda75f8" alt="" /></a><a className="priceai-social github" href="https://github.com/physics-dimension/PriceAI" target="_blank" rel="noopener noreferrer" aria-label="打开 PriceAI GitHub 仓库"><img src="https://priceai.cc/brand-icons/github.svg?dpl=3b7255cafa5bfe60f6aecc223e1e7e716fda75f8" alt="" /></a><Link className="priceai-login" href={`/login?next=${encodeURIComponent(pathname || "/")}`} aria-label="登录 PriceAI"><Icon name="user" /></Link></div>
-    </header>
-  </>;
+  function renderNavLink(link: NavLink) {
+    const current = isActive(active, link.key);
+    return <Link href={link.href} aria-current={current ? "page" : undefined} key={link.key}>{link.label}</Link>;
+  }
+
+  function renderMenuLink(link: NavLink) {
+    const current = isActive(active, link.key);
+    return (
+      <Link href={link.href} aria-current={current ? "page" : undefined} key={link.key}>
+        {link.label}
+        {link.note && <small>{link.note}</small>}
+      </Link>
+    );
+  }
+
+  function renderDrawerLink(link: NavLink) {
+    const current = isActive(active, link.key);
+    return (
+      <Link href={link.href} aria-current={current ? "page" : undefined} onClick={() => setDrawerOpen(false)} key={link.key}>
+        {link.label}
+        {link.note && <small>{link.note}</small>}
+      </Link>
+    );
+  }
+
+  return (
+    <>
+      <header className={`site-header${stuck ? " is-stuck" : ""}`}>
+        <div className="site-header-frame">
+          <div className="site-header-bar">
+            <BrandLockup tagline={false} />
+            <nav className="site-nav" aria-label="主导航">
+              {PRIMARY_LINKS.map(renderNavLink)}
+            </nav>
+
+            <div className="site-header-actions">
+              <span className="site-header-divider" aria-hidden="true" />
+              <div className="site-desktop-actions">
+                <div className="site-nav-more" ref={moreRef}>
+                  <button className="site-icon-button site-social-button" type="button" aria-expanded={moreOpen} aria-controls={moreId} aria-label="打开聊天与站点工具" title="聊天与站点工具" onClick={() => setMoreOpen((open) => !open)}>
+                    <Icon name="message" size={17} />
+                  </button>
+                  {moreOpen && (
+                    <div className="site-menu" id={moreId}>
+                      <SearchForm id={`${baseId}-q`} inputRef={searchRef} />
+                      <div className="site-menu-section">
+                        <span className="site-menu-label">动态与数据</span>
+                        {MENU_RESEARCH_LINKS.map(renderMenuLink)}
+                      </div>
+                      <div className="site-menu-section">
+                        <span className="site-menu-label">参与</span>
+                        {PARTICIPATE_LINKS.map(renderMenuLink)}
+                      </div>
+                      <div className="site-menu-section">
+                        <span className="site-menu-label">外观</span>
+                        <button className="site-menu-action" type="button" onClick={toggleTheme} aria-pressed={dark}>
+                          <Icon name={dark ? "sun" : "moon"} size={16} />
+                          <span>{dark ? "切换到浅色模式" : "切换到深色模式"}</span>
+                        </button>
+                        <EditionSwitch edition={edition} onSelect={selectEdition} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <Link className="site-icon-button site-social-button" href="/?qqGroup=1" aria-label="加入 QQ 交流群" title="QQ 交流群">
+                  <img src="/social-icons/qq.svg" alt="" />
+                </Link>
+                <Link className="site-icon-button site-social-button" href="/support?contact=wechat" aria-label="通过微信联系" title="微信联系">
+                  <img src="/social-icons/wechat.svg" alt="" />
+                </Link>
+                <a className="site-icon-button site-social-button" href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer" aria-label="通过 Telegram 联系" title="Telegram">
+                  <img src="/social-icons/telegram.svg" alt="" />
+                </a>
+                <Link className="site-icon-button site-social-button site-account-button" href={loginHref} aria-label="登录个人账户" title="登录个人账户">
+                  <Icon name="user" size={17} />
+                </Link>
+              </div>
+              <button ref={menuToggleRef} className="site-icon-button site-menu-toggle" type="button" aria-expanded={drawerOpen} aria-controls={drawerId} aria-label="打开站点菜单" onClick={() => setDrawerOpen(true)}>
+                <Icon name="menu" size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {drawerOpen && (
+        <div className="site-drawer" id={drawerId} role="dialog" aria-modal="true" aria-label={`${SITE_NAME} 站点菜单`}>
+          <div className="site-drawer-inner">
+            <div className="site-drawer-head">
+              <BrandLockup tagline={false} />
+              <button ref={drawerCloseRef} className="site-icon-button" type="button" aria-label="关闭菜单" onClick={() => setDrawerOpen(false)}>
+                <Icon name="close" />
+              </button>
+            </div>
+            <SearchForm id={`${baseId}-drawer-q`} />
+            <nav className="site-drawer-nav" aria-label="全部栏目">
+              {PURCHASE_GROUPS.map((group) => (
+                <section className="site-drawer-section" key={group.id}>
+                  <h2>{group.kicker}</h2>
+                  <p>{group.summary}</p>
+                  {group.links.map(renderDrawerLink)}
+                </section>
+              ))}
+              <section className="site-drawer-section">
+                <h2>数据与说明</h2>
+                <p>看异动、读指南、核对排序口径</p>
+                {RESEARCH_LINKS.map(renderDrawerLink)}
+              </section>
+              <section className="site-drawer-section">
+                <h2>参与</h2>
+                <p>提交渠道、合作与支持</p>
+                {PARTICIPATE_LINKS.map(renderDrawerLink)}
+              </section>
+            </nav>
+            <div className="site-drawer-foot">
+              <Link className="site-outline-link" href={loginHref}>登录</Link>
+              <button className="site-outline-link" type="button" onClick={toggleTheme} aria-pressed={dark}>
+                <Icon name={dark ? "sun" : "moon"} size={16} />
+                {dark ? "浅色模式" : "深色模式"}
+              </button>
+              <EditionSwitch edition={edition} onSelect={selectEdition} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

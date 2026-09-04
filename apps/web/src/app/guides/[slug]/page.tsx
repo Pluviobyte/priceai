@@ -28,5 +28,5 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   const guide = guides[slug];
   if (!guide) notFound();
   const toc = guide.sections.map(([id, title]) => ({ id, label: title }));
-  return <GuideShell toc={toc}><h1>{guide.title}</h1><p className="lead">{guide.intro}</p>{guide.sections.map(([id, title, paragraphs], index) => <section key={id}><h2 id={id}>{title}</h2>{paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{index === 0 && <aside className="priceai-doc-callout info"><b>●　使用提示</b><p>PriceAI 只聚合公开信息。购买、付款或接入 API 前，请回到原始渠道核验最新规则。</p></aside>}</section>)}<p className="priceai-doc-back"><Link href="/guides">← 返回指南目录</Link>　<Link href="/">返回 PriceAI 主站</Link></p></GuideShell>;
+  return <GuideShell toc={toc} currentSlug={slug}><h1>{guide.title}</h1><p className="lead">{guide.intro}</p>{guide.sections.map(([id, title, paragraphs], index) => <section key={id}><h2 id={id}>{title}</h2>{paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{index === 0 && <aside className="priceai-doc-callout info"><b>●　使用提示</b><p>PriceAI 只聚合公开信息。购买、付款或接入 API 前，请回到原始渠道核验最新规则。</p></aside>}</section>)}<p className="priceai-doc-back"><Link href="/guides">← 返回指南目录</Link>　<Link href="/">返回 PriceAI 主站</Link></p></GuideShell>;
 }

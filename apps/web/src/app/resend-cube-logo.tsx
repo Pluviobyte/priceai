@@ -174,7 +174,7 @@ export function ResendCubeLogo() {
       let motionTime = reducedMotion ? 2.4 : 0;
       let yawRotation = 0.58;
       let engagement = 0;
-      const brandLink = canvas.closest<HTMLElement>(".priceai-brand");
+      const brandLink = canvas.closest<HTMLElement>(".site-brand, .priceai-brand");
 
       const engage = () => { isEngaged = true; };
       const disengage = () => { isEngaged = false; };

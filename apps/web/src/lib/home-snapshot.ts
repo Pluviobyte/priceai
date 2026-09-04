@@ -60,7 +60,7 @@ export interface BaselineRow {
   brand: string;
   /** model-icons 里的 key，取不到时为 null。 */
   icon: string | null;
-  /** 规格摘要，例如「1 个月 · 个人」。同规格才可比。 */
+  /** 规格摘要，例如「1 个月」。同规格才可比。 */
   spec: string;
   /** 官方价，折人民币。区间价不进入这里，只认精确价。 */
   official: { cny: number; note: string; evidenceUrl: string } | null;
@@ -99,10 +99,10 @@ export interface HomeSnapshot {
 
 const PLACEHOLDER: HomeSnapshot = {
   baseline: [
-    { slug: "chatgpt-plus", name: "ChatGPT Plus", brand: "OpenAI", icon: "openai", spec: "1 个月 · 个人" , official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
-    { slug: "claude-pro", name: "Claude Pro", brand: "Anthropic", icon: "claude", spec: "1 个月 · 个人", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
-    { slug: "google-ai-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月 · 个人", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
-    { slug: "supergrok", name: "SuperGrok", brand: "xAI", icon: "grok", spec: "1 个月 · 个人", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "chatgpt-plus", name: "ChatGPT Plus", brand: "OpenAI", icon: "openai", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "claude-pro", name: "Claude Pro", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "google-ai-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "supergrok", name: "SuperGrok", brand: "xAI", icon: "grok", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
   ],
   changes: [],
   coverage: { verifiedOfferCount: 0, activeSourceCount: 0, officialVendorCount: 0, publishedAt: null },

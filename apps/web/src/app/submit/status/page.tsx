@@ -1,4 +1,5 @@
 import { getPublicSubmissionStatus } from "@/lib/public-submissions";
+import { SiteHeader } from "../../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -21,11 +22,7 @@ export default async function SubmissionStatusPage({
   const submission = validId ? await getPublicSubmissionStatus(id) : null;
   return (
     <main>
-      <header className="topbar">
-        <a className="brand" href="/"><span className="brand-mark">A</span><span>AI 价格雷达</span></a>
-        <nav aria-label="主导航"><a href="/">卡网订阅</a><a className="active" href="/submit">提交渠道</a></nav>
-        <a className="submit-link" href="/submit">再次提交</a>
-      </header>
+      <SiteHeader active="submit" />
       <section className="status-shell">
         <span className="section-kicker">投稿进度</span>
         {submission ? (
