@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import type { ReactNode } from "react";
 import "./styles.css";
 
@@ -16,14 +15,8 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // 首屏前恢复深浅色模式，避免页面先以默认外观闪一下。
-  const appearanceInit = `(function(){try{var root=document.documentElement;var theme=localStorage.getItem("priceai-theme");if(theme==="dark"||theme==="light")root.dataset.theme=theme}catch(_){}})()`;
-
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <head>
-        <Script id="site-appearance-init" strategy="beforeInteractive">{appearanceInit}</Script>
-      </head>
       <body>
         <a className="skip-link" href="#main-content">跳到主要内容</a>
         <div id="main-content">{children}</div>

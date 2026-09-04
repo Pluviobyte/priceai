@@ -5,20 +5,21 @@ import {
   officialSubscriptionPlans,
   officialSubscriptionPriceHistory,
   officialSubscriptionPrices,
-  type Database,
-} from "@price-radar/database";
+} from "@price-radar/database/schema";
+import * as databaseSchema from "@price-radar/database/schema";
 import { and, desc, eq } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import {
+  OFFICIAL_SUBSCRIPTION_PLAN_CATALOG,
+  OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
+  type OfficialSubscriptionPlanCatalogItem,
+} from "@price-radar/price-channels/subscription-catalog";
+import { extractOfficialPagePrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "@price-radar/price-channels/storefront-parser";
+
+type Database = NodePgDatabase<typeof databaseSchema>;
 
 type PriceKind = "exact" | "range" | "unknown";
 type Channel = "web" | "app_store" | "google_play";
-
-interface PlanSeed {
-  vendor: string;
-  planCode: string;
-  displayName: string;
-  billingPeriod: "month" | "year" | "one_time";
-  officialUrl: string;
-}
 
 interface PriceSeed {
   vendor: string;
@@ -34,26 +35,18 @@ interface PriceSeed {
   appId?: string;
   evidenceUrl: string;
   evidence?: Record<string, unknown>;
+  verificationTerms?: readonly string[];
 }
 
 export interface SubscriptionRefreshResult {
   exchangeRates: number;
   seededPrices: number;
+  verifiedWebPrices: number;
   appStorePrices: number;
   googlePlayRanges: number;
 }
 
-const PLAN_SEEDS: readonly PlanSeed[] = [
-  { vendor: "openai", planCode: "chatgpt-plus-monthly", displayName: "ChatGPT Plus", billingPeriod: "month", officialUrl: "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus" },
-  { vendor: "openai", planCode: "chatgpt-pro-5x-monthly", displayName: "ChatGPT Pro 5x", billingPeriod: "month", officialUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro" },
-  { vendor: "openai", planCode: "chatgpt-pro-20x-monthly", displayName: "ChatGPT Pro 20x", billingPeriod: "month", officialUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro" },
-  { vendor: "anthropic", planCode: "claude-pro-monthly", displayName: "Claude Pro", billingPeriod: "month", officialUrl: "https://support.anthropic.com/en/articles/8325610-how-much-does-claude-pro-cost" },
-  { vendor: "anthropic", planCode: "claude-pro-annual", displayName: "Claude Pro Annual", billingPeriod: "year", officialUrl: "https://support.anthropic.com/en/articles/8325610-how-much-does-claude-pro-cost" },
-  { vendor: "anthropic", planCode: "claude-max-5x-monthly", displayName: "Claude Max 5x", billingPeriod: "month", officialUrl: "https://support.anthropic.com/en/articles/11049762-choosing-a-claude-ai-plan" },
-  { vendor: "anthropic", planCode: "claude-max-20x-monthly", displayName: "Claude Max 20x", billingPeriod: "month", officialUrl: "https://support.anthropic.com/en/articles/11049762-choosing-a-claude-ai-plan" },
-  { vendor: "xai", planCode: "supergrok-monthly", displayName: "SuperGrok", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
-  { vendor: "xai", planCode: "supergrok-plus-monthly", displayName: "SuperGrok Plus", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
-];
+const PLAN_SEEDS = OFFICIAL_SUBSCRIPTION_PLAN_CATALOG;
 
 const CANONICAL_SLUG_BY_PLAN: Readonly<Record<string, string>> = {
   "openai:chatgpt-plus-monthly": "chatgpt-plus",
@@ -66,13 +59,13 @@ const CANONICAL_SLUG_BY_PLAN: Readonly<Record<string, string>> = {
 };
 
 const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
-  { vendor: "openai", planCode: "chatgpt-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "ChatGPT Plus", evidenceUrl: "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus", evidence: { billing: "monthly", officialArticleUpdated: "2026-08-17" } },
-  { vendor: "openai", planCode: "chatgpt-pro-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Pro $100 (5x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 5, officialArticleUpdated: "2026-08-26" } },
-  { vendor: "openai", planCode: "chatgpt-pro-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro $200 (20x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 20, officialArticleUpdated: "2026-08-26" } },
-  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.anthropic.com/en/articles/11049762-choosing-a-claude-ai-plan" },
-  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://support.anthropic.com/en/articles/8325610-how-much-does-claude-pro-cost", evidence: { billedUpfront: true } },
-  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.anthropic.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 5 } },
-  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.anthropic.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 20 } },
+  { vendor: "openai", planCode: "chatgpt-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "ChatGPT Plus", evidenceUrl: "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus", evidence: { billing: "monthly", officialArticleUpdated: "2026-08-17" }, verificationTerms: ["ChatGPT Plus"] },
+  { vendor: "openai", planCode: "chatgpt-pro-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Pro $100 (5x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 5, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "5x"] },
+  { vendor: "openai", planCode: "chatgpt-pro-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro $200 (20x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 20, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "20x"] },
+  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", verificationTerms: ["Pro"] },
+  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { billedUpfront: true } },
+  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
+  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
   { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing" },
   { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing" },
 ];
@@ -80,31 +73,41 @@ const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
 const APP_STORE_TARGETS = [
   {
     appId: "6448311069",
-    countryCode: "US",
-    currency: "USD",
     vendor: "openai",
     aliases: [
-      ["ChatGPT Plus", "chatgpt-plus-monthly"],
-      ["ChatGPT Pro 5x", "chatgpt-pro-5x-monthly"],
-      ["ChatGPT Pro 20x", "chatgpt-pro-20x-monthly"],
+      { rawPlanName: "ChatGPT Go", planCode: "chatgpt-go-monthly", selection: "lowest" },
+      { rawPlanName: "ChatGPT Plus", planCode: "chatgpt-plus-monthly", selection: "lowest", mustBeLessThanPlanName: "ChatGPT Pro 5x" },
+      { rawPlanName: "ChatGPT Pro 5x", planCode: "chatgpt-pro-5x-monthly", selection: "lowest" },
+      { rawPlanName: "ChatGPT Pro 20x", planCode: "chatgpt-pro-20x-monthly", selection: "lowest" },
     ],
   },
   {
     appId: "6473753684",
-    countryCode: "US",
-    currency: "USD",
     vendor: "anthropic",
     aliases: [
-      ["Claude Pro - Monthly", "claude-pro-monthly"],
-      ["Claude Pro - Annual", "claude-pro-annual"],
-      ["Claude Max 5x - Monthly", "claude-max-5x-monthly"],
-      ["Claude Max 20x - Monthly", "claude-max-20x-monthly"],
+      { rawPlanName: "Claude Pro - Monthly", planCode: "claude-pro-monthly", selection: "first" },
+      { rawPlanName: "Claude Pro - Annual", planCode: "claude-pro-annual", selection: "first" },
+      { rawPlanName: "Claude Max 5x - Monthly", planCode: "claude-max-5x-monthly", selection: "first" },
+      { rawPlanName: "Claude Max 20x - Monthly", planCode: "claude-max-20x-monthly", selection: "first" },
     ],
   },
-] as const;
-
-const GOOGLE_PLAY_TARGETS = [
-  { packageId: "com.openai.chatgpt", vendor: "openai", planCode: "chatgpt-plus-monthly", countryCode: "US", currency: "USD" },
+  {
+    appId: "6477489729",
+    vendor: "google",
+    aliases: [
+      { rawPlanName: "Google AI Plus (400 GB)", planCode: "google-ai-plus-monthly", selection: "lowest" },
+      { rawPlanName: "Google AI Pro (5 TB)", planCode: "google-ai-pro-monthly", selection: "lowest" },
+      { rawPlanName: "Google AI Ultra (30 TB)", planCode: "google-ai-ultra-monthly", selection: "lowest" },
+    ],
+  },
+  {
+    appId: "6670324846",
+    vendor: "xai",
+    aliases: [
+      { rawPlanName: "SuperGrok", planCode: "supergrok-monthly", selection: "lowest" },
+      { rawPlanName: "SuperGrok Plus", planCode: "supergrok-plus-monthly", selection: "lowest" },
+    ],
+  },
 ] as const;
 
 function stableJson(value: unknown): string {
@@ -126,7 +129,7 @@ function numberString(value: number | undefined): string | null {
   return value === undefined ? null : value.toFixed(6);
 }
 
-async function upsertPlan(database: Database, seed: PlanSeed): Promise<string> {
+async function upsertPlan(database: Database, seed: OfficialSubscriptionPlanCatalogItem): Promise<string> {
   const canonicalSlug = CANONICAL_SLUG_BY_PLAN[`${seed.vendor}:${seed.planCode}`];
   const [canonical] = canonicalSlug
     ? await database.select({ id: canonicalProducts.id }).from(canonicalProducts).where(eq(canonicalProducts.slug, canonicalSlug)).limit(1)
@@ -154,14 +157,35 @@ async function latestCnyRate(database: Database, currency: string) {
   return row ? { id: row.id, rate: Number(row.rate) } : null;
 }
 
-async function upsertPrice(database: Database, seed: PriceSeed, verifiedAt: Date): Promise<void> {
+async function upsertPrice(
+  database: Database,
+  seed: PriceSeed,
+  verifiedAt: Date,
+  options: { preserveVerifiedAtWhenUnchanged?: boolean } = {},
+): Promise<void> {
   const plan = PLAN_SEEDS.find((item) => item.vendor === seed.vendor && item.planCode === seed.planCode);
   if (!plan) throw new Error(`unknown_official_plan:${seed.vendor}:${seed.planCode}`);
   const planId = await upsertPlan(database, plan);
   const rate = await latestCnyRate(database, seed.currency);
   const cnyEstimate = seed.amount !== undefined && rate ? seed.amount * rate.rate : undefined;
+  const normalizedCnyEstimate = numberString(cnyEstimate);
+  const exchangeRateSnapshotId = rate?.id ?? null;
   const evidence = { ...(seed.evidence ?? {}), priceKind: seed.priceKind };
-  const evidenceHash = hashEvidence({ ...seed, evidence });
+  const evidenceHash = hashEvidence({
+    vendor: seed.vendor,
+    planCode: seed.planCode,
+    channel: seed.channel,
+    countryCode: seed.countryCode,
+    currency: seed.currency,
+    priceKind: seed.priceKind,
+    amount: seed.amount,
+    lowerAmount: seed.lowerAmount,
+    upperAmount: seed.upperAmount,
+    rawPlanName: seed.rawPlanName,
+    appId: seed.appId,
+    evidenceUrl: seed.evidenceUrl,
+    evidence,
+  });
   const [existing] = await database
     .select()
     .from(officialSubscriptionPrices)
@@ -172,7 +196,28 @@ async function upsertPrice(database: Database, seed: PriceSeed, verifiedAt: Date
       eq(officialSubscriptionPrices.rawPlanName, seed.rawPlanName),
     ))
     .limit(1);
-  const changed = !existing || existing.evidenceHash !== evidenceHash;
+  const sourcePriceChanged = !existing || existing.evidenceHash !== evidenceHash;
+  const conversionChanged = Boolean(existing) && (
+    existing?.cnyEstimate !== normalizedCnyEstimate
+    || existing?.exchangeRateSnapshotId !== exchangeRateSnapshotId
+  );
+  const shouldTouchVerification = sourcePriceChanged || !options.preserveVerifiedAtWhenUnchanged;
+  const updatedAt = new Date();
+  const conflictValues = {
+    currency: seed.currency,
+    priceKind: seed.priceKind,
+    amount: numberString(seed.amount),
+    lowerAmount: numberString(seed.lowerAmount),
+    upperAmount: numberString(seed.upperAmount),
+    cnyEstimate: normalizedCnyEstimate,
+    exchangeRateSnapshotId,
+    appId: seed.appId ?? null,
+    evidenceUrl: seed.evidenceUrl,
+    evidence,
+    evidenceHash,
+    ...(shouldTouchVerification ? { verifiedAt } : {}),
+    ...(shouldTouchVerification || conversionChanged ? { updatedAt } : {}),
+  };
   const [price] = await database
     .insert(officialSubscriptionPrices)
     .values({
@@ -184,8 +229,8 @@ async function upsertPrice(database: Database, seed: PriceSeed, verifiedAt: Date
       amount: numberString(seed.amount),
       lowerAmount: numberString(seed.lowerAmount),
       upperAmount: numberString(seed.upperAmount),
-      cnyEstimate: numberString(cnyEstimate),
-      exchangeRateSnapshotId: rate?.id ?? null,
+      cnyEstimate: normalizedCnyEstimate,
+      exchangeRateSnapshotId,
       rawPlanName: seed.rawPlanName,
       appId: seed.appId ?? null,
       evidenceUrl: seed.evidenceUrl,
@@ -195,25 +240,11 @@ async function upsertPrice(database: Database, seed: PriceSeed, verifiedAt: Date
     })
     .onConflictDoUpdate({
       target: [officialSubscriptionPrices.planId, officialSubscriptionPrices.channel, officialSubscriptionPrices.countryCode, officialSubscriptionPrices.rawPlanName],
-      set: {
-        currency: seed.currency,
-        priceKind: seed.priceKind,
-        amount: numberString(seed.amount),
-        lowerAmount: numberString(seed.lowerAmount),
-        upperAmount: numberString(seed.upperAmount),
-        cnyEstimate: numberString(cnyEstimate),
-        exchangeRateSnapshotId: rate?.id ?? null,
-        appId: seed.appId ?? null,
-        evidenceUrl: seed.evidenceUrl,
-        evidence,
-        evidenceHash,
-        verifiedAt,
-        updatedAt: verifiedAt,
-      },
+      set: conflictValues,
     })
     .returning({ id: officialSubscriptionPrices.id });
   if (!price) throw new Error("official_subscription_price_upsert_failed");
-  if (changed) {
+  if (sourcePriceChanged || conversionChanged) {
     await database.insert(officialSubscriptionPriceHistory).values({
       officialPriceId: price.id,
       currency: seed.currency,
@@ -221,38 +252,27 @@ async function upsertPrice(database: Database, seed: PriceSeed, verifiedAt: Date
       amount: numberString(seed.amount),
       lowerAmount: numberString(seed.lowerAmount),
       upperAmount: numberString(seed.upperAmount),
-      cnyEstimate: numberString(cnyEstimate),
+      cnyEstimate: normalizedCnyEstimate,
       evidenceUrl: seed.evidenceUrl,
       evidenceHash,
-      observedAt: verifiedAt,
+      observedAt: sourcePriceChanged ? verifiedAt : updatedAt,
     });
   }
 }
 
-export async function seedVerifiedSubscriptionPrices(database: Database, verifiedAt = new Date()): Promise<number> {
+export async function seedVerifiedSubscriptionPrices(database: Database): Promise<number> {
+  // These values were manually checked from official pages; hourly jobs must not make them appear newly fetched.
+  const verifiedAt = new Date("2026-09-04T00:00:00.000Z");
   for (const plan of PLAN_SEEDS) await upsertPlan(database, plan);
-  for (const price of VERIFIED_WEB_PRICES) await upsertPrice(database, price, verifiedAt);
+  for (const price of VERIFIED_WEB_PRICES) {
+    await upsertPrice(database, price, verifiedAt, { preserveVerifiedAtWhenUnchanged: true });
+  }
   return VERIFIED_WEB_PRICES.length;
-}
-
-function decodeHtml(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#x2F;|&#47;/g, "/")
-    .replace(/\s+/g, " ");
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function fetchText(url: string): Promise<string> {
   const response = await fetch(url, {
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(8_000),
     headers: { "user-agent": "AIPriceRadar/0.1 (+public-price-verification)" },
   });
   if (!response.ok) throw new Error(`price_source_http_${response.status}`);
@@ -263,58 +283,94 @@ async function fetchText(url: string): Promise<string> {
   return text;
 }
 
-export async function collectAppleAppStorePrices(database: Database, verifiedAt = new Date()): Promise<number> {
-  let saved = 0;
-  for (const target of APP_STORE_TARGETS) {
-    const evidenceUrl = `https://apps.apple.com/${target.countryCode.toLowerCase()}/app/id${target.appId}`;
-    const text = decodeHtml(await fetchText(evidenceUrl));
-    for (const [rawPlanName, planCode] of target.aliases) {
-      const expression = new RegExp(`${escapeRegex(rawPlanName)}\\s+\\$([0-9]+(?:\\.[0-9]{1,2})?)`, "i");
-      const match = text.match(expression);
-      if (!match?.[1]) continue;
-      await upsertPrice(database, {
-        vendor: target.vendor,
-        planCode,
-        channel: "app_store",
-        countryCode: target.countryCode,
-        currency: target.currency,
-        priceKind: "exact",
-        amount: Number(match[1]),
-        rawPlanName,
-        appId: target.appId,
-        evidenceUrl,
-        evidence: { sourceOwner: "Apple App Store", publicListing: true },
-      }, verifiedAt);
-      saved += 1;
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const item = items[index];
+      if (item !== undefined) results[index] = await task(item);
     }
   }
-  return saved;
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }
 
-export async function collectGooglePlayRanges(database: Database, verifiedAt = new Date()): Promise<number> {
-  let saved = 0;
-  for (const target of GOOGLE_PLAY_TARGETS) {
-    const evidenceUrl = `https://play.google.com/store/apps/details?id=${encodeURIComponent(target.packageId)}&hl=en_US&gl=US`;
-    const raw = await fetchText(evidenceUrl);
-    const text = decodeHtml(raw.replace(/\\u0026/g, "&"));
-    const range = text.match(/\$([0-9]+(?:\.[0-9]{1,2})?)\s*(?:[-–—]|to)\s*\$([0-9]+(?:\.[0-9]{1,2})?)[^$]{0,40}(?:item|purchase)/i);
+export async function verifyOfficialWebPrices(database: Database, verifiedAt = new Date()): Promise<number> {
+  const sourceUrls = [...new Set(VERIFIED_WEB_PRICES.map((price) => price.evidenceUrl))];
+  const fetchedPages = await mapWithConcurrency(sourceUrls, 4, async (sourceUrl) => {
+    try {
+      return [sourceUrl, await fetchText(sourceUrl)] as const;
+    } catch {
+      return [sourceUrl, null] as const;
+    }
+  });
+  const pageByUrl = new Map<string, string | null>(fetchedPages);
+  let verified = 0;
+  for (const price of VERIFIED_WEB_PRICES) {
+    const html = pageByUrl.get(price.evidenceUrl);
+    if (!html || price.amount === undefined || !price.verificationTerms) continue;
+    const extractedAmount = extractOfficialPagePrice(html, price.verificationTerms);
+    if (extractedAmount === null || extractedAmount < price.amount * 0.25 || extractedAmount > price.amount * 4) continue;
     await upsertPrice(database, {
-      vendor: target.vendor,
-      planCode: target.planCode,
-      channel: "google_play",
-      countryCode: target.countryCode,
-      currency: target.currency,
-      priceKind: range?.[1] && range[2] ? "range" : "unknown",
-      ...(range?.[1] ? { lowerAmount: Number(range[1]) } : {}),
-      ...(range?.[2] ? { upperAmount: Number(range[2]) } : {}),
-      rawPlanName: "Google Play public in-app purchase range",
-      appId: target.packageId,
-      evidenceUrl,
-      evidence: { sourceOwner: "Google Play", exactSkuPrice: false, listingSaysInAppPurchases: /in-app purchases/i.test(text) },
+      ...price,
+      amount: extractedAmount,
+      evidence: { ...(price.evidence ?? {}), publicPageParsed: true },
     }, verifiedAt);
-    saved += 1;
+    verified += 1;
   }
-  return saved;
+  return verified;
+}
+
+export async function collectAppleAppStorePrices(database: Database, verifiedAt = new Date()): Promise<number> {
+  const jobs = APP_STORE_TARGETS.flatMap((target) =>
+    OFFICIAL_SUBSCRIPTION_REGION_CATALOG.map((region) => ({ target, region })),
+  );
+  const results = await mapWithConcurrency(jobs, 12, async ({ target, region }) => {
+    const evidenceUrl = `https://apps.apple.com/${region.storefront}/app/id${target.appId}`;
+    try {
+      const listings = parseAppStorePriceListings(await fetchText(evidenceUrl), region.currency);
+      let saved = 0;
+      for (const alias of target.aliases) {
+        const listing = selectAppStorePlanPrice(
+          listings,
+          alias.rawPlanName,
+          alias.selection,
+          "mustBeLessThanPlanName" in alias ? { mustBeLessThanPlanName: alias.mustBeLessThanPlanName } : {},
+        );
+        if (!listing) continue;
+        await upsertPrice(database, {
+          vendor: target.vendor,
+          planCode: alias.planCode,
+          channel: "app_store",
+          countryCode: region.countryCode,
+          currency: region.currency,
+          priceKind: "exact",
+          amount: listing.amount,
+          rawPlanName: alias.rawPlanName,
+          appId: target.appId,
+          evidenceUrl,
+          evidence: {
+            sourceOwner: "Apple App Store",
+            publicListing: true,
+            storefront: region.storefront,
+            displayedAmount: listing.displayAmount,
+          },
+        }, verifiedAt);
+        saved += 1;
+      }
+      return saved;
+    } catch {
+      return 0;
+    }
+  });
+  return results.reduce((total, count) => total + count, 0);
 }
 
 function parseEcbCsv(csv: string): Map<string, { date: string; rate: number }> {
@@ -338,16 +394,32 @@ function parseEcbCsv(csv: string): Map<string, { date: string; rate: number }> {
 }
 
 export async function refreshEcbCnyRates(database: Database): Promise<number> {
-  const sourceUrl = "https://data-api.ecb.europa.eu/service/data/EXR/D.CNY+USD.EUR.SP00.A?format=csvdata&startPeriod=2026-01-01";
+  const currencies = [...new Set([
+    "CNY",
+    ...OFFICIAL_SUBSCRIPTION_REGION_CATALOG
+      .map((region) => region.currency)
+      .filter((currency) => currency !== "EUR" && currency !== "TWD"),
+  ])];
+  const startYear = new Date().getUTCFullYear() - 1;
+  const sourceUrl = `https://data-api.ecb.europa.eu/service/data/EXR/D.${currencies.join("+")}.EUR.SP00.A?format=csvdata&startPeriod=${startYear}-01-01`;
   const csv = await fetchText(sourceUrl);
   const values = parseEcbCsv(csv);
   const cny = values.get("CNY");
-  const usd = values.get("USD");
-  if (!cny || !usd) throw new Error("ecb_cny_or_usd_missing");
-  const rows = [
+  if (!cny) throw new Error("ecb_cny_missing");
+  const rows: Array<{ baseCurrency: string; quoteCurrency: "CNY"; rate: number; effectiveDate: string }> = [
     { baseCurrency: "EUR", quoteCurrency: "CNY", rate: cny.rate, effectiveDate: cny.date },
-    { baseCurrency: "USD", quoteCurrency: "CNY", rate: cny.rate / usd.rate, effectiveDate: cny.date < usd.date ? cny.date : usd.date },
   ];
+  for (const currency of currencies) {
+    if (currency === "CNY") continue;
+    const value = values.get(currency);
+    if (!value) continue;
+    rows.push({
+      baseCurrency: currency,
+      quoteCurrency: "CNY",
+      rate: cny.rate / value.rate,
+      effectiveDate: cny.date < value.date ? cny.date : value.date,
+    });
+  }
   for (const row of rows) {
     await database.insert(exchangeRateSnapshots).values({
       ...row,
@@ -366,10 +438,9 @@ export async function refreshOfficialSubscriptionChannels(database: Database): P
   const verifiedAt = new Date();
   let exchangeRates = 0;
   try { exchangeRates = await refreshEcbCnyRates(database); } catch { /* keep native prices when ECB is unavailable */ }
-  const seededPrices = await seedVerifiedSubscriptionPrices(database, verifiedAt);
+  const seededPrices = await seedVerifiedSubscriptionPrices(database);
+  const verifiedWebPrices = await verifyOfficialWebPrices(database, verifiedAt);
   let appStorePrices = 0;
-  let googlePlayRanges = 0;
   try { appStorePrices = await collectAppleAppStorePrices(database, verifiedAt); } catch { /* one source outage must not erase current values */ }
-  try { googlePlayRanges = await collectGooglePlayRanges(database, verifiedAt); } catch { /* preserve the last verified observation */ }
-  return { exchangeRates, seededPrices, appStorePrices, googlePlayRanges };
+  return { exchangeRates, seededPrices, verifiedWebPrices, appStorePrices, googlePlayRanges: 0 };
 }

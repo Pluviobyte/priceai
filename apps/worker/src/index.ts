@@ -236,7 +236,7 @@ const schedulerTimer = setInterval(() => {
 schedulerTimer.unref();
 const priceRefreshTimer = setInterval(() => {
   void refreshPriceChannels().catch((error: unknown) => logger.error({ error }, "price channel refresh failed"));
-}, 6 * 60 * 60 * 1_000);
+}, config.priceRefreshIntervalMs);
 priceRefreshTimer.unref();
 const discoveryTimer = setInterval(() => {
   void runSourceDiscovery().catch((error: unknown) => logger.error({ error }, "source discovery failed"));

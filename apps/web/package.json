@@ -10,9 +10,12 @@
   },
   "dependencies": {
     "@price-radar/classifier": "*",
+    "@price-radar/database": "*",
     "@price-radar/object-storage": "*",
+    "@price-radar/price-channels": "*",
     "@price-radar/ranking": "*",
     "@price-radar/schema": "*",
+    "drizzle-orm": "0.45.2",
     "next": "16.3.4",
     "pg": "8.23.0",
     "react": "19.2.8",

@@ -140,8 +140,9 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   const moreId = `${baseId}-more`;
   const drawerId = `${baseId}-drawer`;
   const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
+  const themeToggleLabel = dark ? "切换到浅色模式" : "切换到深色模式";
 
-  // 读取已保存的深浅色偏好。layout 里的内联脚本已在首屏前应用，这里只同步控件状态。
+  // 读取已保存的深浅色偏好，并同步页面与控件状态。
   useEffect(() => {
     const root = document.documentElement;
     const nextDark = readStorage(THEME_KEY) === "dark";
@@ -294,10 +295,13 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                 <a className="site-icon-button site-social-button site-github-button" href="https://github.com/Pluviobyte/priceai" target="_blank" rel="noopener noreferrer" aria-label="打开 PriceAI GitHub 仓库" title="GitHub">
                   <Icon name="github" size={18} />
                 </a>
-                <Link className="site-icon-button site-social-button site-account-button" href={loginHref} aria-label="登录个人账户" title="登录个人账户">
-                  <Icon name="user" size={17} />
-                </Link>
               </div>
+              <button className="site-icon-button site-social-button site-theme-toggle" type="button" onClick={toggleTheme} aria-label={themeToggleLabel} title={themeToggleLabel} aria-pressed={dark}>
+                <Icon name={dark ? "sun" : "moon"} size={17} />
+              </button>
+              <Link className="site-icon-button site-social-button site-account-button site-desktop-account" href={loginHref} aria-label="登录个人账户" title="登录个人账户">
+                <Icon name="user" size={17} />
+              </Link>
               <button ref={menuToggleRef} className="site-icon-button site-menu-toggle" type="button" aria-expanded={drawerOpen} aria-controls={drawerId} aria-label="打开站点菜单" onClick={() => setDrawerOpen(true)}>
                 <Icon name="menu" size={18} />
               </button>

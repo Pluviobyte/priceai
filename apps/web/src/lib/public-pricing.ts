@@ -19,6 +19,7 @@ export interface OfficialSubscriptionPrice {
   evidenceUrl: string;
   verifiedAt: Date;
   exchangeRateDate: string | null;
+  exchangeRateUrl: string | null;
   historyCount: number;
 }
 
@@ -41,7 +42,18 @@ interface SubscriptionRow {
   evidence_url: string;
   verified_at: Date;
   exchange_rate_date: string | null;
+  exchange_rate_url: string | null;
   history_count: string;
+}
+
+const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 36 * 60 * 60 * 1_000;
+
+export function isFreshOfficialSubscriptionPrice(
+  row: Pick<OfficialSubscriptionPrice, "verifiedAt">,
+  now = Date.now(),
+): boolean {
+  const verifiedAt = new Date(row.verifiedAt).getTime();
+  return Number.isFinite(verifiedAt) && verifiedAt <= now + 5 * 60_000 && now - verifiedAt <= OFFICIAL_SUBSCRIPTION_FRESHNESS_MS;
 }
 
 export interface OfficialReferencePrice {
@@ -165,13 +177,14 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
             p.price_kind, p.amount, p.lower_amount, p.upper_amount,
             p.cny_estimate, p.raw_plan_name, p.app_id, p.evidence_url,
             p.verified_at, er.effective_date::text as exchange_rate_date,
+            er.source_url as exchange_rate_url,
             count(h.id)::text as history_count
        from official_subscription_prices p
        join official_subscription_plans pl on pl.id=p.plan_id
        left join exchange_rate_snapshots er on er.id=p.exchange_rate_snapshot_id
        left join official_subscription_price_history h on h.official_price_id=p.id
       where pl.active=true
-      group by p.id,pl.id,er.effective_date
+      group by p.id,pl.id,er.id
       order by pl.vendor,pl.display_name,
                case p.price_kind when 'exact' then 0 when 'range' then 1 else 2 end,
                p.cny_estimate nulls last,p.channel,p.country_code`,
@@ -183,7 +196,8 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
     lowerAmount: row.lower_amount, upperAmount: row.upper_amount,
     cnyEstimate: row.cny_estimate, rawPlanName: row.raw_plan_name, appId: row.app_id,
     evidenceUrl: row.evidence_url, verifiedAt: row.verified_at,
-    exchangeRateDate: row.exchange_rate_date, historyCount: Number(row.history_count),
+    exchangeRateDate: row.exchange_rate_date, exchangeRateUrl: row.exchange_rate_url,
+    historyCount: Number(row.history_count),
   }));
 }
 

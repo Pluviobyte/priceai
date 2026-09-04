@@ -1,0 +1,119 @@
+export interface AppStorePriceListing {
+  rawPlanName: string;
+  displayAmount: string;
+  amount: number;
+}
+
+function decodeInlineHtml(value: string): string {
+  return value
+    .replace(/&nbsp;|&#160;|\u00a0/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#x2F;|&#47;/gi, "/")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function visibleTextFromHtml(html: string): string {
+  return decodeInlineHtml(
+    html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " "),
+  );
+}
+
+export function extractOfficialPagePrice(html: string, requiredTerms: readonly string[]): number | null {
+  const [anchorTerm, ...nearbyTerms] = requiredTerms;
+  if (!anchorTerm) return null;
+  const visibleText = visibleTextFromHtml(html);
+  const normalizedText = visibleText.toLocaleLowerCase("en-US");
+  const normalizedAnchor = anchorTerm.toLocaleLowerCase("en-US");
+  const candidates: Array<{ amount: number; score: number }> = [];
+  let anchorIndex = normalizedText.indexOf(normalizedAnchor);
+  while (anchorIndex >= 0) {
+    const windowStart = Math.max(0, anchorIndex - 120);
+    const windowEnd = Math.min(visibleText.length, anchorIndex + normalizedAnchor.length + 500);
+    const textWindow = visibleText.slice(windowStart, windowEnd);
+    const normalizedWindow = normalizedText.slice(windowStart, windowEnd);
+    if (nearbyTerms.every((term) => normalizedWindow.includes(term.toLocaleLowerCase("en-US")))) {
+      const pricePattern = /(?:US\s*)?\$\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/gi;
+      for (const match of textWindow.matchAll(pricePattern)) {
+        const amount = Number((match[1] ?? "").replaceAll(",", ""));
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        const globalPriceIndex = windowStart + (match.index ?? 0);
+        const anchorEnd = anchorIndex + normalizedAnchor.length;
+        const distance = Math.abs(globalPriceIndex - anchorEnd);
+        candidates.push({ amount, score: globalPriceIndex >= anchorEnd ? distance : distance + 500 });
+      }
+    }
+    anchorIndex = normalizedText.indexOf(normalizedAnchor, anchorIndex + normalizedAnchor.length);
+  }
+  return candidates.sort((left, right) => left.score - right.score)[0]?.amount ?? null;
+}
+
+export function officialPageConfirmsPrice(html: string, requiredTerms: readonly string[], amount: number): boolean {
+  return extractOfficialPagePrice(html, requiredTerms) === amount;
+}
+
+function parseNumber(value: string, currency: string): number | null {
+  const compact = value.replace(/[\s\u00a0]/g, "");
+  const match = compact.match(/[0-9][0-9.,]*/);
+  if (!match) return null;
+
+  let raw = match[0];
+  const suffix = compact.slice((match.index ?? 0) + raw.length).toLowerCase();
+  const isIndonesianMillion = currency === "IDR" && suffix.startsWith("juta");
+  const isIndonesianThousand = currency === "IDR" && suffix.startsWith("ribu");
+
+  if (isIndonesianMillion) {
+    raw = raw.replace(/\./g, "").replace(",", ".");
+  } else if (raw.includes(",") && raw.includes(".")) {
+    const decimalMark = raw.lastIndexOf(",") > raw.lastIndexOf(".") ? "," : ".";
+    const thousandsMark = decimalMark === "," ? "." : ",";
+    raw = raw.replaceAll(thousandsMark, "").replace(decimalMark, ".");
+  } else if (raw.includes(",")) {
+    const trailing = raw.length - raw.lastIndexOf(",") - 1;
+    raw = trailing > 0 && trailing <= 2 ? raw.replace(",", ".") : raw.replaceAll(",", "");
+  } else if ((raw.match(/\./g) ?? []).length > 1) {
+    const trailing = raw.length - raw.lastIndexOf(".") - 1;
+    raw = trailing === 2 ? `${raw.slice(0, raw.lastIndexOf(".")).replaceAll(".", "")}.${raw.slice(raw.lastIndexOf(".") + 1)}` : raw.replaceAll(".", "");
+  }
+
+  const amount = Number(raw);
+  if (!Number.isFinite(amount)) return null;
+  if (isIndonesianMillion) return amount * 1_000_000;
+  if (isIndonesianThousand) return amount * 1_000;
+  return amount;
+}
+
+export function parseAppStorePriceListings(html: string, currency: string): AppStorePriceListing[] {
+  const listings: AppStorePriceListing[] = [];
+  const pairPattern = /<span\b[^>]*>([\s\S]*?)<\/span>\s*<span\b[^>]*>([\s\S]*?)<\/span>/gi;
+  for (const match of html.matchAll(pairPattern)) {
+    const rawPlanName = decodeInlineHtml(match[1] ?? "");
+    const displayAmount = decodeInlineHtml(match[2] ?? "");
+    if (!rawPlanName || !displayAmount || !/^(ChatGPT|Claude|Gemini|Google AI|SuperGrok)/i.test(rawPlanName)) continue;
+    const amount = parseNumber(displayAmount, currency);
+    if (amount === null) continue;
+    listings.push({ rawPlanName, displayAmount, amount });
+  }
+  return listings;
+}
+
+export function selectAppStorePlanPrice(
+  listings: readonly AppStorePriceListing[],
+  rawPlanName: string,
+  selection: "first" | "lowest" = "first",
+  options: { mustBeLessThanPlanName?: string } = {},
+): AppStorePriceListing | null {
+  const matches = listings.filter((listing) => listing.rawPlanName.toLocaleLowerCase("en-US") === rawPlanName.toLocaleLowerCase("en-US"));
+  if (!matches.length) return null;
+  const selected = selection === "lowest"
+    ? [...matches].sort((left, right) => left.amount - right.amount)[0] ?? null
+    : matches[0] ?? null;
+  if (!selected || !options.mustBeLessThanPlanName) return selected;
+  const upperBound = listings
+    .filter((listing) => listing.rawPlanName.toLocaleLowerCase("en-US") === options.mustBeLessThanPlanName!.toLocaleLowerCase("en-US"))
+    .sort((left, right) => left.amount - right.amount)[0];
+  return upperBound && selected.amount < upperBound.amount ? selected : null;
+}

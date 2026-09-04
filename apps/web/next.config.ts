@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   transpilePackages: [
     "@price-radar/classifier",
+    "@price-radar/database",
+    "@price-radar/price-channels",
     "@price-radar/ranking",
     "@price-radar/schema",
   ],
