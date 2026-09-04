@@ -694,106 +694,6 @@ html[data-theme="dark"] .blue-engine-table-head { background: #18223a; }
 html[data-theme="dark"] .blue-engine-range-track { background: #25324d; }
 html[data-theme="dark"] .blue-engine-range-fill { background: #405a95; }
 
-/* Parallel green edition: enabled by PRICEAI_COLOR_THEME=green. */
-html[data-brand-theme="green"] {
-  --color-page: #f9f9f9;
-  --color-page-translucent: #f9f9f9f2;
-  --color-panel: #fff;
-  --color-panel-soft: #fbfcfc;
-  --color-surface: #f2f4f4;
-  --color-surface-raised: #fff;
-  --color-surface-hover: #edf0f1;
-  --color-surface-muted: #e4e9ea;
-  --color-surface-selected: #dde4e5;
-  --color-text-primary: #202829;
-  --color-text-body: #2d3435;
-  --color-text-muted: #5a6061;
-  --color-text-soft: #6f7778;
-  --color-text-on-primary: #f8f8f8;
-  --color-border: #dfe4e5;
-  --color-border-subtle: #edf0f1;
-  --color-border-muted: #adb3b447;
-  --color-border-soft: #adb3b42e;
-  --color-primary: #2d3435;
-  --color-primary-strong: #202829;
-  --color-primary-hover: #1f2526;
-  --color-nav-active: #2d3435;
-  --color-nav-active-text: #f8f8f8;
-  --color-brand: #45bf78;
-  --color-logo-lens-bg: #f8fbf9;
-  --accent-deep: #2f7a4b;
-  --accent-soft: #e8f3ec;
-}
-html[data-brand-theme="green"][data-theme="dark"] {
-  --color-page: #111718;
-  --color-page-translucent: #111718f0;
-  --color-panel: #182122;
-  --color-panel-soft: #1b2526;
-  --color-surface: #1f292a;
-  --color-surface-raised: #243132;
-  --color-surface-hover: #2a3637;
-  --color-surface-muted: #263233;
-  --color-surface-selected: #314143;
-  --color-text-primary: #d7e1de;
-  --color-text-body: #c8d2cf;
-  --color-text-muted: #9eaaa7;
-  --color-text-soft: #879693;
-  --color-text-on-primary: #dce5e2;
-  --color-border: #334142;
-  --color-border-subtle: #263334;
-  --color-border-muted: #9aaaa638;
-  --color-border-soft: #9aaaa624;
-  --color-primary: #243132;
-  --color-primary-strong: #2c3a3b;
-  --color-primary-hover: #314143;
-  --color-nav-active: #314143;
-  --color-nav-active-text: #d7e1de;
-  --color-brand: #65cc8c;
-  --color-logo-lens-bg: #17211e;
-  --accent-deep: #77d59c;
-  --accent-soft: #45bf7821;
-}
-html[data-brand-theme="green"] .priceai-delivery-section { background: var(--color-page); }
-html[data-brand-theme="green"] .priceai-catalog-toolbar nav a.apply,
-html[data-brand-theme="green"] .priceai-transit-actions a.apply { box-shadow: 0 0 0 1px #b9d8c9; }
-html[data-brand-theme="green"] .priceai-sponsor-head a { color: var(--accent-deep); }
-html[data-brand-theme="green"] .blue-engine {
-  --blue-ink: #202829;
-  --blue-body: #5a6061;
-  --blue-muted: #77817d;
-  --blue-line: #dfe4e5;
-  --blue-brand: #2f7a4b;
-  --blue-green: #137a52;
-  background: var(--color-page);
-}
-html[data-brand-theme="green"] .blue-engine-hero { background: var(--color-page); }
-html[data-brand-theme="green"] .blue-engine-eyebrow i { box-shadow: 0 0 0 5px rgba(47, 122, 75, .1); }
-html[data-brand-theme="green"] .blue-engine-find button,
-html[data-brand-theme="green"] .blue-engine-find button:hover { box-shadow: none; }
-html[data-brand-theme="green"] .blue-engine-range-fill { background: #c8dfd1; }
-html[data-brand-theme="green"] .blue-engine-guide { background: #202827; }
-html[data-brand-theme="green"] .blue-engine-guide-label,
-html[data-brand-theme="green"] .blue-engine-guide li span,
-html[data-brand-theme="green"] .blue-engine-guide > a { color: #77d59c; }
-html[data-brand-theme="green"][data-theme="dark"] .priceai-delivery-section { background: var(--color-page); }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine {
-  --blue-ink: #d7e1de;
-  --blue-body: #a5b0ad;
-  --blue-muted: #879693;
-  --blue-line: #334142;
-  --blue-brand: #77d59c;
-  background: #111718;
-}
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-hero { background: var(--color-page); }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-find,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-toolbar nav a.active,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-table,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-row,
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-changes { background: #182122; }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-mark { background: #263233; }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-toolbar nav { background: #263233; }
-html[data-brand-theme="green"][data-theme="dark"] .blue-engine-table-head { background: #1b2526; }
-
 html { background: var(--color-page); }
 body { color: var(--color-text-body); background: var(--color-page); font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; }
 .priceai-page { min-height: 100vh; background: var(--color-page); color: var(--color-text-body); }
@@ -996,7 +896,6 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .priceai-cube-logo-fallback img { width: 100%; height: 100%; padding: 2px; border: 1px solid rgba(79,97,117,.12); border-radius: 2px; background: #f7f8f8; opacity: .82; }
 html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7px rgba(0, 0, 0, .42)); }
 .site-brand-mark { --site-mark-bg: var(--color-primary); --site-mark-ink: var(--color-text-on-primary); width: 28px; height: 28px; flex: 0 0 auto; display: block; }
-html[data-brand-theme="green"][data-theme="dark"] .site-brand-mark { --site-mark-bg: var(--color-brand); --site-mark-ink: #0f1a15; }
 .site-brand-name { font-size: 14px; font-weight: 650; line-height: 1; letter-spacing: -.015em; white-space: nowrap; }
 .site-brand-tagline { display: none; }
 .site-search { flex: 1 1 auto; max-width: 400px; height: 38px; margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-page); color: var(--color-text-muted); transition: border-color .15s ease, box-shadow .15s ease; }
@@ -1040,14 +939,6 @@ html[data-brand-theme="green"][data-theme="dark"] .site-brand-mark { --site-mark
 .site-menu a[aria-current="page"] { background: var(--color-surface); box-shadow: inset 3px 0 0 var(--color-brand); }
 .site-menu-action { width: calc(100% - 8px); min-height: 36px; display: flex; align-items: center; gap: 9px; margin: 0 4px 5px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text-primary); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
 .site-menu-action:hover { background: var(--color-surface-hover); }
-.site-edition { display: flex; gap: 6px; padding: 2px 10px 6px; }
-.site-edition button { flex: 1; height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-panel); color: var(--color-text-muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
-.site-edition button:hover { color: var(--color-text-primary); }
-.site-edition button[aria-pressed="true"] { border-color: var(--color-text-primary); color: var(--color-text-primary); }
-.site-edition i { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(17, 24, 39, .1); }
-.site-edition i.blue { background: #5b7bc0; }
-.site-edition i.green { background: #4faf76; }
-
 .site-drawer { position: fixed; inset: 0; z-index: 60; overflow-y: auto; overscroll-behavior: contain; color: var(--color-text-body); background: var(--color-page); }
 .site-drawer-inner { width: min(560px, calc(100% - 32px)); margin: 0 auto; padding: 8px 0 40px; }
 .site-drawer-head { min-height: 54px; display: flex; align-items: center; justify-content: space-between; }
@@ -1061,8 +952,6 @@ html[data-brand-theme="green"][data-theme="dark"] .site-brand-mark { --site-mark
 .site-drawer-section a small { flex: 0 1 auto; color: var(--color-text-muted); font-size: 12px; font-weight: 500; text-align: right; }
 .site-drawer-section a[aria-current="page"] { border-color: var(--color-brand); box-shadow: inset 3px 0 0 var(--color-brand); }
 .site-drawer-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--color-border); }
-.site-drawer-foot .site-edition { flex: 1 1 100%; padding: 4px 0 0; }
-
 @media (max-width: 959px) {
   .site-header-frame { padding-inline: 16px; }
   .site-header.is-stuck .site-header-frame { padding: 12px 12px 0; }

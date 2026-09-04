@@ -23,10 +23,8 @@ export type HeaderSection =
 type NavKey = HeaderSection | "merchant-feed" | "wholesale" | "commercial" | "support";
 type NavLink = { key: NavKey; label: string; href: string; note?: string };
 type NavGroup = { id: string; kicker: string; summary: string; links: readonly NavLink[] };
-type Edition = "blue" | "green";
 
 const THEME_KEY = "priceai-theme";
-const EDITION_KEY = "priceai-color-theme";
 
 /**
  * 主导航按购买路径分组，而不是平铺频道：
@@ -127,20 +125,10 @@ function SearchForm({ id, inputRef }: { id: string; inputRef?: React.RefObject<H
   );
 }
 
-function EditionSwitch({ edition, onSelect }: { edition: Edition; onSelect: (next: Edition) => void }) {
-  return (
-    <div className="site-edition" role="group" aria-label="站点配色">
-      <button type="button" aria-pressed={edition === "blue"} onClick={() => onSelect("blue")}><i className="blue" />蓝色版</button>
-      <button type="button" aria-pressed={edition === "green"} onClick={() => onSelect("green")}><i className="green" />绿色版</button>
-    </div>
-  );
-}
-
 export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   const pathname = usePathname();
   const baseId = useId();
   const [dark, setDark] = useState(false);
-  const [edition, setEdition] = useState<Edition>("blue");
   const [stuck, setStuck] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -153,16 +141,12 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   const drawerId = `${baseId}-drawer`;
   const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
 
-  // 读取已保存的外观偏好。layout 里的内联脚本已在首屏前应用，这里只同步控件状态。
+  // 读取已保存的深浅色偏好。layout 里的内联脚本已在首屏前应用，这里只同步控件状态。
   useEffect(() => {
     const root = document.documentElement;
     const nextDark = readStorage(THEME_KEY) === "dark";
-    const storedEdition = readStorage(EDITION_KEY);
-    const nextEdition: Edition = storedEdition === "green" || storedEdition === "blue" ? storedEdition : root.dataset.brandTheme === "green" ? "green" : "blue";
     setDark(nextDark);
-    setEdition(nextEdition);
     root.dataset.theme = nextDark ? "dark" : "light";
-    root.dataset.brandTheme = nextEdition;
   }, []);
 
   // 与 New API 一致：越过 20px 后将宽导航收拢为居中的轻量浮动栏。
@@ -234,12 +218,6 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
     writeStorage(THEME_KEY, next ? "dark" : "light");
   }
 
-  function selectEdition(next: Edition) {
-    setEdition(next);
-    document.documentElement.dataset.brandTheme = next;
-    writeStorage(EDITION_KEY, next);
-  }
-
   function renderNavLink(link: NavLink) {
     const current = isActive(active, link.key);
     return <Link href={link.href} aria-current={current ? "page" : undefined} key={link.key}>{link.label}</Link>;
@@ -300,7 +278,6 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                           <Icon name={dark ? "sun" : "moon"} size={16} />
                           <span>{dark ? "切换到浅色模式" : "切换到深色模式"}</span>
                         </button>
-                        <EditionSwitch edition={edition} onSelect={selectEdition} />
                       </div>
                     </div>
                   )}
@@ -364,7 +341,6 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                 <Icon name={dark ? "sun" : "moon"} size={16} />
                 {dark ? "浅色模式" : "深色模式"}
               </button>
-              <EditionSwitch edition={edition} onSelect={selectEdition} />
             </div>
           </div>
         </div>

@@ -16,12 +16,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  const colorTheme = process.env.PRICEAI_COLOR_THEME === "green" ? "green" : "blue";
-  // 首屏前恢复深浅色与配色版本，避免页面先以默认外观闪一下。
-  const appearanceInit = `(function(){try{var root=document.documentElement;var theme=localStorage.getItem("priceai-theme");if(theme==="dark"||theme==="light")root.dataset.theme=theme;var edition=localStorage.getItem("priceai-color-theme");if(edition==="blue"||edition==="green")root.dataset.brandTheme=edition}catch(_){}})()`;
+  // 首屏前恢复深浅色模式，避免页面先以默认外观闪一下。
+  const appearanceInit = `(function(){try{var root=document.documentElement;var theme=localStorage.getItem("priceai-theme");if(theme==="dark"||theme==="light")root.dataset.theme=theme}catch(_){}})()`;
 
   return (
-    <html lang="zh-CN" data-brand-theme={colorTheme} suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <Script id="site-appearance-init" strategy="beforeInteractive">{appearanceInit}</Script>
       </head>
