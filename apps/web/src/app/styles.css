@@ -16,7 +16,7 @@ html { scroll-padding-top: 64px; background: var(--paper); }
 /* 首屏两个按钮是页内跳转，滑过去比瞬间跳更容易看清落到了哪一节。 */
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 @media (prefers-reduced-motion: reduce) {
-  .site-header-frame, .site-header-bar, .site-nav-more > button svg { transition: none !important; }
+  .site-header-frame, .site-header-bar, .site-nav-more > button svg, .site-announcement-inner { transition: none !important; animation: none !important; }
 }
 
 body {
@@ -304,6 +304,27 @@ footer nav a { padding: 7px 9px; font-size: 12px; }
 .public-form input, .public-form textarea, .public-form select { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 12px 13px; color: var(--ink); background: white; font: inherit; }
 .public-form textarea { min-height: 95px; resize: vertical; }
 .public-form button { border: 0; border-radius: 11px; padding: 14px 18px; color: white; background: var(--ink); cursor: pointer; font-weight: 750; }
+.admin-announcement-settings { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 28px; margin-bottom: 36px; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: var(--white); }
+.admin-announcement-settings h2, .admin-announcement-create h2, .admin-announcement-list h2 { margin: 0; font-size: 21px; }
+.admin-announcement-settings p, .admin-announcement-create > div > p { margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.admin-announcement-settings form { display: flex; align-items: end; gap: 10px; }
+.admin-announcement-settings label, .admin-announcement-edit label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.admin-announcement-settings input[type="number"], .admin-announcement-edit input, .admin-announcement-edit select { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; font: inherit; }
+.admin-check { min-height: 40px; display: flex !important; flex-direction: row; align-items: center; gap: 8px !important; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: white; white-space: nowrap; }
+.admin-check input { accent-color: var(--accent-deep); }
+.admin-announcement-settings button, .admin-announcement-edit button { min-height: 40px; padding: 9px 14px; border: 0; border-radius: 10px; color: white; background: var(--ink); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.admin-announcement-create { margin-bottom: 42px; }
+.admin-announcement-create > div { margin-bottom: -14px; }
+.admin-create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-field-wide { grid-column: 1 / -1; }
+.admin-announcement-list-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.admin-announcement-list-head span { color: var(--muted); font-size: 12px; }
+.admin-announcement-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.admin-announcement-preview small { padding: 4px 8px; border-radius: 999px; color: var(--accent-deep); background: var(--accent-soft); font-weight: 750; }
+.admin-announcement-preview b { font-size: 14px; }
+.admin-announcement-preview span { color: var(--muted); font-size: 12px; }
+.admin-announcement-preview em { margin-left: auto; color: var(--accent-deep); font-size: 12px; font-style: normal; font-weight: 750; }
+.admin-announcement-edit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); }
 .submission-paths { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 30px; }
 .submission-paths > * { display: grid; gap: 5px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--white); }
 .submission-paths > .active { border-color: color-mix(in oklch, var(--accent-deep) 34%, var(--line)); background: var(--accent-soft); }
@@ -946,6 +967,21 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 /* Site header ---------------------------------------------------------------
    结构和滚动态对齐 New API：首屏是 64px 的透明宽栏，向下滚动后收成
    52rem × 48px 的居中浮层。导航项保持文本态，只让整条导航产生容器层级。 */
+.site-announcement { position: relative; z-index: 51; min-height: 48px; display: grid; align-items: center; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); background: color-mix(in oklch, var(--color-panel) 96%, var(--color-brand) 4%); }
+.site-announcement::before { position: absolute; inset: auto 0 -1px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--color-brand) 38%, transparent), transparent); content: ""; pointer-events: none; }
+.site-announcement-inner { width: min(1180px, calc(100% - 40px)); min-height: 48px; margin-inline: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 14px; animation: site-announcement-in .38s cubic-bezier(.16, 1, .3, 1) both; }
+.site-announcement-badge { min-height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid color-mix(in oklch, var(--color-brand) 18%, var(--color-border)); border-radius: 999px; color: var(--color-text-muted); background: color-mix(in oklch, var(--color-panel) 88%, var(--color-brand) 12%); font-size: 11px; font-weight: 650; white-space: nowrap; }
+.site-announcement-badge svg { width: 14px; height: 14px; fill: none; stroke: var(--color-brand); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.site-announcement-copy { min-width: 0; display: flex; align-items: baseline; justify-content: center; gap: 11px; overflow: hidden; text-align: center; }
+.site-announcement-copy strong { flex: 0 1 auto; overflow: hidden; color: var(--color-text-primary); font-size: 13px; font-weight: 650; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.site-announcement-copy span { flex: 0 1 auto; overflow: hidden; color: var(--color-text-muted); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.site-announcement-cta { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 2px 7px oklch(22% .025 257 / 5%); font-size: 12px; font-weight: 650; white-space: nowrap; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+.site-announcement-cta:hover { border-color: color-mix(in oklch, var(--color-brand) 46%, var(--color-border)); box-shadow: 0 4px 12px oklch(22% .025 257 / 9%); transform: translateY(-1px); }
+.site-announcement-cta span { color: var(--color-brand); font-size: 14px; }
+.site-announcement-pages { min-width: 28px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.site-announcement-pages button { width: 5px; height: 5px; padding: 0; border: 0; border-radius: 999px; background: var(--color-border-muted); cursor: pointer; transition: width .2s ease, background .2s ease; }
+.site-announcement-pages button.active { width: 13px; background: var(--color-brand); }
+@keyframes site-announcement-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 .site-header { position: sticky; top: 0; z-index: 50; height: 64px; pointer-events: none; }
 .site-header-frame { width: 100%; max-width: 1280px; height: 64px; margin-inline: auto; padding: 0 24px; transition: max-width .7s cubic-bezier(.16, 1, .3, 1), padding .7s cubic-bezier(.16, 1, .3, 1); }
 .site-header-bar { height: 64px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 8px; border: .5px solid transparent; border-radius: 0; background: transparent; box-shadow: none; pointer-events: auto; transition: height .7s cubic-bezier(.16, 1, .3, 1), padding .7s cubic-bezier(.16, 1, .3, 1), border-color .7s cubic-bezier(.16, 1, .3, 1), border-radius .7s cubic-bezier(.16, 1, .3, 1), background .7s cubic-bezier(.16, 1, .3, 1), box-shadow .7s cubic-bezier(.16, 1, .3, 1); }
@@ -1033,6 +1069,21 @@ html[data-brand-theme="green"][data-theme="dark"] .site-brand-mark { --site-mark
   .site-nav, .site-desktop-actions, .site-header-divider { display: none; }
   .site-header-actions { margin-left: auto; }
   .site-menu-toggle { display: inline-grid; }
+}
+
+@media (max-width: 760px) {
+  .admin-announcement-settings { grid-template-columns: 1fr; }
+  .admin-announcement-settings form { align-items: stretch; flex-direction: column; }
+  .admin-create-form, .admin-announcement-edit { grid-template-columns: 1fr; }
+  .admin-field-wide { grid-column: auto; }
+  .site-announcement-inner { width: calc(100% - 24px); grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+  .site-announcement-copy { justify-content: flex-start; text-align: left; }
+  .site-announcement-copy span, .site-announcement-pages { display: none; }
+}
+
+@media (max-width: 480px) {
+  .site-announcement-badge { width: 28px; padding: 0; justify-content: center; font-size: 0; }
+  .site-announcement-cta { min-height: 28px; padding-inline: 10px; font-size: 11px; }
 }
 
 .priceai-home { background: var(--color-page); }
@@ -1727,4 +1778,109 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
   .priceai-product-hero h1 { font-size: 30px; }
   .priceai-product-heading, .priceai-product-guide { align-items: flex-start; flex-direction: column; padding-block: 18px; }
   .priceai-product-filters { overflow-x: auto; }
+}
+
+/* SEO document library ------------------------------------------------------ */
+.priceai-library, .priceai-article-page { color: var(--color-text-body); background: var(--color-page); }
+.priceai-library main, .priceai-article-page main { min-height: 70vh; }
+.priceai-library-hero { width: min(1200px, calc(100% - 64px)); display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .55fr); align-items: end; gap: clamp(42px, 8vw, 120px); margin: 0 auto; padding: clamp(74px, 9vw, 122px) 0 clamp(62px, 7vw, 94px); }
+.priceai-library-hero > div > span, .priceai-library-section header span, .priceai-related-docs header span { color: var(--color-brand); font-size: 12px; font-weight: 700; letter-spacing: .09em; }
+.priceai-library-hero h1 { margin: 14px 0 0; color: var(--color-text-primary); font: 600 clamp(56px, 7vw, 92px)/.98 "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: -.055em; white-space: nowrap; }
+.priceai-library-hero > p { max-width: 31ch; margin: 0 0 9px; color: var(--color-text-muted); font-size: 17px; line-height: 1.9; }
+.priceai-library-section { width: min(1200px, calc(100% - 64px)); margin: 0 auto; padding: 0 0 clamp(84px, 10vw, 138px); }
+.priceai-library-section > header { display: flex; align-items: end; justify-content: space-between; gap: 30px; margin-bottom: 30px; padding-top: 26px; border-top: 1px solid var(--color-border); }
+.priceai-library-section header h2, .priceai-related-docs header h2 { margin: 8px 0 0; color: var(--color-text-primary); font: 600 34px/1.2 "Songti SC", STSong, SimSun, Georgia, serif; }
+.priceai-library-section > header p { max-width: 38ch; margin: 0 0 4px; color: var(--color-text-muted); font-size: 13px; line-height: 1.65; text-align: right; }
+.priceai-library-section > header > a { margin-bottom: 5px; color: var(--color-text-primary); font-size: 13px; font-weight: 650; }
+.priceai-library-section > header > a b { margin-left: 5px; color: var(--color-brand); }
+.priceai-doc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(22px, 3vw, 34px); }
+.priceai-doc-card { min-width: 0; display: flex; flex-direction: column; }
+.priceai-doc-card-image { aspect-ratio: 3 / 2; display: block; overflow: hidden; border-radius: 10px; background: var(--color-surface); box-shadow: inset 0 0 0 1px var(--color-border-soft); }
+.priceai-doc-card-image img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s cubic-bezier(.16, 1, .3, 1), filter .35s ease; }
+.priceai-doc-card:hover .priceai-doc-card-image img { filter: saturate(.92) contrast(1.02); transform: scale(1.018); }
+.priceai-doc-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 19px; color: var(--color-text-soft); font-size: 11px; line-height: 16px; }
+.priceai-doc-card-meta > * + *::before { margin-right: 7px; color: var(--color-border-muted); content: "·"; }
+.priceai-doc-card-meta span:first-child { color: var(--color-brand); font-weight: 700; }
+.priceai-doc-card h2 { margin: 12px 0 0; color: var(--color-text-primary); font: 650 21px/1.35 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; letter-spacing: -.02em; }
+.priceai-doc-card h2 a { display: block; }
+.priceai-doc-card h2 a:hover { color: var(--color-primary-strong); }
+.priceai-doc-card > p { min-height: 3.5em; margin: 9px 0 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.72; }
+.priceai-doc-card-link { width: fit-content; margin-top: 17px; color: var(--color-text-primary); font-size: 12px; font-weight: 650; text-decoration: underline; text-decoration-color: var(--color-border-muted); text-underline-offset: 5px; }
+.priceai-doc-card-link span { display: inline-block; margin-left: 4px; color: var(--color-brand); transition: transform .18s ease; }
+.priceai-doc-card-link:hover span { transform: translateX(3px); }
+.priceai-library-note { width: min(1200px, calc(100% - 64px)); display: grid; grid-template-columns: 150px minmax(0, 1fr) auto; align-items: center; gap: 30px; margin: 0 auto 96px; padding: 28px 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.priceai-library-note > span { color: var(--color-brand); font-size: 12px; font-weight: 700; }
+.priceai-library-note p { max-width: 70ch; margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.75; }
+.priceai-library-note a { color: var(--color-text-primary); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.priceai-library-note a b { margin-left: 4px; color: var(--color-brand); }
+
+.priceai-article-hero { width: min(1040px, calc(100% - 64px)); margin: 0 auto; padding: 64px 0 46px; }
+.priceai-article-hero > nav { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; color: var(--color-text-soft); font-size: 11px; }
+.priceai-article-hero > nav a:hover { color: var(--color-text-primary); }
+.priceai-article-hero > nav b { color: var(--color-brand); font-weight: 650; }
+.priceai-article-heading { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(250px, .45fr); align-items: end; gap: clamp(36px, 7vw, 90px); margin-top: 48px; }
+.priceai-article-heading h1 { margin: 0; color: var(--color-text-primary); font: 600 clamp(42px, 5.4vw, 70px)/1.08 "Songti SC", STSong, SimSun, Georgia, serif; letter-spacing: -.045em; }
+.priceai-article-heading p { margin: 0 0 6px; color: var(--color-text-muted); font-size: 15px; line-height: 1.85; }
+.priceai-article-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 35px; color: var(--color-text-soft); font-size: 11px; }
+.priceai-article-meta span:first-child { color: var(--color-brand); font-weight: 700; }
+.priceai-article-meta > * + *::before { margin-right: 10px; color: var(--color-border-muted); content: "·"; }
+.priceai-article-cover { width: min(1200px, calc(100% - 64px)); margin: 0 auto; }
+.priceai-article-cover img { width: 100%; max-height: 620px; aspect-ratio: 16 / 8.2; display: block; border-radius: 12px; object-fit: cover; background: var(--color-surface); }
+.priceai-article-cover figcaption { margin-top: 10px; color: var(--color-text-soft); font-size: 10px; line-height: 1.55; text-align: right; }
+.priceai-article-cover figcaption a { text-decoration: underline; text-underline-offset: 2px; }
+.priceai-article-layout { width: min(960px, calc(100% - 64px)); display: grid; grid-template-columns: minmax(0, 1fr) 220px; align-items: start; gap: clamp(58px, 8vw, 100px); margin: 0 auto; padding: 76px 0 112px; }
+.priceai-article-body { min-width: 0; }
+.priceai-article-lead { margin: 0 0 48px !important; color: var(--color-text-primary) !important; font-size: 19px !important; line-height: 1.8 !important; }
+.priceai-article-body section { scroll-margin-top: 96px; }
+.priceai-article-body section + section { margin-top: 52px; }
+.priceai-article-body h2 { margin: 0 0 18px; color: var(--color-text-primary); font: 650 29px/1.35 "Songti SC", STSong, SimSun, Georgia, serif; }
+.priceai-article-body p, .priceai-article-body li { color: var(--color-text-body); font-size: 16px; line-height: 1.95; }
+.priceai-article-body p { margin: 0 0 16px; }
+.priceai-article-body ul { margin: 24px 0 4px; padding: 20px 22px 20px 42px; border-radius: 10px; background: var(--color-surface); }
+.priceai-article-body li + li { margin-top: 8px; }
+.priceai-article-body li::marker { color: var(--color-brand); }
+.priceai-article-disclaimer { margin-top: 58px; padding: 22px 0; border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+.priceai-article-disclaimer b { color: var(--color-text-primary); font-size: 13px; }
+.priceai-article-disclaimer p { margin: 8px 0 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.75; }
+.priceai-article-toc { position: sticky; top: 88px; display: grid; gap: 4px; padding-top: 3px; }
+.priceai-article-toc > span { margin-bottom: 9px; color: var(--color-text-primary); font-size: 12px; font-weight: 700; }
+.priceai-article-toc > a { display: grid; grid-template-columns: 24px 1fr; gap: 8px; padding: 8px 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.55; }
+.priceai-article-toc > a i { color: var(--color-brand); font-style: normal; }
+.priceai-article-toc > a:hover { color: var(--color-text-primary); }
+.priceai-article-toc > a:last-child { display: flex; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--color-border); color: var(--color-text-primary); font-weight: 650; }
+.priceai-article-toc > a:last-child b { color: var(--color-brand); }
+.priceai-related-docs { width: min(1200px, calc(100% - 64px)); margin: 0 auto; padding: 42px 0 120px; border-top: 1px solid var(--color-border); }
+.priceai-related-docs > header { margin-bottom: 30px; }
+
+@media (max-width: 960px) {
+  .priceai-library-hero, .priceai-article-heading { grid-template-columns: 1fr; align-items: start; gap: 24px; }
+  .priceai-library-hero > p { max-width: 56ch; }
+  .priceai-doc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .priceai-article-layout { grid-template-columns: 1fr; }
+  .priceai-article-toc { position: static; order: -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; padding: 0 0 24px; border-bottom: 1px solid var(--color-border); }
+  .priceai-article-toc > span, .priceai-article-toc > a:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 680px) {
+  .priceai-library-hero, .priceai-library-section, .priceai-library-note, .priceai-article-hero, .priceai-article-cover, .priceai-article-layout, .priceai-related-docs { width: calc(100% - 32px); }
+  .priceai-library-hero { padding: 52px 0 64px; }
+  .priceai-library-hero h1 { font-size: 50px; }
+  .priceai-library-hero > p { font-size: 15px; }
+  .priceai-library-section { padding-bottom: 82px; }
+  .priceai-library-section > header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .priceai-library-section > header p { text-align: left; }
+  .priceai-doc-grid { grid-template-columns: 1fr; gap: 52px; }
+  .priceai-doc-card > p { min-height: 0; }
+  .priceai-library-note { grid-template-columns: 1fr; gap: 12px; margin-bottom: 68px; }
+  .priceai-article-hero { padding: 42px 0 34px; }
+  .priceai-article-heading { margin-top: 34px; }
+  .priceai-article-heading h1 { font-size: 38px; line-height: 1.16; }
+  .priceai-article-cover img { aspect-ratio: 4 / 3; }
+  .priceai-article-cover figcaption { text-align: left; }
+  .priceai-article-layout { padding: 54px 0 80px; }
+  .priceai-article-toc { grid-template-columns: 1fr; }
+  .priceai-article-lead { font-size: 17px !important; }
+  .priceai-article-body h2 { font-size: 25px; }
+  .priceai-article-body p, .priceai-article-body li { font-size: 15px; }
+  .priceai-related-docs { padding-bottom: 86px; }
 }

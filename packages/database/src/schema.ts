@@ -1117,6 +1117,31 @@ export const sponsorshipPlacements = pgTable(
   (table) => [index("sponsorship_active_idx").on(table.status, table.position, table.startsAt, table.endsAt)],
 );
 
+export const siteAnnouncements = pgTable(
+  "site_announcements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    badge: text("badge").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    actionLabel: text("action_label").notNull(),
+    destinationUrl: text("destination_url").notNull(),
+    kind: text("kind").notNull().default("update"),
+    status: text("status").notNull().default("active"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [index("site_announcements_public_idx").on(table.status, table.sortOrder, table.updatedAt)],
+);
+
+export const siteAnnouncementSettings = pgTable("site_announcement_settings", {
+  key: text("key").primaryKey().default("global"),
+  rotationEnabled: boolean("rotation_enabled").notNull().default(true),
+  rotationIntervalSeconds: integer("rotation_interval_seconds").notNull().default(6),
+  updatedAt,
+});
+
 export const systemMetricSamples = pgTable(
   "system_metric_samples",
   {

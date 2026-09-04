@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup, SITE_NAME } from "./site-brand";
+import { AnnouncementBanner } from "./announcement-banner";
 
 export type HeaderSection =
   | "home"
@@ -16,7 +17,8 @@ export type HeaderSection =
   | "submit"
   | "methodology"
   | "status"
-  | "guides";
+  | "guides"
+  | "docs";
 
 type NavKey = HeaderSection | "merchant-feed" | "wholesale" | "commercial" | "support";
 type NavLink = { key: NavKey; label: string; href: string; note?: string };
@@ -54,6 +56,7 @@ const PURCHASE_GROUPS: readonly NavGroup[] = [
 const RESEARCH_LINKS: readonly NavLink[] = [
   { key: "changes", label: "异动", href: "/changes", note: "降价、补货与售罄" },
   { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
+  { key: "docs", label: "文档", href: "/docs", note: "价格研究、购买说明与方法" },
   { key: "methodology", label: "数据说明", href: "/methodology", note: "排序口径与责任边界" },
   { key: "status", label: "数据健康", href: "/status", note: "采集与发布状态" },
 ];
@@ -70,8 +73,9 @@ const PRIMARY_LINKS: readonly NavLink[] = [
   { key: "home", label: "首页", href: "/" },
   ...PURCHASE_GROUPS.flatMap((group) => group.links),
   { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
+  { key: "docs", label: "文档", href: "/docs", note: "价格研究、购买说明与方法" },
 ];
-const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides");
+const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides" && link.key !== "docs");
 
 function isActive(active: HeaderSection, key: NavKey) {
   if (key === "channels") return active === "channels" || active === "subscriptions";
@@ -263,6 +267,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
 
   return (
     <>
+      <AnnouncementBanner />
       <header className={`site-header${stuck ? " is-stuck" : ""}`}>
         <div className="site-header-frame">
           <div className="site-header-bar">
@@ -344,7 +349,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
               ))}
               <section className="site-drawer-section">
                 <h2>数据与说明</h2>
-                <p>看异动、读指南、核对排序口径</p>
+                <p>看异动、读指南与文档、核对排序口径</p>
                 {RESEARCH_LINKS.map(renderDrawerLink)}
               </section>
               <section className="site-drawer-section">

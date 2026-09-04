@@ -11,6 +11,7 @@ export function AdminNav() {
       <a href="/admin/quality">质量报表</a>
       <a href="/admin/audit">审计日志</a>
       <a href="/api/admin/classification-rule-patch">规则补丁</a>
+      <a href="/admin/announcements">顶部横幅</a>
       <a href="/admin/sponsorships">广告与赞助</a>
       <a href="/">公开首页</a>
     </nav>
