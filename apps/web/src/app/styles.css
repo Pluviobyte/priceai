@@ -869,14 +869,14 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
    52rem × 48px 的居中浮层。导航项保持文本态，只让整条导航产生容器层级。 */
 .site-announcement { position: relative; z-index: 51; min-height: 48px; display: grid; align-items: center; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-primary); background: color-mix(in oklch, var(--color-panel) 96%, var(--color-brand) 4%); }
 .site-announcement::before { position: absolute; inset: auto 0 -1px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--color-brand) 38%, transparent), transparent); content: ""; pointer-events: none; }
-.site-announcement-inner { width: min(1180px, calc(100% - 40px)); min-height: 48px; margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; animation: site-announcement-in .38s cubic-bezier(.16, 1, .3, 1) both; }
-.site-announcement-message { min-width: 0; grid-column: 2; display: flex; align-items: center; justify-content: center; gap: 9px; }
+.site-announcement-inner { width: min(1180px, calc(100% - 40px)); min-height: 48px; margin-inline: auto; display: flex; align-items: center; justify-content: center; gap: 9px; animation: site-announcement-in .38s cubic-bezier(.16, 1, .3, 1) both; }
+.site-announcement-message { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 9px; }
 .site-announcement-badge { min-height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid color-mix(in oklch, var(--color-brand) 18%, var(--color-border)); border-radius: 999px; color: var(--color-text-muted); background: color-mix(in oklch, var(--color-panel) 88%, var(--color-brand) 12%); font-size: 11px; font-weight: 650; white-space: nowrap; }
 .site-announcement-badge svg { width: 14px; height: 14px; fill: none; stroke: var(--color-brand); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .site-announcement-copy { min-width: 0; display: flex; align-items: baseline; justify-content: flex-start; gap: 11px; overflow: hidden; text-align: left; }
 .site-announcement-copy strong { flex: 0 1 auto; overflow: hidden; color: var(--color-text-primary); font-size: 13px; font-weight: 650; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
 .site-announcement-copy span { flex: 0 1 auto; overflow: hidden; color: var(--color-text-muted); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
-.site-announcement-controls { min-width: 0; grid-column: 3; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.site-announcement-controls { min-width: 0; display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .site-announcement-cta { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-primary); background: var(--color-panel); box-shadow: 0 2px 7px oklch(22% .025 257 / 5%); font-size: 12px; font-weight: 650; white-space: nowrap; transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
 .site-announcement-cta:hover { border-color: color-mix(in oklch, var(--color-brand) 46%, var(--color-border)); box-shadow: 0 4px 12px oklch(22% .025 257 / 9%); transform: translateY(-1px); }
 .site-announcement-cta span { color: var(--color-brand); font-size: 14px; }
@@ -968,9 +968,9 @@ html[data-theme="dark"] .priceai-cube-logo-canvas { filter: drop-shadow(0 4px 7p
   .admin-announcement-settings form { align-items: stretch; flex-direction: column; }
   .admin-create-form, .admin-announcement-edit { grid-template-columns: 1fr; }
   .admin-field-wide { grid-column: auto; }
-  .site-announcement-inner { width: calc(100% - 24px); grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .site-announcement-message { grid-column: 1; justify-content: flex-start; gap: 7px; }
-  .site-announcement-controls { grid-column: 2; gap: 0; }
+  .site-announcement-inner { width: calc(100% - 24px); gap: 8px; }
+  .site-announcement-message { flex: 1 1 auto; justify-content: flex-start; gap: 7px; }
+  .site-announcement-controls { flex: 0 0 auto; gap: 0; }
   .site-announcement-copy span, .site-announcement-pages { display: none; }
 }
 
