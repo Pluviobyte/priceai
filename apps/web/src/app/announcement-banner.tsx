@@ -63,26 +63,30 @@ export function AnnouncementBanner() {
       }}
     >
       <div className="site-announcement-inner" key={announcement.id}>
-        <span className="site-announcement-badge"><AnnouncementIcon kind={announcement.kind} />{announcement.badge}</span>
-        <a className="site-announcement-copy" href={announcement.destinationUrl}>
-          <strong>{announcement.title}</strong>
-          {announcement.description && <span>{announcement.description}</span>}
-        </a>
-        <a className="site-announcement-cta" href={announcement.destinationUrl}>{announcement.actionLabel}<span aria-hidden="true">→</span></a>
-        {config.announcements.length > 1 && (
-          <div className="site-announcement-pages" role="group" aria-label="切换站点公告">
-            {config.announcements.map((item, index) => (
-              <button
-                type="button"
-                className={index === currentIndex ? "active" : ""}
-                aria-label={`查看公告 ${index + 1}：${item.title}`}
-                aria-pressed={index === currentIndex}
-                onClick={() => setCurrentIndex(index)}
-                key={item.id}
-              />
-            ))}
-          </div>
-        )}
+        <div className="site-announcement-message">
+          <span className="site-announcement-badge"><AnnouncementIcon kind={announcement.kind} />{announcement.badge}</span>
+          <a className="site-announcement-copy" href={announcement.destinationUrl}>
+            <strong>{announcement.title}</strong>
+            {announcement.description && <span>{announcement.description}</span>}
+          </a>
+        </div>
+        <div className="site-announcement-controls">
+          <a className="site-announcement-cta" href={announcement.destinationUrl}>{announcement.actionLabel}<span aria-hidden="true">→</span></a>
+          {config.announcements.length > 1 && (
+            <div className="site-announcement-pages" role="group" aria-label="切换站点公告">
+              {config.announcements.map((item, index) => (
+                <button
+                  type="button"
+                  className={index === currentIndex ? "active" : ""}
+                  aria-label={`查看公告 ${index + 1}：${item.title}`}
+                  aria-pressed={index === currentIndex}
+                  onClick={() => setCurrentIndex(index)}
+                  key={item.id}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );
