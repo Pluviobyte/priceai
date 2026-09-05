@@ -196,6 +196,10 @@ async function upsertPrice(
       eq(officialSubscriptionPrices.rawPlanName, seed.rawPlanName),
     ))
     .limit(1);
+  // Historical seeds must never replace newer live evidence when a fetch fails.
+  if (options.preserveVerifiedAtWhenUnchanged && existing && existing.verifiedAt > verifiedAt) {
+    return;
+  }
   const sourcePriceChanged = !existing || existing.evidenceHash !== evidenceHash;
   const conversionChanged = Boolean(existing) && (
     existing?.cnyEstimate !== normalizedCnyEstimate
