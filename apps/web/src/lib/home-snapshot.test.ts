@@ -9,6 +9,7 @@ test("home minimum, merchant and distribution belong to the same delivery mode",
  assert.equal(row.lowest?.merchantName,"甲");assert.equal(row.lowest?.cny,50);
  assert.deepEqual(row.band,{minCny:50,maxCny:90});assert.equal(row.offerCount,2);assert.equal(row.inStockMerchantCount,2);
  assert.equal(rows[1]!.lowest,null);
+ assert.equal(rows[2]!.slug,"gemini-pro");
 });
 
 test("home ignores non-finite and nonpositive prices and keeps verification time of the minimum",()=>{

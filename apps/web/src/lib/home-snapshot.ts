@@ -82,7 +82,7 @@ const PLACEHOLDER: HomeSnapshot = {
   baseline: [
     { slug: "chatgpt-plus", name: "ChatGPT Plus", brand: "OpenAI", icon: "openai", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "claude-pro", name: "Claude Pro", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
-    { slug: "google-ai-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "gemini-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "supergrok", name: "SuperGrok", brand: "xAI", icon: "grok", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
   ],
   changes: [],
@@ -91,7 +91,7 @@ const PLACEHOLDER: HomeSnapshot = {
 };
 
 
-const PLAN_CODES: Record<string, string> = { "chatgpt-plus": "chatgpt-plus-monthly", "claude-pro": "claude-pro-monthly", "google-ai-pro": "google-ai-pro-monthly", supergrok: "supergrok-monthly" };
+const PLAN_CODES: Record<string, string> = { "chatgpt-plus": "chatgpt-plus-monthly", "claude-pro": "claude-pro-monthly", "gemini-pro": "google-ai-pro-monthly", supergrok: "supergrok-monthly" };
 export interface HomeOffer {
   id: string; slug: string; price: string; currency: string; mode: OfferMode;
   merchant_id: string; merchant_name: string; warranty_type: string; verified_at: Date;
@@ -125,7 +125,7 @@ export async function getHomeSnapshot(): Promise<HomeSnapshot> {
       join sources s on s.id=o.source_id join merchants m on m.id=s.merchant_id
       join offer_matches om on om.raw_offer_snapshot_id=o.latest_raw_snapshot_id
       join offer_attributes oa on oa.offer_match_id=om.id
-      where cp.slug=any($1) and cp.status='active' and m.status='active'
+      where cp.slug=any($1) and cp.status='active' and m.status='active' and s.enabled=true
         and o.availability_state='purchasable' and o.stock_state in ('in_stock','low_stock')
         and o.offer_verified_at>now()-interval '24 hours' and o.offer_verified_at<=now()
         and o.currency='CNY' and o.price>0 and oa.duration_days=30 and coalesce(oa.shared,false)=false
