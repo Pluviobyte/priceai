@@ -1,0 +1,13 @@
+.git
+.vercel
+**/node_modules
+**/.next
+**/.next-*
+**/dist
+**/*.tsbuildinfo
+.env*
+cube-extracts
+coverage
+playwright-report
+test-results
+*.log
