@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
-import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
 import { PriceComparison } from "./price-comparison";
@@ -123,6 +123,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
     databaseAvailable = false;
   }
 
+  const checks = await getOfficialSubscriptionChecks().catch(() => null);
   const scopedRows = allRows.filter((row) => !channel || row.channel === channel);
   const allPlans = groupPlans(scopedRows);
   const query = q.toLocaleLowerCase("zh-CN");
@@ -199,7 +200,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
 
       {plans.length ? <div className="priceai-data-table-wrap priceai-official-table-wrap">
         <table className="priceai-data-table priceai-official-table">
-          <thead><tr><th>标准商品</th><th>周期</th><th>官方参考价</th><th>最低地区</th><th>报价样本</th><th>最近核验</th></tr></thead>
+          <thead><tr><th>标准商品</th><th>周期</th><th>已采集最低价</th><th>对应地区</th><th>报价样本</th><th>最近核验</th></tr></thead>
           <tbody>{plans.map((plan) => {
             const lowest = plan.lowest;
             const amount = lowest?.cnyEstimate ? `¥${Number(lowest.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "等待核验";
@@ -216,7 +217,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
         </table>
       </div> : <div className="empty-state">没有匹配的官方订阅套餐，请尝试其他关键词或产品。</div>}
 
-      <PriceComparison rows={allRows} params={raw} available={databaseAvailable} />
+      <PriceComparison rows={allRows} checks={checks} params={raw} available={databaseAvailable} />
 
       <aside className="priceai-official-note"><b>读表提醒</b><p>人民币估算不额外计入当地税费、银行卡跨境手续费或应用商店结算差异。能否购买还取决于账号地区和支付方式，付款前请回到官方页面再次确认。</p></aside>
       <p className="priceai-catalog-disclaimer">PriceAI 只整理可核验的官方公开信息，不销售订阅、不代购，也不保证地区购买资格或支付可用性。</p>

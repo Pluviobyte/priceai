@@ -4,7 +4,7 @@ import {
   OFFICIAL_SUBSCRIPTION_PLAN_CATALOG,
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
 } from "@price-radar/price-channels/subscription-catalog";
-import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../../model-icons";
 import { SiteFooter } from "../../site-footer";
 
@@ -63,14 +63,14 @@ function newestPriceRecord(rows: readonly OfficialSubscriptionPrice[]): Official
     !latest || row.verifiedAt > latest.verifiedAt ? row : latest, null);
 }
 
-function PriceCell({ row, isLowest, isGo }: { row: OfficialSubscriptionPrice | null; isLowest: boolean; isGo: boolean }) {
-  if (!row || row.priceKind === "unknown") return <span className="priceai-region-missing">{isGo ? "Go 支持此渠道 · 当地价格待采集" : "待核验"}</span>;
+function PriceCell({ row, isLowest, missingReason }: { row: OfficialSubscriptionPrice | null; isLowest: boolean; missingReason: string | undefined }) {
+  if (!row || row.priceKind === "unknown") return <span className="priceai-region-missing">{missingReason ?? "尚未取得报价"}</span>;
   const fresh = isFreshOfficialSubscriptionPrice(row);
   return <div className={`priceai-region-price${isLowest ? " is-lowest" : ""}${fresh ? "" : " is-stale"}`}>
     <a className="priceai-region-price-source" href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><b>{originalPrice(row)}</b></a>
     <small>{row.cnyEstimate ? `约 ${cnyPrice(row)}` : "人民币换算待补"}{row.exchangeRateDate && row.exchangeRateUrl && <> · <a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率 {row.exchangeRateDate} ↗</a></>}</small>
     <small>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? `公告日期 ${row.verifiedAt.toISOString().slice(0, 10)}` : `价格核验 ${formatRelativeVerificationTime(row.verifiedAt)}`}</small>
-    {row.evidenceUrl.includes("/introducing-chatgpt-go/") ? <em className="stale">公告参考价 · 非当前结算价</em> : isLowest ? <em>全表较低</em> : !fresh ? <em className="stale">已过期</em> : null}
+    {row.collectionStatus === "ambiguous_sku" ? <em className="stale">套餐周期待核验</em> : row.evidenceUrl.includes("/introducing-chatgpt-go/") ? <em className="stale">公告参考价 · 非当前结算价</em> : isLowest ? <em>全表较低</em> : !fresh ? <em className="stale">已过期</em> : null}
   </div>;
 }
 
@@ -92,6 +92,7 @@ export default async function OfficialPriceRegionsPage({
   } catch {
     databaseAvailable = false;
   }
+  const checks = await getOfficialSubscriptionChecks().catch(() => []);
   const planRows = allRows.filter((row) => row.vendor === selectedPlan.vendor && row.planCode === selectedPlan.planCode);
   const exactRows = planRows.filter((row) => row.priceKind === "exact" && row.cnyEstimate !== null && isFreshOfficialSubscriptionPrice(row));
   const lowestValue = exactRows.length ? Math.min(...exactRows.map((row) => Number(row.cnyEstimate))) : null;
@@ -156,7 +157,7 @@ export default async function OfficialPriceRegionsPage({
             {channels.map((channel) => {
               const row = byChannel[channel];
               const isLowest = Boolean(row?.cnyEstimate && lowest?.id === row.id && lowestValue !== null && Number(row.cnyEstimate) === lowestValue);
-              return <td data-label={channelNames[channel]} key={channel}><PriceCell row={row} isLowest={isLowest} isGo={selectedPlan.planCode === "chatgpt-go-monthly"} /></td>;
+              return <td data-label={channelNames[channel]} key={channel}><PriceCell row={row} isLowest={isLowest} missingReason={checks.find(check => check.planCode === selectedPlan.planCode && check.vendor === selectedPlan.vendor && check.channel === channel && check.countryCode === region.countryCode)?.reason} /></td>;
             })}
             <td data-label="当地最低"><strong>{cnyPrice(lowest)}</strong><small>{lowest ? channelNames[lowest.channel] ?? lowest.channel : "暂无可比精确价"}</small></td>
             <td data-label="该地区最近"><time dateTime={regionLatest?.toISOString()}>{formatRelativeVerificationTime(regionLatest)}</time></td>

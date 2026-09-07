@@ -88,7 +88,7 @@ function parseNumber(value: string, currency: string): number | null {
 
 export function parseAppStorePriceListings(html: string, currency: string): AppStorePriceListing[] {
   const listings: AppStorePriceListing[] = [];
-  const pairPattern = /<span\b[^>]*>([\s\S]*?)<\/span>\s*<span\b[^>]*>([\s\S]*?)<\/span>/gi;
+  const pairPattern = /<span\b[^>]*>([^<]*)<\/span>\s*<span\b[^>]*>([^<]*)<\/span>/gi;
   for (const match of html.matchAll(pairPattern)) {
     const rawPlanName = decodeInlineHtml(match[1] ?? "");
     const displayAmount = decodeInlineHtml(match[2] ?? "");
@@ -128,4 +128,24 @@ export function extractChatGptGoWebPrice(html: string): number | null {
     ?? section.match(/\$\s*([0-9]+(?:\.[0-9]{1,2})?)\s*USD\s*(?:\/|per)\s*month/i);
   const amount = match ? Number(match[1]) : NaN;
   return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+/** Keep Pro monthly/annual and Max tiers in their own table cells. */
+export function extractClaudePlanPrice(html: string, planCode: string): number | null {
+  const names: Record<string, string> = { "claude-pro-monthly": "Pro", "claude-pro-annual": "Pro", "claude-max-5x-monthly": "Max 5x", "claude-max-20x-monthly": "Max 20x" };
+  const name = names[planCode];
+  if (!name) return null;
+  for (const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const cells = [...row[1]!.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(cell => visibleTextFromHtml(cell[1]!));
+    if (cells[0]?.trim() !== name || !cells[1]) continue;
+    const pattern = planCode.endsWith("annual") ? /\$\s*([0-9.]+)\s*\/\s*year/i : name === "Pro" ? /\$\s*([0-9.]+)\s*\/\s*month/i : /\$\s*([0-9.]+)/;
+    const match = cells[1].match(pattern);
+    const amount = match ? Number(match[1]) : NaN;
+    return Number.isFinite(amount) && amount > 0 ? amount : null;
+  }
+  return null;
+}
+
+export function hasAmbiguousAppStorePrices(listings: readonly AppStorePriceListing[], name: string): boolean {
+  return new Set(listings.filter(row => row.rawPlanName.toLocaleLowerCase("en-US") === name.toLocaleLowerCase("en-US")).map(row => row.amount)).size > 1;
 }

@@ -21,6 +21,7 @@ export interface OfficialSubscriptionPrice {
   exchangeRateDate: string | null;
   exchangeRateUrl: string | null;
   historyCount: number;
+  collectionStatus?: string | null;
 }
 
 interface SubscriptionRow {
@@ -49,9 +50,10 @@ interface SubscriptionRow {
 const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 36 * 60 * 60 * 1_000;
 
 export function isFreshOfficialSubscriptionPrice(
-  row: Pick<OfficialSubscriptionPrice, "verifiedAt"> & { evidenceUrl?: string },
+  row: Pick<OfficialSubscriptionPrice, "verifiedAt"> & { evidenceUrl?: string; collectionStatus?: string | null },
   now = Date.now(),
 ): boolean {
+  if (row.collectionStatus === "ambiguous_sku") return false;
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return false;
   const verifiedAt = new Date(row.verifiedAt).getTime();
   return Number.isFinite(verifiedAt) && verifiedAt <= now + 5 * 60_000 && now - verifiedAt <= OFFICIAL_SUBSCRIPTION_FRESHNESS_MS;
@@ -190,6 +192,8 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
                case p.price_kind when 'exact' then 0 when 'range' then 1 else 2 end,
                p.cny_estimate nulls last,p.channel,p.country_code`,
   );
+  const checks = await getOfficialSubscriptionChecks();
+  const statusIndex = new Map(checks.map(check => [`${check.vendor}:${check.planCode}:${check.channel}:${check.countryCode}`, check.status]));
   return rows.map((row) => ({
     id: row.id, vendor: row.vendor, planCode: row.plan_code, planName: row.plan_name,
     billingPeriod: row.billing_period, channel: row.channel, countryCode: row.country_code,
@@ -198,7 +202,7 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
     cnyEstimate: row.cny_estimate, rawPlanName: row.raw_plan_name, appId: row.app_id,
     evidenceUrl: row.evidence_url, verifiedAt: row.verified_at,
     exchangeRateDate: row.exchange_rate_date, exchangeRateUrl: row.exchange_rate_url,
-    historyCount: Number(row.history_count),
+    historyCount: Number(row.history_count), collectionStatus: statusIndex.get(`${row.vendor}:${row.plan_code}:${row.channel}:${row.country_code}`) ?? null,
   }));
 }
 
@@ -290,4 +294,20 @@ export async function getTransitOverview(): Promise<{ providers: TransitProvider
     prices: prices.map((row) => ({ providerSlug: row.provider_slug, providerName: row.provider_name, modelCode: row.model_code, displayName: row.display_name, currency: row.currency, unit: row.unit, inputPrice: row.input_price, outputPrice: row.output_price, multiplier: row.multiplier, evidenceKind: row.evidence_kind, evidenceUrl: row.evidence_url, verifiedAt: row.verified_at })),
     events: events.map((row) => ({ providerName: row.provider_name, kind: row.kind, title: row.title, details: row.details, evidenceUrl: row.evidence_url, startedAt: row.started_at, endedAt: row.ended_at })),
   };
+}
+
+export interface OfficialSubscriptionCheck {
+  vendor: string; planCode: string; channel: string; countryCode: string;
+  status: string; reason: string; evidenceUrl: string; checkedAt: Date;
+}
+
+export async function getOfficialSubscriptionChecks(): Promise<OfficialSubscriptionCheck[]> {
+  const rows = await query<{ vendor: string; plan_code: string; channel: string; country_code: string; status: string; reason: string; evidence_url: string; checked_at: Date }>(
+    "select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at from official_subscription_checks",
+  ).catch((error: unknown) => {
+    // Rolling deployments may serve web code before migration 0016 completes.
+    if (error && typeof error === "object" && "code" in error && error.code === "42P01") return [];
+    throw error;
+  });
+  return rows.map(row => ({ vendor: row.vendor, planCode: row.plan_code, channel: row.channel, countryCode: row.country_code, status: row.status, reason: row.reason, evidenceUrl: row.evidence_url, checkedAt: row.checked_at }));
 }

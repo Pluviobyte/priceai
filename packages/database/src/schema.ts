@@ -1187,3 +1187,16 @@ export const operatorJobRequests = pgTable(
   },
   (table) => [index("operator_job_requests_status_idx").on(table.status, table.createdAt)],
 );
+
+// Collection attempts are separate from prices: a missing SKU must never become a zero price.
+export const officialSubscriptionChecks = pgTable("official_subscription_checks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  planCode: text("plan_code").notNull(),
+  vendor: text("vendor").notNull(),
+  channel: text("channel").notNull(),
+  countryCode: text("country_code").notNull(),
+  status: text("status").notNull(),
+  reason: text("reason").notNull(),
+  evidenceUrl: text("evidence_url").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex("official_subscription_checks_identity_uidx").on(table.vendor, table.planCode, table.channel, table.countryCode)]);

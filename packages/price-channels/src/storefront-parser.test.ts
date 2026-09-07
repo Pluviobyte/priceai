@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractChatGptGoWebPrice, extractOfficialPagePrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
+import { extractChatGptGoWebPrice, extractClaudePlanPrice, hasAmbiguousAppStorePrices, extractOfficialPagePrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
 
 test("parses common App Store currency formats", () => {
   const html = `
@@ -77,4 +77,25 @@ test("Go web price is scoped to the tier and explicit USD monthly billing", () =
   assert.equal(extractChatGptGoWebPrice("Go Expanded access A$13 / month Plus $20 USD / month"), null);
   assert.equal(extractChatGptGoWebPrice("Go Expanded access $8 USD / year Plus $20 USD / month"), null);
   assert.equal(extractChatGptGoWebPrice("Access denied"), null);
+});
+
+test("does not swallow the first IAP item after unrelated page spans", () => {
+  const html = '<span>Information</span><section><span>In-App Purchases</span></section><div><span>ChatGPT Go</span> <span>₹ 399</span></div><div><span>ChatGPT Plus</span><span>₹ 1,999</span></div>';
+  assert.deepEqual(parseAppStorePriceListings(html, "INR").map(row => row.amount), [399, 1999]);
+});
+
+test("Claude table parser separates annual, monthly and Max prices", () => {
+  const html = '<table><tr><td>Pro</td><td><p>$20/month</p><p>$200/year</p></td></tr><tr><td>Max 5x</td><td>$100</td></tr><tr><td>Max 20x</td><td>$200</td></tr></table>';
+  assert.equal(extractClaudePlanPrice(html, "claude-pro-monthly"), 20);
+  assert.equal(extractClaudePlanPrice(html, "claude-pro-annual"), 200);
+  assert.equal(extractClaudePlanPrice(html, "claude-max-5x-monthly"), 100);
+  assert.equal(extractClaudePlanPrice(html, "claude-max-20x-monthly"), 200);
+  assert.equal(extractClaudePlanPrice('<table><tr><td>Pro</td><td>$20/month</td></tr></table>', "claude-pro-annual"), null);
+});
+
+test("multiple distinct prices require review; repeated identical prices do not", () => {
+  const rows = [{rawPlanName: "Plan", amount: 10, displayAmount: "$10"}, {rawPlanName: "Plan", amount: 100, displayAmount: "$100"}];
+  assert.equal(hasAmbiguousAppStorePrices(rows, "plan"), true);
+  assert.equal(hasAmbiguousAppStorePrices([rows[0]!, rows[0]!], "Plan"), false);
+  assert.equal(hasAmbiguousAppStorePrices(rows, "Other"), false);
 });

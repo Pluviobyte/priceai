@@ -5,6 +5,7 @@ import {
   officialSubscriptionPlans,
   officialSubscriptionPriceHistory,
   officialSubscriptionPrices,
+  officialSubscriptionChecks,
 } from "@price-radar/database/schema";
 import * as databaseSchema from "@price-radar/database/schema";
 import { and, desc, eq } from "drizzle-orm";
@@ -14,7 +15,7 @@ import {
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
   type OfficialSubscriptionPlanCatalogItem,
 } from "@price-radar/price-channels/subscription-catalog";
-import { extractChatGptGoWebPrice, extractOfficialPagePrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "@price-radar/price-channels/storefront-parser";
+import { extractChatGptGoWebPrice, extractClaudePlanPrice, hasAmbiguousAppStorePrices, extractOfficialPagePrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "@price-radar/price-channels/storefront-parser";
 
 type Database = NodePgDatabase<typeof databaseSchema>;
 
@@ -44,6 +45,7 @@ export interface SubscriptionRefreshResult {
   verifiedWebPrices: number;
   appStorePrices: number;
   googlePlayRanges: number;
+  googlePlayChecks: number;
 }
 
 const PLAN_SEEDS = OFFICIAL_SUBSCRIPTION_PLAN_CATALOG;
@@ -62,12 +64,12 @@ const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
   { vendor: "openai", planCode: "chatgpt-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "ChatGPT Plus", evidenceUrl: "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus", evidence: { billing: "monthly", officialArticleUpdated: "2026-08-17" }, verificationTerms: ["ChatGPT Plus"] },
   { vendor: "openai", planCode: "chatgpt-pro-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Pro $100 (5x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 5, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "5x"] },
   { vendor: "openai", planCode: "chatgpt-pro-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro $200 (20x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 20, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "20x"] },
-  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", verificationTerms: ["Pro"] },
-  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { billedUpfront: true } },
-  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
-  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
-  { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing" },
-  { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing" },
+  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", verificationTerms: ["Pro"] },
+  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { billedUpfront: true }, verificationTerms: ["Pro"] },
+  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
+  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
+  { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok"] },
+  { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok Plus"] },
 ];
 
 // Announcement fallback is historical evidence, never a newly verified checkout price.
@@ -284,7 +286,19 @@ export async function seedVerifiedSubscriptionPrices(database: Database): Promis
     await upsertPrice(database, price, verifiedAt, { preserveVerifiedAtWhenUnchanged: true });
   }
   await upsertPrice(database, GO_ANNOUNCEMENT_PRICE, new Date("2026-01-16T00:00:00.000Z"), { preserveVerifiedAtWhenUnchanged: true });
+  // Explicit manual source review on 2026-09-07; scheduled refreshes keep this fixed timestamp.
+  const reviewedAt = new Date("2026-09-07T06:58:00.000Z");
+  for (const price of VERIFIED_WEB_PRICES.filter(price => price.vendor === "openai" || price.vendor === "xai")) {
+    await upsertPrice(database, { ...price, evidence: { ...price.evidence, verificationMethod: "official_document_manual_review", reviewDocument: "docs/research/official-subscription-audit-2026-09-07.md" } }, reviewedAt, { preserveVerifiedAtWhenUnchanged: true });
+  }
   return VERIFIED_WEB_PRICES.length + 1;
+}
+
+async function recordCheck(database: Database, plan: { vendor: string; planCode: string }, channel: Channel, countryCode: string, status: string, reason: string, evidenceUrl: string, checkedAt: Date): Promise<void> {
+  const values = { vendor: plan.vendor, planCode: plan.planCode, channel, countryCode, status, reason, evidenceUrl, checkedAt };
+  await database.insert(officialSubscriptionChecks).values(values).onConflictDoUpdate({
+    target: [officialSubscriptionChecks.vendor, officialSubscriptionChecks.planCode, officialSubscriptionChecks.channel, officialSubscriptionChecks.countryCode], set: values,
+  });
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -320,27 +334,35 @@ async function mapWithConcurrency<T, R>(
 }
 
 export async function verifyOfficialWebPrices(database: Database, verifiedAt = new Date()): Promise<number> {
-  const sourceUrls = [...new Set(LIVE_WEB_PRICES.map((price) => price.evidenceUrl))];
-  const fetchedPages = await mapWithConcurrency(sourceUrls, 4, async (sourceUrl) => {
-    try {
-      return [sourceUrl, await fetchText(sourceUrl)] as const;
-    } catch {
-      return [sourceUrl, null] as const;
-    }
+  const sourceUrls = [...new Set([...LIVE_WEB_PRICES.map(price => price.evidenceUrl), ...PLAN_SEEDS.filter(plan => plan.vendor === "google").map(plan => plan.officialUrl)])];
+  const fetchedPages = await mapWithConcurrency(sourceUrls, 4, async sourceUrl => {
+    try { return [sourceUrl, { html: await fetchText(sourceUrl), error: "" }] as const; }
+    catch (error) { return [sourceUrl, { html: null, error: error instanceof Error ? error.message : "fetch_failed" }] as const; }
   });
-  const pageByUrl = new Map<string, string | null>(fetchedPages);
+  const pages = new Map<string, { html: string | null; error: string }>(fetchedPages);
   let verified = 0;
-  for (const price of LIVE_WEB_PRICES) {
-    const html = pageByUrl.get(price.evidenceUrl);
-    if (!html || price.amount === undefined || !price.verificationTerms) continue;
-    const extractedAmount = price.planCode === "chatgpt-go-monthly" ? extractChatGptGoWebPrice(html) : extractOfficialPagePrice(html, price.verificationTerms);
-    if (extractedAmount === null || extractedAmount < price.amount * 0.25 || extractedAmount > price.amount * 4) continue;
-    await upsertPrice(database, {
-      ...price,
-      amount: extractedAmount,
-      evidence: { ...(price.evidence ?? {}), publicPageParsed: true },
-    }, verifiedAt);
-    verified += 1;
+  for (const plan of PLAN_SEEDS) {
+    const price = LIVE_WEB_PRICES.find(price => price.vendor === plan.vendor && price.planCode === plan.planCode);
+    const url = price?.evidenceUrl ?? plan.officialUrl;
+    const page = pages.get(url);
+    let amount: number | null = null;
+    if (page?.html && price?.verificationTerms) {
+      amount = plan.vendor === "anthropic" ? extractClaudePlanPrice(page.html, plan.planCode)
+        : plan.planCode === "chatgpt-go-monthly" ? extractChatGptGoWebPrice(page.html)
+        : extractOfficialPagePrice(page.html, price.verificationTerms);
+      if (amount !== null && price.amount !== undefined && (amount < price.amount * 0.25 || amount > price.amount * 4)) amount = null;
+    }
+    if (amount !== null && price) {
+      await upsertPrice(database, { ...price, amount, evidence: { ...price.evidence, publicPageParsed: true } }, verifiedAt);
+      verified++;
+    }
+    for (const region of OFFICIAL_SUBSCRIPTION_REGION_CATALOG) {
+      const status = !page?.html ? "fetch_failed" : region.countryCode !== "US" ? "regional_checkout_required" : amount !== null ? "verified" : "price_not_public";
+      const reason = status === "fetch_failed" ? `来源访问失败：${page?.error ?? "fetch_failed"}`
+        : status === "regional_checkout_required" ? "公开参考页未提供该地区的结算价，需地区账户或结算页核验"
+        : status === "verified" ? "已从官方页面解析套餐价格" : "公开页未提供能对应此套餐、币种与周期的精确价格";
+      await recordCheck(database, plan, "web", region.countryCode, status, reason, url, verifiedAt);
+    }
   }
   return verified;
 }
@@ -355,13 +377,23 @@ export async function collectAppleAppStorePrices(database: Database, verifiedAt 
       const listings = parseAppStorePriceListings(await fetchText(evidenceUrl), region.currency);
       let saved = 0;
       for (const alias of target.aliases) {
+        const ambiguous = hasAmbiguousAppStorePrices(listings, alias.rawPlanName);
+        if (ambiguous) {
+          await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode, "ambiguous_sku", "同名内购项存在多个金额，公开名称未区分周期或优惠资格；不将最便宜的一项直接认作标准月价", evidenceUrl, verifiedAt);
+          continue;
+        }
         const listing = selectAppStorePlanPrice(
           listings,
           alias.rawPlanName,
           alias.selection,
           "mustBeLessThanPlanName" in alias ? { mustBeLessThanPlanName: alias.mustBeLessThanPlanName } : {},
         );
-        if (!listing) continue;
+        if (!listing) {
+          const hasAlias = listings.some(item => item.rawPlanName === alias.rawPlanName);
+          await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode,
+            hasAlias ? "ambiguous_sku" : "sku_not_listed", hasAlias ? "公开内购项无法可靠对应月付套餐，保留历史价格待核验" : "公开内购列表未列出此套餐，不代表不能购买", evidenceUrl, verifiedAt);
+          continue;
+        }
         await upsertPrice(database, {
           vendor: target.vendor,
           planCode: alias.planCode,
@@ -380,14 +412,29 @@ export async function collectAppleAppStorePrices(database: Database, verifiedAt 
             displayedAmount: listing.displayAmount,
           },
         }, verifiedAt);
+        await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode, "verified", "已解析对应内购项；周期按标准套餐映射，结算时复核", evidenceUrl, verifiedAt);
         saved += 1;
       }
       return saved;
-    } catch {
+    } catch (error) {
+      for (const alias of target.aliases) await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode, "fetch_failed", `来源访问失败：${error instanceof Error ? error.message : "fetch_failed"}`, evidenceUrl, verifiedAt);
       return 0;
     }
   });
   return results.reduce((total, count) => total + count, 0);
+}
+
+export async function checkGooglePlayPrices(database: Database, checkedAt = new Date()): Promise<number> {
+  const apps = { openai: "com.openai.chatgpt", anthropic: "com.anthropic.claude", google: "com.google.android.apps.bard", xai: "ai.x.grok" };
+  const jobs = Object.entries(apps).flatMap(([vendor, appId]) => OFFICIAL_SUBSCRIPTION_REGION_CATALOG.map(region => ({ vendor, appId, region })));
+  const results = await mapWithConcurrency(jobs, 8, async ({ vendor, appId, region }) => {
+    const url = `https://play.google.com/store/apps/details?id=${appId}&hl=en_US&gl=${region.countryCode}`;
+    let status = "price_not_public", reason = "Google Play 公开应用页不提供可归属到此套餐的内购 SKU 价格，需应用内结算核验";
+    try { await fetchText(url); } catch (error) { status = "fetch_failed"; reason = `来源访问失败：${error instanceof Error ? error.message : "fetch_failed"}`; }
+    for (const plan of PLAN_SEEDS.filter(plan => plan.vendor === vendor)) await recordCheck(database, plan, "google_play", region.countryCode, status, reason, url, checkedAt);
+    return 1;
+  });
+  return results.reduce((sum, count) => sum + count, 0);
 }
 
 function parseEcbCsv(csv: string): Map<string, { date: string; rate: number }> {
@@ -459,5 +506,6 @@ export async function refreshOfficialSubscriptionChannels(database: Database): P
   const verifiedWebPrices = await verifyOfficialWebPrices(database, verifiedAt);
   let appStorePrices = 0;
   try { appStorePrices = await collectAppleAppStorePrices(database, verifiedAt); } catch { /* one source outage must not erase current values */ }
-  return { exchangeRates, seededPrices, verifiedWebPrices, appStorePrices, googlePlayRanges: 0 };
+  const googlePlayChecks = await checkGooglePlayPrices(database, verifiedAt);
+  return { exchangeRates, seededPrices, verifiedWebPrices, appStorePrices, googlePlayRanges: 0, googlePlayChecks };
 }

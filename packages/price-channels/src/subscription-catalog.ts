@@ -28,9 +28,9 @@ export const OFFICIAL_SUBSCRIPTION_PLAN_CATALOG: readonly OfficialSubscriptionPl
   { vendor: "anthropic", planCode: "claude-pro-annual", displayName: "Claude Pro Annual", billingPeriod: "year", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
   { vendor: "anthropic", planCode: "claude-max-5x-monthly", displayName: "Claude Max 5x", billingPeriod: "month", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
   { vendor: "anthropic", planCode: "claude-max-20x-monthly", displayName: "Claude Max 20x", billingPeriod: "month", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
-  { vendor: "google", planCode: "google-ai-plus-monthly", displayName: "Google AI Plus", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
-  { vendor: "google", planCode: "google-ai-pro-monthly", displayName: "Google AI Pro", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
-  { vendor: "google", planCode: "google-ai-ultra-monthly", displayName: "Google AI Ultra", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
+  { vendor: "google", planCode: "google-ai-plus-monthly", displayName: "Google AI Plus (400 GB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
+  { vendor: "google", planCode: "google-ai-pro-monthly", displayName: "Google AI Pro (5 TB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
+  { vendor: "google", planCode: "google-ai-ultra-monthly", displayName: "Google AI Ultra (30 TB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
   { vendor: "xai", planCode: "supergrok-monthly", displayName: "SuperGrok", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
   { vendor: "xai", planCode: "supergrok-plus-monthly", displayName: "SuperGrok Plus", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
 ];

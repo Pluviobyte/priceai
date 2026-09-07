@@ -39,3 +39,34 @@
   .table th, .table td { padding: 12px; min-width: 160px; }
   .scroll { max-height: 620px; }
 }
+/* Keep each channel on a comparable baseline; evidence expands only when requested. */
+.section .table th, .section .table td { min-width: 185px; padding: 14px; }
+.section .table .identity { min-width: 200px; max-width: 210px; }
+.section .table tbody .identity { font-weight: 600; }
+.section .table .groupStart > * { border-top: 2px solid var(--color-border); }
+.section .table tbody tr:first-child > * { border-top: 0; }
+.section .quote { white-space: normal; gap: 5px; min-height: 72px; }
+.section .quote strong { font-size: 16px; }
+.section .channel { display: inline-block; margin-top: 9px; padding: 3px 7px; border-radius: 5px; background: var(--color-surface); color: var(--color-text-body); font-size: 11px; }
+.original { white-space: nowrap; }
+.original small { display: inline; }
+.state, .best { font-size: 10px; font-style: normal; line-height: 1.5; }
+.state { color: var(--color-text-muted); }
+.best { color: var(--color-primary-strong); }
+.lowest strong { text-decoration: underline; text-decoration-color: var(--color-border); text-underline-offset: 4px; }
+.evidence { margin-top: 4px; color: var(--color-text-muted); font-size: 11px; font-weight: 400; line-height: 1.65; max-width: 240px; }
+.evidence summary { cursor: pointer; width: fit-content; }
+.evidence summary:hover { color: var(--color-primary); }
+.evidence summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.evidence p { margin: 6px 0; overflow-wrap: anywhere; }
+.evidence a { color: var(--color-primary); }
+.coverage { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 12px 16px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text-muted); font-size: 12px; background: var(--color-panel); }
+.coverage b { color: var(--color-text-primary); }
+.filters .checkbox { display: flex; align-items: center; gap: 7px; height: 42px; font-weight: 400; }
+.checkbox input { width: 16px; height: 16px; accent-color: var(--color-primary); }
+@media (max-width: 640px) {
+  .section .table .identity { min-width: 130px; max-width: 140px; }
+  .section .table th, .section .table td { padding: 10px; min-width: 175px; }
+  .filters .checkbox { flex-basis: 100%; height: auto; }
+  .coverage { gap: 8px; }
+}

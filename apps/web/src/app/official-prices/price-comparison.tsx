@@ -1,64 +1,88 @@
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
-import { isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice as Price, type OfficialSubscriptionCheck as Check } from "@/lib/public-pricing";
 import styles from "./price-comparison.module.css";
 
 const vendors: Record<string, string> = { openai: "ChatGPT", anthropic: "Claude", google: "Gemini", xai: "Grok" };
 const channels: Record<string, string> = { web: "官网直购", app_store: "iOS Store", google_play: "Google Play" };
 const periods: Record<string, string> = { month: "月付", year: "年付", one_time: "一次性" };
+const statuses: Record<string, string> = { fetch_failed: "来源暂不可读", regional_checkout_required: "需地区结算核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", sku_not_listed: "公开列表未列出" };
 type Params = Record<string, string | string[] | undefined>;
 const first = (value: Params[string]) => (Array.isArray(value) ? value[0] : value) ?? "";
-const number = (value: string) => Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = (value: string | number) => Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const keyOf = (row: { vendor: string; planCode: string; channel: string; countryCode: string }) => `${row.vendor}:${row.planCode}:${row.channel}:${row.countryCode}`;
+const newest = (rows: Price[]) => [...rows].sort((a, b) => b.verifiedAt.getTime() - a.verifiedAt.getTime())[0];
+const date = (value: Date) => value.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
 
-function GoMissingChannel({ channel }: { channel: string }) {
-  return <div className={styles.quote}><span className={styles.channel}>{channels[channel]}</span><span className={styles.missing}>当地价格待采集</span><a className={styles.rate} href="https://help.openai.com/en/articles/11989085-what-is-chatgpt-go" target="_blank" rel="noopener noreferrer">Go 支持此订阅渠道 ↗</a></div>;
-}
-
-function Quote({ row }: { row: OfficialSubscriptionPrice }) {
-  const original = row.priceKind === "exact" && row.amount !== null ? `${row.currency} ${number(row.amount)}`
-    : row.priceKind === "range" && row.lowerAmount !== null && row.upperAmount !== null ? `${row.currency} ${number(row.lowerAmount)}–${number(row.upperAmount)}` : "未公开精确价";
-  return <div className={styles.quote}>
-    <span className={styles.channel}>{channels[row.channel] ?? row.channel}{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? <em>公告参考价</em> : !isFreshOfficialSubscriptionPrice(row) && <em>待更新</em>}</span>
-    <a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow" title="查看官方价格来源">{original} ↗</a>
-    <strong>{row.priceKind === "exact" && row.cnyEstimate !== null ? `≈ ¥${number(row.cnyEstimate)}` : "人民币换算待补"}</strong>
-    <time dateTime={row.verifiedAt.toISOString()}>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? "公告 " : "核验 "}{row.verifiedAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit" })}</time>
-    {row.exchangeRateDate && row.exchangeRateUrl && <a className={styles.rate} href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率 {row.exchangeRateDate}</a>}
+function Cell({ row, check, monthly, lowest }: { row: Price | undefined; check: Check | undefined; monthly: boolean; lowest: boolean }) {
+  const exact = row?.priceKind === "exact" && row.amount !== null;
+  const announcement = row?.evidenceUrl.includes("/introducing-chatgpt-go/");
+  const fresh = row && isFreshOfficialSubscriptionPrice(row);
+  const divisor = monthly && row?.billingPeriod === "year" ? 12 : 1;
+  const state = announcement ? "公告参考价" : row?.collectionStatus === "ambiguous_sku" ? "套餐周期待核验" : exact && !fresh ? "历史价 · 待更新" : !exact ? statuses[check?.status ?? ""] ?? "尚未取得报价" : null;
+  return <div className={`${styles.quote}${lowest ? ` ${styles.lowest}` : ""}`}>
+    {exact && row ? <><span className={styles.original}>{row.currency} {amount(Number(row.amount) / divisor)}{divisor === 12 && <small> / 月</small>}</span><strong>{row.cnyEstimate !== null ? `≈ ¥${amount(Number(row.cnyEstimate) / divisor)}` : "汇率待补"}</strong>{divisor === 12 && <small>年付总额 {row.currency} {amount(row.amount!)}</small>}</> : <span className={styles.missing}>{state}</span>}
+    {exact && state && <em className={styles.state}>{state}</em>}
+    {lowest && <em className={styles.best}>本套餐 · 同渠道较低</em>}
+    <details className={styles.evidence}><summary>{exact ? "来源与核验" : "查看原因"}</summary>
+      {row && <><p>{announcement ? "公告日期" : "价格核验"}：<time dateTime={row.verifiedAt.toISOString()}>{date(row.verifiedAt)}</time></p><p>原始内购名称：{row.rawPlanName}</p><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">价格来源 ↗</a>{row.exchangeRateDate && row.exchangeRateUrl && <p><a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate} ↗</a></p>}</>}
+      {check ? <><p>{check.reason}</p><p>采集检查：{date(check.checkedAt)}</p><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看被检查的官方页面 ↗</a></> : <p>没有本地区、套餐与渠道的采集检查记录；不代表免费或不能购买。</p>}
+    </details>
   </div>;
 }
 
-export function PriceComparison({ rows, params, available }: { rows: OfficialSubscriptionPrice[]; params: Params; available: boolean }) {
-  const vendor = first(params.compare_vendor), period = first(params.compare_period), channel = first(params.compare_channel), region = first(params.compare_region);
-  const plans = catalog.filter((plan) => (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));
-  const regions = [...regionCatalog.map((item) => ({ code: item.countryCode, name: item.displayName })),
-    ...[...new Set(rows.map((row) => row.countryCode))].filter((code) => !regionCatalog.some((item) => item.countryCode === code)).sort().map((code) => ({ code, name: code }))];
-  const visibleRegions = regions.filter((item) => !region || item.code === region);
-  const filtered = rows.filter((row) => (!vendor || row.vendor === vendor) && (!period || row.billingPeriod === period) && (!channel || row.channel === channel) && (!region || row.countryCode === region));
-  const index = new Map<string, OfficialSubscriptionPrice[]>();
-  for (const row of filtered) {
-    const key = `${row.vendor}:${row.planCode}:${row.billingPeriod}:${row.countryCode}`;
-    index.set(key, [...(index.get(key) ?? []), row]);
-  }
+export function PriceComparison({ rows, checks, params, available }: { rows: Price[]; checks: Check[] | null; params: Params; available: boolean }) {
+  const requestedVendor = first(params.compare_vendor), requestedPeriod = first(params.compare_period), requestedChannel = first(params.compare_channel), requestedRegion = first(params.compare_region);
+  const vendor = vendors[requestedVendor] ? requestedVendor : "";
+  const period = ["month", "year"].includes(requestedPeriod) ? requestedPeriod : "";
+  const channel = channels[requestedChannel] ? requestedChannel : "";
+  const monthly = first(params.compare_basis) === "month";
+  const freshOnly = first(params.compare_fresh) === "1";
+  const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...[...new Set(rows.map(row => row.countryCode))].filter(code => !regionCatalog.some(item => item.countryCode === code)).sort().map(code => ({ code, name: code }))];
+  const region = regions.some(item => item.code === requestedRegion) ? requestedRegion : "";
+  const visibleRegions = regions.filter(item => !region || item.code === region);
+  const plans = catalog.filter(plan => (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));
+  const selectedChannels = Object.keys(channels).filter(value => !channel || channel === value);
+  const checkIndex = new Map((checks ?? []).map(check => [keyOf(check), check]));
+  const index = new Map<string, Price[]>();
+  for (const row of rows) { const key = keyOf(row); index.set(key, [...(index.get(key) ?? []), row]); }
+  const groups = plans.flatMap(plan => selectedChannels.map(channel => {
+    const cells = visibleRegions.map(region => {
+      const key = keyOf({ ...plan, channel, countryCode: region.code });
+      return { region, row: newest(index.get(key) ?? []), check: checkIndex.get(key) };
+    });
+    const comparable = cells.flatMap(cell => cell.row && cell.row.priceKind === "exact" && cell.row.cnyEstimate !== null && isFreshOfficialSubscriptionPrice(cell.row) ? [Number(cell.row.cnyEstimate)] : []);
+    return { plan, channel, cells, minimum: comparable.length > 1 ? Math.min(...comparable) : null };
+  })).filter(group => !freshOnly || group.cells.some(cell => cell.row && isFreshOfficialSubscriptionPrice(cell.row) && cell.row.priceKind === "exact"));
+  const total = plans.length * selectedChannels.length * visibleRegions.length;
+  const allCells = plans.flatMap(plan => selectedChannels.flatMap(channel => visibleRegions.map(region => newest(index.get(keyOf({ ...plan, channel, countryCode: region.code })) ?? []))));
+  const current = allCells.filter(row => row?.priceKind === "exact" && isFreshOfficialSubscriptionPrice(row)).length;
+  const historical = allCells.filter(row => row?.priceKind === "exact" && !isFreshOfficialSubscriptionPrice(row)).length;
   return <section id="price-comparison" className={styles.section} aria-labelledby="comparison-heading">
-    <header className={styles.heading}><div><p className="priceai-kicker">各 AI · 各档位 · 各地区</p><h2 id="comparison-heading">订阅价格对照表</h2><p>每格先看当地币种标价，再看人民币估算。月付与年付分别展示，年付金额为整年费用。</p></div><Link href="/official-prices/regions">单套餐渠道对照 ↗</Link></header>
+    <header className={styles.heading}><div><p className="priceai-kicker">各 AI · 各档位 · 各地区</p><h2 id="comparison-heading">订阅价格对照表</h2><p>一行一个套餐与购买渠道，横向比较地区。原币金额在上，人民币估算在下。</p></div><Link href="/official-prices/regions">单套餐详情 ↗</Link></header>
     <form action="/official-prices#price-comparison" className={styles.filters}>
-      {["q", "vendor", "channel", "period"].map((key) => first(params[key]) ? <input key={key} type="hidden" name={key} value={first(params[key])} /> : null)}
-      <label htmlFor="compare-vendor"><span>AI 产品</span><select aria-label="AI 产品" id="compare-vendor" name="compare_vendor" defaultValue={vendor}><option value="">全部 AI</option>{Object.entries(vendors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label htmlFor="compare-period"><span>付费周期</span><select aria-label="付费周期" id="compare-period" name="compare_period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select></label>
-      <label htmlFor="compare-channel"><span>购买渠道</span><select aria-label="购买渠道" id="compare-channel" name="compare_channel" defaultValue={channel}><option value="">全部渠道</option>{Object.entries(channels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <label htmlFor="compare-region"><span>地区</span><select aria-label="地区" id="compare-region" name="compare_region" defaultValue={region}><option value="">全部地区</option>{regions.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
+      {["q", "vendor", "channel", "period"].map(key => first(params[key]) ? <input key={key} type="hidden" name={key} value={first(params[key])} /> : null)}
+      <label htmlFor="compare-vendor">AI 产品<select id="compare-vendor" name="compare_vendor" defaultValue={vendor}><option value="">全部 AI</option>{Object.entries(vendors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label htmlFor="compare-period">付费周期<select id="compare-period" name="compare_period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select></label>
+      <label htmlFor="compare-channel">购买渠道<select id="compare-channel" name="compare_channel" defaultValue={channel}><option value="">全部渠道</option>{Object.entries(channels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label htmlFor="compare-region">地区<select id="compare-region" name="compare_region" defaultValue={region}><option value="">全部地区</option>{regions.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
+      <label htmlFor="compare-basis">金额口径<select id="compare-basis" name="compare_basis" defaultValue={monthly ? "month" : "cycle"}><option value="cycle">每期总价</option><option value="month">每月折算</option></select></label>
+      <label className={styles.checkbox}><input type="checkbox" name="compare_fresh" value="1" defaultChecked={freshOnly} />只看有新核验价的行</label>
       <button type="submit">更新对照表</button><Link href="/official-prices#price-comparison">重置</Link>
     </form>
-    <p className={styles.meta}>{plans.length} 个套餐 · {visibleRegions.length} 个地区 · {filtered.length} 条报价记录<span>左右滑动查看所有地区；点击原币价查看来源</span></p>
-    {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !plans.length || !visibleRegions.length ? <p role="status">没有匹配的套餐或地区，请重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
+    <div className={styles.coverage} role="status"><b>{current} / {total} 项有新核验价</b><span>{historical} 项为历史或待核验价格</span><span>{total - current - historical} 项尚无精确价</span></div>
+    <p className={styles.meta}>{plans.length} 个套餐 · {visibleRegions.length} 个地区 · {groups.length} 行<span>较低价只比较当前筛选地区、同套餐、同渠道；不跨档位排名</span></p>
+    {checks === null && <p role="status">采集状态暂不可用，已保存的价格仍可查看。</p>}
+    {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !groups.length ? <p role="status">当前条件下没有新核验报价，请取消勾选或重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
       <table className={styles.table}>
-        <caption className="sr-only">各 AI 套餐按地区对照的原币价格与人民币估算</caption>
-        <thead><tr><th scope="col">AI / 套餐档位</th>{visibleRegions.map((item) => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}</tr></thead>
-        <tbody>{plans.map((plan) => <tr key={`${plan.vendor}:${plan.planCode}:${plan.billingPeriod}`}>
-          <th scope="row"><span className={styles.vendor}>{vendors[plan.vendor] ?? plan.vendor}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod] ?? plan.billingPeriod}{plan.billingPeriod === "year" ? " · 整年总价" : " · 每期价格"}</small></th>
-          {visibleRegions.map((item) => { const quotes = index.get(`${plan.vendor}:${plan.planCode}:${plan.billingPeriod}:${item.code}`) ?? []; return <td key={item.code}>{plan.planCode === "chatgpt-go-monthly" ? Object.keys(channels).filter((key) => !channel || key === channel).map((key) => { const matches = quotes.filter((row) => row.channel === key); return matches.length ? matches.map((row) => <Quote key={row.id} row={row} />) : <GoMissingChannel key={key} channel={key} />; }) : quotes.length ? [...quotes].sort((a, b) => Object.keys(channels).indexOf(a.channel) - Object.keys(channels).indexOf(b.channel)).map((row) => <Quote key={row.id} row={row} />) : <span className={styles.missing}>尚无报价</span>}</td>; })}
+        <caption className="sr-only">每行一个套餐与渠道，每列一个地区，同时保留原币及人民币价格</caption>
+        <thead><tr><th scope="col" className={styles.identity}>AI / 套餐 / 渠道</th>{visibleRegions.map(item => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}</tr></thead>
+        <tbody>{groups.map(({ plan, channel, cells, minimum }, index) => <tr key={`${plan.planCode}:${channel}`} className={index === 0 || groups[index - 1]?.plan.planCode !== plan.planCode ? styles.groupStart : undefined}>
+          <th scope="row" className={styles.identity}><span className={styles.vendor}>{vendors[plan.vendor]}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod]}{plan.billingPeriod === "year" ? " · 整年扣款" : ""}</small><span className={styles.channel}>{channels[channel]}</span></th>
+          {cells.map(({ region, row, check }) => <td key={region.code}><Cell row={row} check={check} monthly={monthly} lowest={Boolean(row && visibleRegions.length > 1 && isFreshOfficialSubscriptionPrice(row) && row.cnyEstimate !== null && minimum !== null && Number(row.cnyEstimate) === minimum)} /></td>)}
         </tr>)}</tbody>
       </table>
     </div>}
-    <p className={styles.note}>Go 支持官网、iOS 和 Google Play 订阅，地区及账户资格以实际结算为准。公告参考价保留公告日期，不代表已核验当前结算价。人民币金额按记录所关联的汇率估算，未另加税费及跨境支付手续费。“待更新”保留上次核验价格；“尚无报价”表示尚未收录，不代表免费或不能购买。</p>
+    <p className={styles.note}>年付“每月折算”仅用于预算比较，付款仍收取整年费用。人民币金额使用记录对应的汇率，未另加税费和跨境支付费；“公告参考价”及待核验记录不参与较低价标记。缺少价格不代表该地区或渠道不支持订阅，购买资格请在官方结算页确认。</p>
   </section>;
 }
