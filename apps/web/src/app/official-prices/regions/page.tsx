@@ -69,7 +69,7 @@ function newestPriceRecord(rows: readonly OfficialSubscriptionPrice[]): Official
 }
 
 function PriceCell({ row, check }: { row: OfficialSubscriptionPrice | null; check: OfficialSubscriptionCheck | undefined }) {
-  if (!row) return <div className="priceai-region-price"><span className="priceai-region-missing">尚未取得套餐报价</span>{check && <details><summary>查看原因与来源</summary><small>{check.reason}</small><small>检查日期 {priceDate(check.checkedAt)}</small><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看官方来源 ↗</a></details>}</div>;
+  if (!row || check?.status === "price_anomaly") return <div className="priceai-region-price"><span className="priceai-region-missing">{check?.status === "price_anomaly" ? "源站金额异常 · 待核验" : "尚未取得套餐报价"}</span>{check && <details><summary>查看原因与来源</summary><small>{check.reason}</small><small>检查日期 {priceDate(check.checkedAt)}</small><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看官方来源 ↗</a></details>}</div>;
   const fresh = isFreshOfficialSubscriptionPrice(row);
   return <div className={`priceai-region-price${fresh ? "" : " is-stale"}`}>
     <a className="priceai-region-price-source" href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><b>{originalPrice(row)}</b></a>
@@ -162,7 +162,7 @@ export default async function OfficialPriceRegionsPage({
         <table className="priceai-region-table">
           <thead><tr><th>地区</th><th>官网</th><th>iOS Store</th><th>Google Play</th><th>最新价格日期</th></tr></thead>
           <tbody>{regionRows.map(({ region, byChannel, latest: regionLatest }) => <tr key={region.countryCode}>
-            <td data-label="地区"><b>{region.displayName}</b><small>{region.countryCode} · {region.currency}</small></td>
+            <td data-label="地区"><b>{region.displayName}</b><small>{region.countryCode}</small></td>
             {channels.map((channel) => {
               const row = byChannel[channel];
               return <td data-label={channelNames[channel]} key={channel}><PriceCell row={row} check={checks.find(check => check.planCode === selectedPlan.planCode && check.vendor === selectedPlan.vendor && check.channel === channel && check.countryCode === region.countryCode)} /></td>;

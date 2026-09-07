@@ -47,7 +47,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const channel = channels[requestedChannel] ? requestedChannel : "";
   const monthly = first(params.compare_basis) === "month";
   const freshOnly = first(params.compare_fresh) === "1";
-  const otherCodes = [...new Set(rows.map(row => row.countryCode))].filter(code => !regionCatalog.some(item => item.countryCode === code));
+  const otherCodes = [...new Set([...rows.map(row => row.countryCode), ...(checks ?? []).map(check => check.countryCode)])].filter(code => !regionCatalog.some(item => item.countryCode === code));
   const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...otherCodes.map(code => ({ code, name: regionDisplayName(code) })).sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))];
   const region = regions.some(item => item.code === requestedRegion) ? requestedRegion : "";
   const visibleRegions = regions.filter(item => !region || item.code === region);
