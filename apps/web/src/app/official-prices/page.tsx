@@ -4,6 +4,7 @@ import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/
 import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
+import { PriceComparison } from "./price-comparison";
 
 export const dynamic = "force-dynamic";
 
@@ -185,13 +186,14 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
           <label className="sr-only" htmlFor="official-query">搜索官方订阅</label>
           <input id="official-query" name="q" defaultValue={q} placeholder="搜索 ChatGPT、Claude、Gemini 或 Grok" />
           {vendor && <input type="hidden" name="vendor" value={vendor} />}
-          <label className="sr-only" htmlFor="official-channel">购买渠道</label>
+          <fieldset className="official-filter-group"><legend className="sr-only">筛选官方套餐</legend>
+          <div className="official-filter-field"><label htmlFor="official-channel">购买渠道</label>
           <select id="official-channel" name="channel" defaultValue={channel}><option value="">全部渠道</option><option value="web">官网直购</option><option value="app_store">iOS Store</option><option value="google_play">Google Play</option></select>
-          <label className="sr-only" htmlFor="official-period">结算周期</label>
+          </div><div className="official-filter-field"><label htmlFor="official-period">结算周期</label>
           <select id="official-period" name="period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select>
-          <button type="submit">⌕　筛选</button>
+          </div><button type="submit" className="official-filter-submit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>筛选</button></fieldset>
         </form>
-        <nav aria-label="官方价格相关页面"><Link className="active" href="/official-prices">套餐总览</Link><Link href="/official-prices/regions">地区对照</Link><Link href="/official-api">官方 API</Link></nav>
+        <nav aria-label="官方价格相关页面"><Link className="active" href="/official-prices">套餐总览</Link><a href="#price-comparison">订阅价格对照表</a><Link href="/official-prices/regions">地区对照</Link><Link href="/official-api">官方 API</Link></nav>
       </div>
       <div className="priceai-catalog-status"><span>{plans.length} 个匹配套餐</span>{(q || vendor || channel || period) && <Link href="/official-prices">清空全部条件</Link>}</div>
 
@@ -213,6 +215,8 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
           })}</tbody>
         </table>
       </div> : <div className="empty-state">没有匹配的官方订阅套餐，请尝试其他关键词或产品。</div>}
+
+      <PriceComparison rows={allRows} params={raw} available={databaseAvailable} />
 
       <aside className="priceai-official-note"><b>读表提醒</b><p>人民币估算不额外计入当地税费、银行卡跨境手续费或应用商店结算差异。能否购买还取决于账号地区和支付方式，付款前请回到官方页面再次确认。</p></aside>
       <p className="priceai-catalog-disclaimer">PriceAI 只整理可核验的官方公开信息，不销售订阅、不代购，也不保证地区购买资格或支付可用性。</p>

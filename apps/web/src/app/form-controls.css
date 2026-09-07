@@ -1,0 +1,56 @@
+/* Shared native selects retain form submission, keyboard and mobile picker support. */
+:root body select:not([multiple]):not([size]) {
+  appearance: none;
+  min-height: 42px;
+  padding: 9px 38px 9px 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: var(--color-panel);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23677993' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-size: 16px;
+  background-repeat: no-repeat;
+  color: var(--color-text-body);
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+:root body select:not([multiple]):not([size]):hover:not(:disabled) { border-color: var(--color-brand); background-color: var(--color-panel-soft); }
+:root body select:not([multiple]):not([size]):focus-visible { border-color: var(--color-primary); outline: 2px solid var(--color-primary); outline-offset: 2px; }
+:root body select:disabled { opacity: .5; cursor: not-allowed; }
+:root body select option, :root body select optgroup { color: var(--color-text-body); background: var(--color-panel); }
+@supports (appearance: base-select) {
+  :root body select:not([multiple]):not([size]), :root body select:not([multiple]):not([size])::picker(select) { appearance: base-select; }
+  :root body select:not([multiple]):not([size]) { background-image: none; padding-right: 13px; align-items: center; gap: 16px; }
+  :root body select::picker-icon { color: var(--color-text-muted); transition: rotate 150ms ease; }
+  :root body select:open::picker-icon { rotate: 180deg; }
+  :root body select::picker(select) { margin-top: 6px; padding: 5px; max-height: min(360px, 60dvh); overflow: auto; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-panel); color: var(--color-text-body); box-shadow: 0 12px 32px oklch(20% .025 257 / 14%); }
+  :root body select option { padding: 9px 12px; min-height: 38px; border-radius: 7px; font: inherit; cursor: pointer; }
+  :root body select option:hover, :root body select option:focus-visible { background: var(--color-surface-hover); outline: none; }
+  :root body select option:checked { color: var(--color-primary-strong); background: var(--color-surface-selected); font-weight: 600; }
+  :root body select option::checkmark { color: var(--color-primary); }
+  :root body select optgroup { padding: 5px 0; }
+}
+.priceai-official-toolbar form { flex: 1 1 620px; gap: 16px; align-items: flex-end; }
+.priceai-official-toolbar form > #official-query { flex: 1 1 260px; width: auto; min-width: 180px; height: 42px; border-radius: 10px; }
+.official-filter-group { display: flex; align-items: flex-end; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.official-filter-field { display: grid; gap: 6px; min-width: 0; }
+.official-filter-field > label { color: var(--color-text-muted); font-size: 11px; font-weight: 600; padding-left: 2px; }
+:root body .official-filter-field select { width: 145px; height: 42px; }
+.priceai-official-toolbar .official-filter-submit { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 42px; padding: 0 18px; border: 1px solid var(--color-primary); border-radius: 10px; background: var(--color-primary); color: var(--color-text-on-primary); font-size: 13px; cursor: pointer; }
+.priceai-official-toolbar .official-filter-submit:hover { background: var(--color-primary-hover); }
+.priceai-official-toolbar .official-filter-submit:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+@media (max-width: 640px) {
+  .priceai-official-toolbar form > #official-query { flex-basis: 100%; }
+  .official-filter-group { width: 100%; gap: 8px; }
+  .official-filter-field { flex: 1 1 0; }
+  :root body .official-filter-field select { width: 100%; min-width: 0; }
+  .priceai-official-toolbar .official-filter-submit { padding: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) { :root body select, :root body select::picker-icon { transition: none; } }
+@media (max-width: 760px) {
+  .priceai-official-toolbar form { flex: 0 1 auto; width: 100%; }
+}

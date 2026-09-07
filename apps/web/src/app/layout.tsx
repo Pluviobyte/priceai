@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { PersistentSiteHeader } from "./persistent-site-header";
 import "./styles.css";
+import "./form-controls.css";
 
 const deploymentOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
 
