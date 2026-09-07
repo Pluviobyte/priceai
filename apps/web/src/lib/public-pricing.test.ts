@@ -18,6 +18,7 @@ test("an explicitly monthly listing can be compared, unless its SKU is ambiguous
   assert.equal(isFreshOfficialSubscriptionPrice(monthly, now), true);
   assert.equal(isFreshOfficialSubscriptionPrice({ ...monthly, collectionStatus: "ambiguous_sku" }, now), false);
   assert.equal(isFreshOfficialSubscriptionPrice({ ...monthly, collectionStatus: "sku_not_listed" }, now), false);
+  assert.equal(isFreshOfficialSubscriptionPrice({ ...monthly, collectionStatus: "price_anomaly" }, now), false);
 });
 
 test("OpenAI standard plan documents may confirm period without claiming checkout verification", () => {

@@ -37,7 +37,7 @@ export async function runSubscriptionSweep(databaseUrl: string, options: Subscri
     if (!result.appStorePrices) errors.push("Apple sweep returned no prices");
     if (!result.googleWebPrices) errors.push("Google sweep returned no prices");
     if (!result.openAiWebPrices || result.openAiWebSkipped) errors.push("OpenAI browser sweep incomplete");
-    const failedChecks = (await client.query("select channel,status,count(*)::int as affected_quotes,count(distinct evidence_url)::int as source_pages from official_subscription_checks where checked_at >= $1 and status in ('fetch_failed','parser_drift','storefront_redirected','country_fallback','currency_mismatch','currency_unknown') group by channel,status", [startedAt])).rows;
+    const failedChecks = (await client.query("select channel,status,count(*)::int as affected_quotes,count(distinct evidence_url)::int as source_pages from official_subscription_checks where checked_at >= $1 and status in ('fetch_failed','parser_drift','storefront_redirected','country_fallback','currency_mismatch','currency_unknown','price_anomaly') group by channel,status", [startedAt])).rows;
     const status = errors.length ? "failed" : failedChecks.length ? "partial" : "success";
     const summary = {...result, failedChecks};
     await client.query("update operator_job_requests set status=$2,result=$3,error_message=$4,finished_at=now() where id=$1", [requestId, status, JSON.stringify(summary), errors.length ? errors.join("; ").slice(0, 2000) : null]);

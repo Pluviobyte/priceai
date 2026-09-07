@@ -74,7 +74,7 @@ export function isFreshOfficialSubscriptionPrice(
   row: SubscriptionEvidence,
   now = Date.now(),
 ): boolean {
-  if (["ambiguous_sku", "sku_not_listed", "billing_unverified", "not_available", "storefront_redirected", "country_fallback", "currency_mismatch", "currency_unknown"].includes(row.collectionStatus ?? "")) return false;
+  if (["price_anomaly", "ambiguous_sku", "sku_not_listed", "billing_unverified", "not_available", "storefront_redirected", "country_fallback", "currency_mismatch", "currency_unknown"].includes(row.collectionStatus ?? "")) return false;
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return false;
   if (!hasVerifiedSubscriptionBilling(row)) return false;
   const verifiedAt = new Date(row.verifiedAt).getTime();
@@ -85,6 +85,7 @@ export function getOfficialSubscriptionPriceStatus(row: SubscriptionEvidence, no
   if (row.priceKind === "unknown") return "未公开套餐精确价";
   if (row.priceKind === "range") return "应用价格区间 · 非套餐报价";
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return "公告参考价 · 非当前报价";
+  if (row.collectionStatus === "price_anomaly") return "源站金额异常 · 待人工核验";
   if (row.collectionStatus === "ambiguous_sku") return "同名多价 · 待核验";
   if (row.collectionStatus === "sku_not_listed") return "本次列表未列出 · 历史记录";
   if (row.collectionStatus === "not_available") return "来源未提供本地区页面 · 历史记录";

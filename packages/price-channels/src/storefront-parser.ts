@@ -250,6 +250,7 @@ export function parseLocalizedAmount(display: string, currency: string): number 
 }
 
 const KNOWN_CURRENCY_CODES = new Set([
+  ...Intl.supportedValuesOf("currency"),
   "AED", "AUD", "BGN", "BHD", "BRL", "CAD", "CHF", "CLP", "CNY", "COP", "CZK", "DKK", "EGP", "EUR", "GBP", "HKD", "HUF",
   "IDR", "ILS", "INR", "IQD", "ISK", "JOD", "JPY", "KES", "KRW", "KWD", "KZT", "LKR", "MAD", "MXN", "MYR", "NGN", "NOK",
   "NZD", "OMR", "PEN", "PHP", "PKR", "PLN", "QAR", "RON", "RSD", "RUB", "SAR", "SEK", "SGD", "THB", "TRY", "TWD", "TZS",

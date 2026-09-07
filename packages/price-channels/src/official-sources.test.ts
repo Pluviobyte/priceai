@@ -216,3 +216,36 @@ test("Ultra tiers are associated with explicit labels even if their order revers
   assert.equal(parsed.plans.find(p=>p.planKey==='ultra_20x')?.amount,199);
   assert.equal(parseGeminiSubscriptionPage(geminiCard("Google AI Ultra",'<span class="price-amount">$99</span>/month'),"USD").plans.length,0);
 });
+
+test("localized Ultra usage labels retain their own price and monthly period", () => {
+  const labels = [
+    ["5‑mal", "20‑mal"], ["cinq fois", "20 fois"], ["5 veces", "20 veces"],
+    ["5배", "20배"], ["5 kat", "20 kat"], ["5 مرات", "20 مرة"],
+    ["5 razy", "20 razy"], ["5 volte", "20 volte"], ["5 пъти", "20 пъти"],
+    ["5 kertaa", "20 kertaa"], ["5 φορές", "20 φορές"], ["5 puta", "20 puta"],
+    ["Ötször", "20-szor"], ["פי 5", "פי 20"], ["penkis kartus", "dvidešimt kartų"],
+    ["piecas reizes", "20 reizes"], ["5 ganger", "20 ganger"], ["5 گنا", "20 گنا"],
+    ["5 vezes", "20 vezes"], ["cinci ori", "20 de ori"], ["5 пута", "20 пута"],
+    ["fem gånger", "20 gånger"], ["5-krat", "20-krat"], ["5-krát", "20‑krát"],
+    ["5 เท่า", "20 เท่า"], ["5 разів", "20 разів"], ["5 lần", "20 lần"],
+  ];
+  for (const [five, twenty] of labels) {
+    const subtitle = `<span class="price"><span class="price-amount">219.99</span></span> EUR/month: ${twenty} AI Pro <span class="price"><span class="price-amount">99.99</span></span> EUR/month: ${five} AI Pro`;
+    const parsed = parseGeminiSubscriptionPage(geminiCard("Google AI Ultra", "", subtitle));
+    assert.deepEqual(parsed.plans.map(p => [p.planKey, p.amount, p.periodConfirmed]), [["ultra_20x",219.99,true],["ultra_5x",99.99,true]], five ?? "unknown label");
+  }
+  const chinese = '每月 <span class="price"><span class="price-amount">3300</span></span> NT$：用量上限是 AI Pro 的 5 倍 每月 <span class="price"><span class="price-amount">6500</span></span> NT$：用量上限是 AI Pro 的 20 倍';
+  assert.deepEqual(parseGeminiSubscriptionPage(geminiCard("Google AI Ultra", "", chinese)).plans.map(p=>p.periodConfirmed), [true,true]);
+});
+
+test("Google local ISO currencies override Apple storefront USD fallback and anomalous USD requires review", () => {
+  for (const code of ["BOB", "CRC", "DZD", "GEL", "GHS", "PYG"]) {
+    const price = parseGeminiSubscriptionPage(geminiCard("Google AI Plus", `<span class="price"><span class="price-amount">3100</span></span> ${code}/month`), "USD").plans[0]!;
+    assert.equal(price.currency, code);
+    assert.equal(price.requiresPriceReview, false);
+  }
+  const sourceError = parseGeminiSubscriptionPage(geminiCard("Google AI Plus", '<span class="price"><span class="price-amount">3,100</span></span> USD/month'), "USD").plans[0]!;
+  assert.equal(sourceError.currency, "USD");
+  assert.equal(sourceError.amount, 3100);
+  assert.equal(sourceError.requiresPriceReview, true);
+});

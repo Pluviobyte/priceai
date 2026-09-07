@@ -637,7 +637,7 @@ export interface VendorMonthlyReference {
 export interface GoogleWebCollectionResult {
   prices: number;
   countries: number;
-  /** `${planCode}:${countryCode}` → 官网月付金额与来源，供 Apple 内购周期交叉确认（规则 C）。 */
+  /** `${planCode}:${countryCode}` → 官网月价与来源，仅保留金额匹配提示，不证明 Apple 周期。 */
   monthlyAmounts: Map<string, VendorMonthlyReference>;
 }
 
@@ -701,6 +701,10 @@ export async function collectGoogleWebPrices(
       }
       if (!price.currency || price.amount === null) {
         await recordCheck(database, plan, "web", countryCode, "currency_unknown", `无法确认金额“${price.amountText}”的币种或数值`, url, verifiedAt, { ...details, evidence: { priceText: price.priceText } });
+        continue;
+      }
+      if (price.requiresPriceReview) {
+        await recordCheck(database, plan, "web", countryCode, "price_anomaly", `源站显示 ${price.currency} ${price.amount}，超过个人月费的 USD 1,000 人工复核阈值；不擅自修正币种或参与比价`, url, verifiedAt, { ...details, evidence: { priceText: price.priceText, amount: price.amount, currency: price.currency } });
         continue;
       }
       await upsertPrice(database, {
@@ -827,13 +831,15 @@ export async function collectAppleAppStorePrices(
       }
       const explicitPeriod = / - Monthly$/i.test(alias.rawPlanName) ? "month" : / - Annual$/i.test(alias.rawPlanName) ? "year" : null;
       const matchesVendorPage = webReference !== undefined && webReference.currency === region.currency && Math.abs(webReference.amount - listing.amount) < 0.005;
-      // OpenAI documents monthly-only Go/Plus/Pro plans. This confirms the plan period,
+      // OpenAI documents monthly-only Go/Pro plans. This confirms the plan period,
       // not a logged-in customer's SKU eligibility, introductory offer or final charge.
       const monthlyOnly = target.vendor === "openai" && alias.planCode !== "chatgpt-plus-monthly";
       const billingPeriod = explicitPeriod ?? (monthlyOnly ? "month" : null);
       const billingEvidenceMethod = explicitPeriod ? "explicit_sku_name" : monthlyOnly ? "official_plan_document" : null;
       const billingEvidenceUrl = explicitPeriod ? evidenceUrl
-        : monthlyOnly ? "https://help.openai.com/en/articles/11989085-what-is-chatgpt-go" : null;
+        : monthlyOnly ? (alias.planCode === "chatgpt-go-monthly"
+          ? "https://help.openai.com/en/articles/11989085-what-is-chatgpt-go"
+          : "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro") : null;
       await upsertPrice(database, {
         vendor: target.vendor,
         planCode: alias.planCode,

@@ -62,6 +62,7 @@ export interface GeminiSubscriptionPlanPrice {
   amount: number | null;
   currency: string | null;
   periodConfirmed: boolean;
+  requiresPriceReview: boolean;
   priceText: string;
 }
 
@@ -76,6 +77,15 @@ const MONTHLY_MARKER = /(?:\/\s*(?:month|mo\b|mês|mes\b|monat|maand|mois|mese|m
 
 function amountsInBlock(block: string): string[] {
   return [...block.matchAll(/<span class="price-amount">([^<]*)<\/span>/g)].map((match) => match[1]!.replace(/ /g, " ").trim());
+}
+
+/** Explicit usage multipliers observed on Google's localized cards; never infer from price order. */
+function ultraUsageLabels(text: string): string[] {
+  const labels = [...text.matchAll(/(?:^|[^\p{N}])(5|20)\s*[-‑–]?\s*(?:[x×倍배]|mal\b|fois\b|veces\b|vezes\b|volte\b|kat\b|razy\b|kertaa\b|ganger\b|gånger\b|puta\b|krat\b|krát\b|szor\b|reizes\b|(?:de\s+)?ori\b|пъти|пута|разів|φορές|مرات|مرة|گنا|เท่า|lần)/giu)].map(match => match[1]!);
+  for (const match of text.matchAll(/פי\s*(5|20)(?![0-9])/gu)) labels.push(match[1]!);
+  if (/(?:cinq\s+fois|ötször|penkis\s+kartus|piecas\s+reizes|cinci\s+ori|fem\s+gånger)/iu.test(text)) labels.push("5");
+  if (/dvidešimt\s+kartų/iu.test(text)) labels.push("20");
+  return labels;
 }
 
 export function parseGeminiSubscriptionPage(html: string, fallbackCurrency?: string): GeminiSubscriptionPageParse {
@@ -96,7 +106,6 @@ export function parseGeminiSubscriptionPage(html: string, fallbackCurrency?: str
     const titleText = title ? visibleText(title[1]!) : "";
     const subtitleText = subtitle ? visibleText(subtitle[1]!) : "";
     const titleAmounts = title ? amountsInBlock(title[1]!) : [];
-    const subtitleAmounts = subtitle ? [...new Set(amountsInBlock(subtitle[1]!))] : [];
     const currency = detectCurrencyFromDisplay(titleText) ?? detectCurrencyFromDisplay(subtitleText) ?? fallbackCurrency ?? null;
     const build = (planKey: GeminiPlanKey, amountText: string | undefined, priceText: string): GeminiSubscriptionPlanPrice => ({
       planKey,
@@ -105,16 +114,19 @@ export function parseGeminiSubscriptionPage(html: string, fallbackCurrency?: str
       amount: amountText && currency ? parseLocalizedAmount(amountText, currency) : null,
       currency,
       periodConfirmed: MONTHLY_MARKER.test(priceText),
+      // CI/SN currently print local-scale amounts with an explicit USD label (e.g. USD 61,401).
+      // Retain the source evidence but require review; never silently change its currency.
+      requiresPriceReview: currency === "USD" && (parseLocalizedAmount(amountText ?? "", currency) ?? 0) > 1_000,
       priceText,
     });
     if (tier === "Plus") plans.push(build("plus", titleAmounts[0], titleText));
     else if (tier === "Pro") plans.push(build("pro", titleAmounts[0], titleText));
     else {
       // Bind each price to its own explicit usage label, never its position in the card.
-      const segments = (subtitle?.[1] ?? "").split(/(?=<span class="price">)/);
+      const segments = (subtitle?.[1] ?? "").replace(/(每(?:個)?月)\s*(<span class="price">)/g, "$2$1").split(/(?=<span class="price">)/);
       for (const segment of segments) {
         const text = visibleText(segment);
-        const labels = [...text.matchAll(/(?:^|[^0-9])(5|20)\s*[x×倍]/gi)].map(match => match[1]);
+        const labels = ultraUsageLabels(visibleText(segment.replace(/<span class="price-amount">[^<]*<\/span>/g, "")));
         const values = amountsInBlock(segment);
         if (new Set(labels).size !== 1 || values.length !== 1) continue;
         const key: GeminiPlanKey = labels[0] === "5" ? "ultra_5x" : "ultra_20x";

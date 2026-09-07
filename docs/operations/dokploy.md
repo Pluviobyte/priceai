@@ -22,3 +22,5 @@ npm run cli --workspace @price-radar/worker -- refresh-subscriptions featured
 生产验收：Web /api/health 返回正常；Worker Docker 健康检查有心跳；operator_job_requests 中观察完整运行结果，并按来源查看 official_subscription_checks 的 HTTP 状态、最终 URL、解析数量与证据。应用页面返回 404 或接口没有国家配置，只说明该公开来源未提供记录，不能证明账号不能购买。浏览器遇持续访问拒绝停止该批请求，记录失败，不绕过登录或验证码。
 
 价格规则：保留 Apple JSON、国家地址校验、Google 明确月价和 OpenAI 明确 month 配置；禁止 null/空字符串变成免费价格。不同渠道金额相同和其他套餐金额相同都不足以确认周期/重复身份，必须保留待核验。旧推断证据在读取层同样不参与比较，重新采集逐步更新证据。Plus 已存在年付配置线索，Apple 无明确周期的 Plus 名称不能再按旧的“仅月付”文档认定。
+
+Google 的本币 ISO 代码优先于 Apple 商店币种，不能把 BOB、CRC、DZD、GEL、GHS、PYG 等回退成 USD。Ultra 5x/20x 按各语言的明确倍数词绑定价格，包括拼写数字与中文前置“每月”；没有倍数标签仍不推断。2026-09-08 检查发现 CI/SN 的官网把 3,100 和 61,401 标成 USD；Google 个人月价超过 USD 1,000 时登记 price_anomaly 交人工复核，不猜测正确币种、不参与比价。该阈值是异常检查规则，不是官方定价上限。
