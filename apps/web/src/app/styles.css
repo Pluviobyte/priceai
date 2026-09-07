@@ -1850,3 +1850,14 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
   .priceai-article-body p, .priceai-article-body li { font-size: 15px; }
   .priceai-related-docs { padding-bottom: 86px; }
 }
+
+/* Keep every header group inside the bar throughout its scroll contraction. */
+.site-header-bar { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 16px; }
+.site-header-bar > .site-brand { justify-self: start; margin-inline-end: 0; min-width: 0; }
+.site-header-bar > .site-header-actions { justify-self: end; margin-inline-start: 0; }
+.site-header .site-nav { max-width: 100%; }
+@media (max-width: 1359px) {
+  .site-header-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .site-nav, .site-desktop-actions, .site-desktop-account, .site-header-divider { display: none; }
+  .site-menu-toggle { display: inline-grid; }
+}
