@@ -177,6 +177,8 @@ export default async function HomePage() {
       </div>
     </section>
 
+    <PriceBaselineTable snapshot={snapshot} />
+
     <section className="priceai-delivery-section" id="delivery">
       <div className="priceai-container">
         <div className="priceai-section-heading">
@@ -197,11 +199,9 @@ export default async function HomePage() {
             <Link className="priceai-btn" href={item.href}>{item.cta} <Arrow /></Link>
           </article>)}
         </div>
-        <p className="priceai-delivery-note">下面表格里的最低价可能来自其中任何一种。比价之前先确认你要哪一种——同规格才有可比性。</p>
+        <p className="priceai-delivery-note">上面表格里的最低价可能来自其中任何一种。比价之前先确认你要哪一种——同规格才有可比性。</p>
       </div>
     </section>
-
-    <PriceBaselineTable snapshot={snapshot} />
 
     <section className="priceai-boundary-section">
       <div className="priceai-container">
