@@ -2,6 +2,8 @@ import { runSubscriptionSweep } from "./subscription-runner.js";
 import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
 import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
+import { sources } from "@price-radar/database/schema";
+import { eq } from "drizzle-orm";
 import { DujiaoCollector } from "@price-radar/dujiao-collector";
 import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
 import { KamiCollector } from "@price-radar/kami-collector";
@@ -59,6 +61,22 @@ async function main(): Promise<void> {
   );
 
   try {
+    if (command === "refresh-channels") {
+      await seedCanonicalProducts(database.db);
+      const enabled = await database.db.select({id:sources.id}).from(sources).where(eq(sources.enabled,true));
+      let failures = 0;
+      for (const source of enabled) {
+        try {
+          const result = await crawlSource(database.db, registry, source.id);
+          if (result.status !== "success") failures++;
+          console.log(JSON.stringify({event:"channel_crawled",sourceId:source.id,result}));
+        } catch (error) { failures++; console.error("channel_crawl_failed",source.id,error); }
+      }
+      const publication = await publishLatestSnapshots(database.db);
+      console.log(JSON.stringify({event:"channels_published",sources:enabled.length,failures,publication}));
+      if (failures) process.exitCode = 1;
+      return;
+    }
     if (command === "probe") {
       if (!argument) throw new Error("usage: probe <source-url>");
       const sourceUrl = await assertSafePublicUrl(argument);

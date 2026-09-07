@@ -58,7 +58,7 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
             <p className="blue-engine-mode"><em>{OFFER_MODE_LABEL[row.lowest.mode]}</em>{row.lowest.warrantyNote}</p>
             <small>{row.lowest.merchantName ?? "渠道待确认"} · {relative(row.verifiedAt)}</small>
           </>
-        : <span className="blue-engine-nodata">当前无有货报价</span>}
+        : <span className="blue-engine-nodata">暂无同规格近期有货报价</span>}
     </div>
 
     <Band row={row} />
@@ -128,8 +128,9 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
         </form>
       </div>
 
-      <p className="blue-engine-legend">{placeholder ? "数据接入中，下表暂不展示具体价格。" : "最低价口径：24 小时内验证过、标记有货、且与官方价同规格的报价。不同交付方式不合并计算。"}</p>
+      <p className="blue-engine-legend">{placeholder ? "数据暂时读取失败，请稍后重试。" : "最低价口径：24 小时内验证过、标记有货、且与官方价同规格的报价。价格带和有效报价数按最低价对应的交付方式统计；渠道权益和税费可能不同。"}</p>
 
+      {snapshot.warnings?.map(warning => <p key={warning} role="status" className="blue-engine-nodata">{warning}</p>)}
       <div className="blue-engine-table">
         <div className="blue-engine-table-head"><span>标准商品</span><span>官方价（折人民币）</span><span>渠道最低价与交付方式</span><span>价格分布</span><span>有效报价</span><span /></div>
         {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
