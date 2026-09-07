@@ -14,7 +14,7 @@ import {
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
   type OfficialSubscriptionPlanCatalogItem,
 } from "@price-radar/price-channels/subscription-catalog";
-import { extractOfficialPagePrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "@price-radar/price-channels/storefront-parser";
+import { extractChatGptGoWebPrice, extractOfficialPagePrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "@price-radar/price-channels/storefront-parser";
 
 type Database = NodePgDatabase<typeof databaseSchema>;
 
@@ -69,6 +69,18 @@ const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
   { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing" },
   { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing" },
 ];
+
+// Announcement fallback is historical evidence, never a newly verified checkout price.
+const GO_ANNOUNCEMENT_PRICE: PriceSeed = {
+  vendor: "openai", planCode: "chatgpt-go-monthly", channel: "web", countryCode: "US",
+  currency: "USD", priceKind: "exact", amount: 8, rawPlanName: "ChatGPT Go",
+  evidenceUrl: "https://openai.com/index/introducing-chatgpt-go/",
+  evidence: { sourceKind: "announcement", publishedAt: "2026-01-16", countryScope: "US" },
+};
+const LIVE_WEB_PRICES: readonly PriceSeed[] = [...VERIFIED_WEB_PRICES, {
+  ...GO_ANNOUNCEMENT_PRICE, evidenceUrl: "https://chatgpt.com/pricing/",
+  evidence: { sourceKind: "pricing_page", countryScope: "US" }, verificationTerms: ["Go"],
+}];
 
 const APP_STORE_TARGETS = [
   {
@@ -271,7 +283,8 @@ export async function seedVerifiedSubscriptionPrices(database: Database): Promis
   for (const price of VERIFIED_WEB_PRICES) {
     await upsertPrice(database, price, verifiedAt, { preserveVerifiedAtWhenUnchanged: true });
   }
-  return VERIFIED_WEB_PRICES.length;
+  await upsertPrice(database, GO_ANNOUNCEMENT_PRICE, new Date("2026-01-16T00:00:00.000Z"), { preserveVerifiedAtWhenUnchanged: true });
+  return VERIFIED_WEB_PRICES.length + 1;
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -307,7 +320,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 export async function verifyOfficialWebPrices(database: Database, verifiedAt = new Date()): Promise<number> {
-  const sourceUrls = [...new Set(VERIFIED_WEB_PRICES.map((price) => price.evidenceUrl))];
+  const sourceUrls = [...new Set(LIVE_WEB_PRICES.map((price) => price.evidenceUrl))];
   const fetchedPages = await mapWithConcurrency(sourceUrls, 4, async (sourceUrl) => {
     try {
       return [sourceUrl, await fetchText(sourceUrl)] as const;
@@ -317,10 +330,10 @@ export async function verifyOfficialWebPrices(database: Database, verifiedAt = n
   });
   const pageByUrl = new Map<string, string | null>(fetchedPages);
   let verified = 0;
-  for (const price of VERIFIED_WEB_PRICES) {
+  for (const price of LIVE_WEB_PRICES) {
     const html = pageByUrl.get(price.evidenceUrl);
     if (!html || price.amount === undefined || !price.verificationTerms) continue;
-    const extractedAmount = extractOfficialPagePrice(html, price.verificationTerms);
+    const extractedAmount = price.planCode === "chatgpt-go-monthly" ? extractChatGptGoWebPrice(html) : extractOfficialPagePrice(html, price.verificationTerms);
     if (extractedAmount === null || extractedAmount < price.amount * 0.25 || extractedAmount > price.amount * 4) continue;
     await upsertPrice(database, {
       ...price,

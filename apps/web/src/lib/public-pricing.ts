@@ -49,9 +49,10 @@ interface SubscriptionRow {
 const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 36 * 60 * 60 * 1_000;
 
 export function isFreshOfficialSubscriptionPrice(
-  row: Pick<OfficialSubscriptionPrice, "verifiedAt">,
+  row: Pick<OfficialSubscriptionPrice, "verifiedAt"> & { evidenceUrl?: string },
   now = Date.now(),
 ): boolean {
+  if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return false;
   const verifiedAt = new Date(row.verifiedAt).getTime();
   return Number.isFinite(verifiedAt) && verifiedAt <= now + 5 * 60_000 && now - verifiedAt <= OFFICIAL_SUBSCRIPTION_FRESHNESS_MS;
 }

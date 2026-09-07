@@ -117,3 +117,15 @@ export function selectAppStorePlanPrice(
     .sort((left, right) => left.amount - right.amount)[0];
   return upperBound && selected.amount < upperBound.amount ? selected : null;
 }
+
+/** Only accept a USD monthly price inside the Go pricing section, never a neighboring tier. */
+export function extractChatGptGoWebPrice(html: string): number | null {
+  const text = visibleTextFromHtml(html);
+  const section = text.match(/\bGo\s+Expanded access\b([\s\S]*?)(?=\bPlus\b|$)/i)?.[1];
+  if (!section) return null;
+  // Explicit US currency only; a localized dollar sign alone is ambiguous.
+  const match = section.match(/(?:US\$\s*|USD\s*\$?\s*)([0-9]+(?:\.[0-9]{1,2})?)\s*(?:USD\s*)?(?:\/|per)\s*month/i)
+    ?? section.match(/\$\s*([0-9]+(?:\.[0-9]{1,2})?)\s*USD\s*(?:\/|per)\s*month/i);
+  const amount = match ? Number(match[1]) : NaN;
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}

@@ -63,14 +63,14 @@ function newestPriceRecord(rows: readonly OfficialSubscriptionPrice[]): Official
     !latest || row.verifiedAt > latest.verifiedAt ? row : latest, null);
 }
 
-function PriceCell({ row, isLowest }: { row: OfficialSubscriptionPrice | null; isLowest: boolean }) {
-  if (!row || row.priceKind === "unknown") return <span className="priceai-region-missing">待核验</span>;
+function PriceCell({ row, isLowest, isGo }: { row: OfficialSubscriptionPrice | null; isLowest: boolean; isGo: boolean }) {
+  if (!row || row.priceKind === "unknown") return <span className="priceai-region-missing">{isGo ? "Go 支持此渠道 · 当地价格待采集" : "待核验"}</span>;
   const fresh = isFreshOfficialSubscriptionPrice(row);
   return <div className={`priceai-region-price${isLowest ? " is-lowest" : ""}${fresh ? "" : " is-stale"}`}>
     <a className="priceai-region-price-source" href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><b>{originalPrice(row)}</b></a>
     <small>{row.cnyEstimate ? `约 ${cnyPrice(row)}` : "人民币换算待补"}{row.exchangeRateDate && row.exchangeRateUrl && <> · <a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率 {row.exchangeRateDate} ↗</a></>}</small>
-    <small>价格核验 {formatRelativeVerificationTime(row.verifiedAt)}</small>
-    {isLowest ? <em>全表较低</em> : !fresh ? <em className="stale">已过期</em> : null}
+    <small>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? `公告日期 ${row.verifiedAt.toISOString().slice(0, 10)}` : `价格核验 ${formatRelativeVerificationTime(row.verifiedAt)}`}</small>
+    {row.evidenceUrl.includes("/introducing-chatgpt-go/") ? <em className="stale">公告参考价 · 非当前结算价</em> : isLowest ? <em>全表较低</em> : !fresh ? <em className="stale">已过期</em> : null}
   </div>;
 }
 
@@ -156,7 +156,7 @@ export default async function OfficialPriceRegionsPage({
             {channels.map((channel) => {
               const row = byChannel[channel];
               const isLowest = Boolean(row?.cnyEstimate && lowest?.id === row.id && lowestValue !== null && Number(row.cnyEstimate) === lowestValue);
-              return <td data-label={channelNames[channel]} key={channel}><PriceCell row={row} isLowest={isLowest} /></td>;
+              return <td data-label={channelNames[channel]} key={channel}><PriceCell row={row} isLowest={isLowest} isGo={selectedPlan.planCode === "chatgpt-go-monthly"} /></td>;
             })}
             <td data-label="当地最低"><strong>{cnyPrice(lowest)}</strong><small>{lowest ? channelNames[lowest.channel] ?? lowest.channel : "暂无可比精确价"}</small></td>
             <td data-label="该地区最近"><time dateTime={regionLatest?.toISOString()}>{formatRelativeVerificationTime(regionLatest)}</time></td>

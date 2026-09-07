@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractOfficialPagePrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
+import { extractChatGptGoWebPrice, extractOfficialPagePrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
 
 test("parses common App Store currency formats", () => {
   const html = `
@@ -69,4 +69,12 @@ test("extracts the amount nearest the named plan instead of an unrelated page pr
   const html = `<p>Another plan costs $100</p><section><h2>Claude Max 5x</h2><p>Now US$120 per month</p></section>`;
 
   assert.equal(extractOfficialPagePrice(html, ["Claude Max 5x"]), 120);
+});
+
+test("Go web price is scoped to the tier and explicit USD monthly billing", () => {
+  assert.equal(extractChatGptGoWebPrice("<h3>Go</h3><p>Expanded access</p><b>$8 USD / month</b><h3>Plus</h3><p>$20 USD / month</p>"), 8);
+  assert.equal(extractChatGptGoWebPrice("Go Expanded access / month Plus $20 USD / month"), null);
+  assert.equal(extractChatGptGoWebPrice("Go Expanded access A$13 / month Plus $20 USD / month"), null);
+  assert.equal(extractChatGptGoWebPrice("Go Expanded access $8 USD / year Plus $20 USD / month"), null);
+  assert.equal(extractChatGptGoWebPrice("Access denied"), null);
 });
