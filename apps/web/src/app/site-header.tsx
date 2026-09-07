@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SPONSORS_ENABLED } from "@/lib/site-features";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup, SITE_NAME } from "./site-brand";
@@ -18,7 +19,8 @@ export type HeaderSection =
   | "methodology"
   | "status"
   | "guides"
-  | "docs";
+  | "docs"
+  | "sponsors";
 
 type NavKey = HeaderSection | "merchant-feed" | "wholesale" | "commercial" | "support";
 type NavLink = { key: NavKey; label: string; href: string; note?: string };
@@ -60,6 +62,7 @@ const RESEARCH_LINKS: readonly NavLink[] = [
 ];
 
 const PARTICIPATE_LINKS: readonly NavLink[] = [
+  ...(SPONSORS_ENABLED ? [{ key: "sponsors" as const, label: "赞助商", href: "/sponsors", note: "合作展示与赞助说明" }] : []),
   { key: "submit", label: "提交店铺", href: "/submit", note: "公开店铺进入预检" },
   { key: "merchant-feed", label: "商家 Feed", href: "/merchant-feed", note: "直连 Feed 提高时效" },
   { key: "wholesale", label: "批发合作", href: "/wholesale" },
@@ -72,6 +75,7 @@ const PRIMARY_LINKS: readonly NavLink[] = [
   ...PURCHASE_GROUPS.flatMap((group) => group.links),
   { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
   { key: "docs", label: "文档", href: "/docs", note: "价格研究、购买说明与方法" },
+  ...(SPONSORS_ENABLED ? [{ key: "sponsors" as const, label: "赞助商", href: "/sponsors" }] : []),
 ];
 const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides" && link.key !== "docs");
 
