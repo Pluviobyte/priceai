@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
 import { getOfficialSubscriptionPrices, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../../site-footer";
-import { SiteHeader } from "../../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +60,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
   const sorted = [...rows].sort((a, b) => Number(a.cnyEstimate ?? Infinity) - Number(b.cnyEstimate ?? Infinity));
 
   return <div className="priceai-page priceai-official-detail-page">
-    <SiteHeader active="official" />
+
     <main className="priceai-detail-shell">
       <Link className="priceai-detail-back" href="/official-prices">← 返回官方订阅</Link>
       <section className="priceai-detail-hero">

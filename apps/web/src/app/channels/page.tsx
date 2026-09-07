@@ -3,7 +3,6 @@ import Link from "next/link";
 import { getChannelCatalog, type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
 import { CHANNEL_MODES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, channelHref, channelMoney, channelTime, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
 import { ModelIcon, type ModelIconName } from "../model-icons";
-import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import styles from "./channels.module.css";
 
@@ -79,7 +78,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   const tabs = [["products", "按规格比价"], ["offers", "全部报价"], ["merchants", "卡网商家"]] as const;
   const resultUnit = filters.view === "merchants" ? "家商家" : filters.view === "offers" ? "条报价" : "组商品规格";
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
-  return <div className="priceai-page"><SiteHeader active="channels" /><main className={styles.shell}>
+  return <div className="priceai-page"><main className={styles.shell}>
     <nav className={styles.breadcrumb} aria-label="面包屑"><Link href="/">首页</Link><span aria-hidden="true">/</span><span>卡网订阅</span></nav>
     <header className={styles.hero}><div><p className={styles.eyebrow}>卡网订阅 · 公开报价</p><h1>选对交付方式，再比较价格</h1><p className={styles.intro}>从自己账号代充、成品账号到团队席位，把期限、库存和售后放在价格旁边。找到合适的报价，再回到原店铺核验。</p></div><Link className={styles.button} href="/official-prices">先看官方订阅价 ↗</Link></header>
     <section className={styles.delivery} aria-label="先选择交付方式">{[

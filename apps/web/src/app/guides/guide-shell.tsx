@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { SITE_NAME } from "../site-brand";
-import { SiteHeader } from "../site-header";
 
 type GuideIconName = "start" | "subscription" | "official" | "channel" | "api";
 
@@ -73,7 +72,7 @@ type TocItem = { id: string; label: string; level?: 2 | 3 };
 
 export function GuideShell({ children, toc = [], currentSlug = "getting-started" }: { children: ReactNode; toc?: TocItem[]; currentSlug?: string }) {
   return <div className="priceai-docs">
-    <SiteHeader active="guides" />
+
 
     <div className="priceai-doc-shell">
       <aside className="priceai-doc-sidebar">

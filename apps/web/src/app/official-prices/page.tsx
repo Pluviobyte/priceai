@@ -4,7 +4,6 @@ import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/
 import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
-import { SiteHeader } from "../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +145,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
   };
 
   return <div className="priceai-page priceai-catalog-page priceai-official-page">
-    <SiteHeader active="official" />
+
     <nav className="priceai-category-rail" aria-label="按产品筛选">
       {categories.map(([label, value]) => <Link className={vendor === value ? "active" : undefined} href={filterHref(value)} key={label}>{label}</Link>)}
     </nav>

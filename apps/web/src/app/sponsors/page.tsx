@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SPONSORS_ENABLED } from "@/lib/site-features";
 import { sponsors } from "@/lib/sponsors";
-import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import styles from "./sponsors.module.css";
 
@@ -29,7 +28,7 @@ export default function SponsorsPage() {
 
   return (
     <div className="priceai-page">
-      <SiteHeader active="sponsors" />
+
       <main className={styles.page}>
         <header className={styles.hero}>
           <span className={styles.eyebrow}><Heart /> 独立比价 · 一起支持</span>

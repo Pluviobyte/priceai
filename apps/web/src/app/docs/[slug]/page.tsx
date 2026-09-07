@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { docsArticles, getDocArticle } from "@/lib/docs-content";
 import { SiteFooter } from "../../site-footer";
-import { SiteHeader } from "../../site-header";
 import { DocCard } from "../doc-card";
 
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" });
@@ -54,7 +53,7 @@ export default async function DocArticlePage({ params }: { params: Promise<{ slu
 
   return (
     <div className="priceai-page priceai-article-page">
-      <SiteHeader active="docs" />
+
       <main>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replaceAll("<", "\\u003c") }} />
         <section className="priceai-article-hero">

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getOfficialApiPrices, getOfficialSubscriptionPrices, type OfficialApiPrice } from "@/lib/public-pricing";
-import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +61,7 @@ export default async function OfficialApiPage({ searchParams }: { searchParams: 
   const latest = allPrices.reduce<Date | null>((current, row) => !current || row.verifiedAt > current ? row.verifiedAt : current, null);
   const categoryHref = (nextVendor: string) => nextVendor ? `/official-api?vendor=${encodeURIComponent(nextVendor)}` : "/official-api";
 
-  return <div className="priceai-page priceai-api-page"><SiteHeader active="api" />
+  return <div className="priceai-page priceai-api-page">
     <nav className="priceai-category-rail priceai-api-categories" aria-label="按厂商或模型类型筛选">{categoryVendors.map(([label, value]) => <Link className={vendor === value ? "active" : undefined} href={categoryHref(value)} key={label}>{label}</Link>)}</nav>
     <main className="priceai-catalog-shell priceai-api-shell">
       <section className="priceai-catalog-hero priceai-official-hero priceai-api-hero"><div><h1>官方订阅与 Token Plan</h1><p className="priceai-catalog-intro">标准模型是一套官方 API 基准价格库：文本模型按输入、输出和缓存 token 看，图片/视频生成按官方公开的图片或视频计费单位展示；来源渠道页用来查看官方订阅与 Token Plan 额度。</p><p className="priceai-catalog-meta">数据库同步：{date(latest)}　·　当前显示：{groups.length} 个官方来源渠道　·　价格单位以厂商文档为准</p></div><dl><div><dt>模型</dt><dd>{uniqueModels}</dd></div><div><dt>渠道</dt><dd>{new Set(allPrices.map((row) => row.vendor)).size}</dd></div><div><dt>报价</dt><dd>{allPrices.length}</dd></div><div><dt>订阅</dt><dd>{uniqueSubscriptionPlans}</dd></div></dl></section>

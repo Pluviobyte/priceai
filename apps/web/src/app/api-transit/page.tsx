@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getTransitOverview, type TransitModelPrice, type TransitProviderOverview } from "@/lib/public-pricing";
-import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +83,7 @@ export default async function ApiTransitPage({ searchParams }: { searchParams: P
   const sampleCount = data.providers.reduce((sum, provider) => sum + provider.sampleCount7d, 0);
   const globalLows = familyRanges(data.prices);
 
-  return <div className="priceai-page priceai-transit-page"><SiteHeader active="transit" />
+  return <div className="priceai-page priceai-transit-page">
     <nav className="priceai-category-rail" aria-label="按模型分类筛选">{categories.map((label) => <Link className={category === (label === "全部" ? "" : label) ? "active" : undefined} href={label === "全部" ? "/api-transit" : `/api-transit?category=${encodeURIComponent(label)}`} key={label}>{label}</Link>)}</nav>
     <main className="priceai-transit-shell">
       <section className="priceai-transit-hero"><div><h1>API 中转站价格榜</h1><p className="priceai-transit-meta">最近更新：{dateTime(latest, true).split(" ")[0]}　·　样本 {sampleCount}{globalLows.slice(0, 2).map((item) => <span key={item.family}>　·　{item.family} 最低 {item.min.toLocaleString("en-US", { maximumFractionDigits: 3 })}{data.prices.some((price) => price.multiplier !== null) ? "x" : ""}</span>)}</p><p>先把主流 API 中转站的价格和稳定性比清楚。这里展示充值系数、模型倍率、综合倍率、近 7 日可用性和来源渠道；不售卖 API，不替商家担保。没有完成审核发布的数据不会出现在榜单里，使用前仍建议小额试用并回原站核验。</p></div><div className="priceai-transit-actions"><Link className="primary" href="/api-transit/detector">♧　模型检测</Link><Link href="/guides/api-transit">▣　使用前说明</Link><Link className="apply" href="/submit">▱　申请收录</Link></div></section>

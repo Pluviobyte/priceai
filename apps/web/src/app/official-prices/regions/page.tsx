@@ -7,7 +7,6 @@ import {
 import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../../model-icons";
 import { SiteFooter } from "../../site-footer";
-import { SiteHeader } from "../../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +115,7 @@ export default async function OfficialPriceRegionsPage({
   const icon = vendorIcons[selectedPlan.vendor];
 
   return <div className="priceai-page priceai-catalog-page priceai-official-page priceai-regions-page">
-    <SiteHeader active="official" />
+
     <nav className="priceai-category-rail" aria-label="官方价格页面">
       <Link href="/official-prices">套餐总览</Link>
       <Link className="active" href="/official-prices/regions">地区对照</Link>

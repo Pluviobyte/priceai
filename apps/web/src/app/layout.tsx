@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { PersistentSiteHeader } from "./persistent-site-header";
 import "./styles.css";
 
 const deploymentOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
@@ -19,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="zh-CN" suppressHydrationWarning>
       <body>
         <a className="skip-link" href="#main-content">跳到主要内容</a>
+        <PersistentSiteHeader />
         <div id="main-content">{children}</div>
       </body>
     </html>

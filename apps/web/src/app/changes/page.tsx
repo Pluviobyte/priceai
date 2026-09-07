@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getPublicMarketChanges } from "@/lib/public-catalog";
-import { SiteHeader } from "../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +45,7 @@ export default async function ChangesPage({
 
   return (
     <main>
-      <SiteHeader active="changes" />
+
       <section className="listing-shell changes-shell">
         <div className="channel-title-row">
           <div><span className="section-kicker">Market movement</span><h1>价格与库存异动</h1><p className="listing-lead">只展示同一条公开报价前后两次观测发生的变化。它用于发现降价与补货，不代表平台推荐购买。</p></div>

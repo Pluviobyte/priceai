@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { docsArticles } from "@/lib/docs-content";
 import { SiteFooter } from "../site-footer";
-import { SiteHeader } from "../site-header";
 import { DocCard } from "./doc-card";
 
 export const metadata: Metadata = {
@@ -17,7 +16,7 @@ export default function DocsPage() {
 
   return (
     <div className="priceai-page priceai-library">
-      <SiteHeader active="docs" />
+
       <main>
         <section className="priceai-library-hero">
           <div><span>PriceAI Knowledge</span><h1>文档与观察</h1></div>

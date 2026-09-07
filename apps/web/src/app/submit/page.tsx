@@ -1,4 +1,3 @@
-import { SiteHeader } from "../site-header";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +15,7 @@ export default async function SubmitPage({
   const { error } = await searchParams;
   return (
     <main>
-      <SiteHeader active="submit" />
+
       <section className="form-shell">
         <div className="form-intro">
           <span className="section-kicker">渠道收录</span>

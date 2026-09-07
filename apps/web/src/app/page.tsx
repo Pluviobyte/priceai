@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { SiteHeader } from "./site-header";
 import { SiteFooter } from "./site-footer";
 import { PriceBaselineHero, PriceBaselineTable } from "./blue-price-engine";
 import { ModelIcon, type ModelIconName } from "./model-icons";
@@ -147,7 +146,7 @@ function Arrow() {
 export default async function HomePage() {
   const snapshot = await getHomeSnapshot();
 
-  return <div className="priceai-page"><SiteHeader /><main className="priceai-home">
+  return <div className="priceai-page"><main className="priceai-home">
     <PriceBaselineHero />
 
     <section className="priceai-module-section" id="channels">

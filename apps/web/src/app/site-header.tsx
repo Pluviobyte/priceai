@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup, SITE_NAME } from "./site-brand";
 import { AnnouncementBanner } from "./announcement-banner";
+import { CommunityDialog, type CommunityPlatform } from "./community-dialog";
 
 export type HeaderSection =
   | "home"
@@ -20,6 +21,7 @@ export type HeaderSection =
   | "status"
   | "guides"
   | "docs"
+  | "account-safety"
   | "sponsors";
 
 type NavKey = HeaderSection | "merchant-feed" | "wholesale" | "commercial" | "support";
@@ -55,8 +57,9 @@ const PURCHASE_GROUPS: readonly NavGroup[] = [
 
 const RESEARCH_LINKS: readonly NavLink[] = [
   { key: "changes", label: "异动", href: "/changes", note: "降价、补货与售罄" },
-  { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
-  { key: "docs", label: "文档", href: "/docs", note: "价格研究、购买说明与方法" },
+  { key: "guides", label: "本站指南", href: "/guides", note: "买前必读与购买路径" },
+  { key: "docs", label: "精选文档", href: "/docs", note: "价格研究、购买说明与方法" },
+  { key: "account-safety", label: "防封指南", href: "/account-safety", note: "待上线" },
   { key: "methodology", label: "数据说明", href: "/methodology", note: "排序口径与责任边界" },
   { key: "status", label: "数据健康", href: "/status", note: "采集与发布状态" },
 ];
@@ -73,11 +76,12 @@ const PARTICIPATE_LINKS: readonly NavLink[] = [
 const PRIMARY_LINKS: readonly NavLink[] = [
   { key: "home", label: "首页", href: "/" },
   ...PURCHASE_GROUPS.flatMap((group) => group.links),
-  { key: "guides", label: "指南", href: "/guides", note: "买前必读与购买路径" },
-  { key: "docs", label: "文档", href: "/docs", note: "价格研究、购买说明与方法" },
+  { key: "guides", label: "本站指南", href: "/guides", note: "买前必读与购买路径" },
+  { key: "docs", label: "精选文档", href: "/docs", note: "价格研究、购买说明与方法" },
+  { key: "account-safety", label: "防封指南", href: "/account-safety" },
   ...(SPONSORS_ENABLED ? [{ key: "sponsors" as const, label: "赞助商", href: "/sponsors" }] : []),
 ];
-const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides" && link.key !== "docs");
+const MENU_RESEARCH_LINKS = RESEARCH_LINKS.filter((link) => link.key !== "guides" && link.key !== "docs" && link.key !== "account-safety");
 
 function isActive(active: HeaderSection, key: NavKey) {
   if (key === "channels") return active === "channels" || active === "subscriptions";
@@ -136,6 +140,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   const [stuck, setStuck] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [communityPlatform, setCommunityPlatform] = useState<CommunityPlatform | null>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const menuToggleRef = useRef<HTMLButtonElement>(null);
@@ -165,6 +170,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   useEffect(() => {
     setMoreOpen(false);
     setDrawerOpen(false);
+    setCommunityPlatform(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -189,7 +195,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
     document.body.style.overflow = "hidden";
     drawerCloseRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDrawerOpen(false);
+      if (event.key === "Escape" && !document.querySelector("dialog[open]")) setDrawerOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -204,6 +210,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector("dialog[open]")) return;
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
       const input = searchRef.current;
@@ -287,12 +294,12 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                     </div>
                   )}
                 </div>
-                <Link className="site-icon-button site-social-button" href="/?qqGroup=1" aria-label="加入 QQ 交流群" title="QQ 交流群">
+                <button className="site-icon-button site-social-button" type="button" onClick={() => setCommunityPlatform("qq")} aria-haspopup="dialog" aria-label="加入 QQ 交流群" title="QQ 交流群">
                   <img src="/social-icons/qq.svg" alt="" />
-                </Link>
-                <Link className="site-icon-button site-social-button" href="/support?contact=wechat" aria-label="通过微信联系" title="微信联系">
+                </button>
+                <button className="site-icon-button site-social-button" type="button" onClick={() => setCommunityPlatform("wechat")} aria-haspopup="dialog" aria-label="加入微信交流群" title="微信交流群">
                   <img src="/social-icons/wechat.svg" alt="" />
-                </Link>
+                </button>
                 <a className="site-icon-button site-social-button" href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer" aria-label="通过 Telegram 联系" title="Telegram">
                   <img src="/social-icons/telegram.svg" alt="" />
                 </a>
@@ -344,6 +351,8 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
               </section>
             </nav>
             <div className="site-drawer-foot">
+              <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("qq")}>QQ 交流群</button>
+              <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("wechat")}>微信交流群</button>
               <Link className="site-outline-link" href={loginHref}>登录</Link>
               <button className="site-outline-link" type="button" onClick={toggleTheme} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={16} />
@@ -353,6 +362,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
           </div>
         </div>
       )}
+      <CommunityDialog platform={communityPlatform} onClose={() => setCommunityPlatform(null)} />
     </>
   );
 }

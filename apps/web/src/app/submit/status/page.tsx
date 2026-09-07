@@ -1,5 +1,4 @@
 import { getPublicSubmissionStatus } from "@/lib/public-submissions";
-import { SiteHeader } from "../../site-header";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,7 @@ export default async function SubmissionStatusPage({
   const submission = validId ? await getPublicSubmissionStatus(id) : null;
   return (
     <main>
-      <SiteHeader active="submit" />
+
       <section className="status-shell">
         <span className="section-kicker">投稿进度</span>
         {submission ? (
