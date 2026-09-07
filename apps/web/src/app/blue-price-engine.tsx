@@ -81,10 +81,10 @@ export function PriceBaselineHero() {
         <span className="blue-engine-eyebrow"><i /> 中立比价雷达 · 不销售 · 不代收款 · 不替渠道背书</span>
         <h1 id="hero-title"><span>AI 订阅充值与 API 中转</span><span>实时行情与比价雷达</span></h1>
         <p>汇集全网卡网现货与官网公开报价。一眼看清官方正价与各渠道底价差多少、当前是否能买到；先理清自充、代充、成品号与 API 的真实区别，买前心里有底，不花冤枉钱。</p>
-        {/* 两个出口都是页内跳转：主按钮导向购买路径，次按钮导向底价大表 */}
+        {/* 两个出口都是页内跳转：主按钮查看底价，次按钮了解订阅渠道 */}
         <div className="blue-engine-hero-actions">
-          <a className="blue-engine-cta primary" href="#channels">先选购买路径 <span aria-hidden="true">↓</span></a>
-          <a className="blue-engine-cta" href="#baseline">直接看全网底价 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta primary" href="#baseline">查看全网底价 <span aria-hidden="true">↓</span></a>
+          <a className="blue-engine-cta" href="#delivery">了解订阅渠道 <span aria-hidden="true">↓</span></a>
         </div>
       </div>
     </div>
