@@ -41,3 +41,11 @@ test("a fresh quote cannot rank with a stale, future or invalid exchange estimat
     assert.equal(hasCurrentCnyEstimate({ cnyEstimate: "134.22", exchangeRateDate }, now), false);
   }
 });
+
+test("matching a vendor monthly amount or another SKU cannot make an Apple quote comparable", () => {
+  for (const evidence of [
+    {billingEvidenceMethod: "same_country_vendor_page_match"},
+    {resolvedBy: "duplicate_explained"},
+    {resolvedBy: "vendor_monthly_amount"},
+  ]) assert.equal(isFreshOfficialSubscriptionPrice({...listing,evidence:{billingPeriod:"month",billingEvidenceUrl:"https://gemini.google/us/subscriptions/",...evidence}},now),false);
+});

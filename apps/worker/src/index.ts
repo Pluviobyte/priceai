@@ -129,7 +129,7 @@ const worker = new Worker(
         }
       }
       case "prices.subscriptions.refresh":
-        return refreshOfficialSubscriptionChannels(database.db);
+        throw new Error("Use the dedicated Dokploy official subscription worker");
       case "prices.official_api.refresh":
         return seedVerifiedOfficialApiPrices(database.db);
       case "prices.transit.refresh":
@@ -190,7 +190,7 @@ async function enqueuePendingSubmissions(): Promise<void> {
 }
 
 async function enqueueOperatorRequests(): Promise<void> {
-  await database.db.execute(sql`update operator_job_requests set status='pending',started_at=null,error_message='recovered abandoned operator request' where status='running' and started_at<now()-interval '15 minutes'`);
+  await database.db.execute(sql`update operator_job_requests set status='pending',started_at=null,error_message='recovered abandoned operator request' where kind='publish' and status='running' and started_at<now()-interval '15 minutes'`);
   const claimed = await database.db.execute(sql`update operator_job_requests set status='running',started_at=now() where id=(select id from operator_job_requests where kind='publish' and status='pending' order by created_at for update skip locked limit 1) returning id,started_at`);
   const row = claimed.rows[0] as { id?: string; started_at?: Date } | undefined;
   if (row?.id) await queue.add("snapshot.publish", { requestId: row.id }, { jobId: `operator-publish-${row.id}-${row.started_at?.getTime() ?? Date.now()}`, attempts: 1, removeOnComplete: 100, removeOnFail: 500 });
@@ -206,12 +206,11 @@ async function deliverNotifications(): Promise<void> {
 }
 
 async function refreshPriceChannels(): Promise<void> {
-  const [subscriptions, officialApi, transit] = await Promise.all([
-    refreshOfficialSubscriptionChannels(database.db),
+  const [officialApi, transit] = await Promise.all([
     seedVerifiedOfficialApiPrices(database.db),
     refreshAllTransitProviders(database.db),
   ]);
-  logger.info({ subscriptions, officialApi, transit }, "official and transit price channels refreshed");
+  logger.info({ officialApi, transit }, "official and transit price channels refreshed");
 }
 
 async function runSourceDiscovery(): Promise<void> {

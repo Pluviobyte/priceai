@@ -4,6 +4,7 @@ export interface WorkerConfig {
   concurrency: number;
   schedulerIntervalMs: number;
   priceRefreshIntervalMs: number;
+  officialSubscriptionRefreshIntervalMs: number;
   browserExecutablePath?: string;
   notificationWebhookUrl?: string;
   notificationWebhookSecret?: string;
@@ -25,6 +26,7 @@ export function readWorkerConfig(
     concurrency: Number(env.WORKER_CONCURRENCY ?? 4),
     schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS ?? 30_000),
     priceRefreshIntervalMs: Number(env.PRICE_REFRESH_INTERVAL_MS ?? 60 * 60 * 1_000),
+    officialSubscriptionRefreshIntervalMs: Number(env.OFFICIAL_SUBSCRIPTION_REFRESH_INTERVAL_MS ?? 24 * 60 * 60 * 1_000),
     ...(env.BROWSER_EXECUTABLE_PATH
       ? { browserExecutablePath: env.BROWSER_EXECUTABLE_PATH }
       : {}),

@@ -35,4 +35,8 @@ packages/ranking            报价可用性与排序口径
 packages/json-feed-collector 自定义 JSON 与商家直连 Feed
 ```
 
+官方订阅价（Apple 各商店、Google 与 OpenAI 各国官网）由 Worker 每日扫描；本地可用 `npm run cli --workspace @price-radar/worker -- refresh-subscriptions` 立即执行一次（加 `featured` 只跑重点地区）。采集口径见 [官方订阅价自动化采集方案](./docs/research/official-price-collection-automation-2026-09-07.md)。
+
 安全角色与备份恢复见 [运行手册](./docs/operations/security-and-recovery.md)。Grok、搜索、通知和 LLM 辅助能力需在 `.env` 中提供对应密钥；没有密钥时不会影响核心比价与发布链路。
+
+生产部署与每日官方采集以 [Dokploy 运行手册](docs/operations/dokploy.md) 为准。Web 与采集服务独立部署，官方订阅调度不依赖外部定时端点。

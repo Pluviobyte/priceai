@@ -1,5 +1,6 @@
+import { runSubscriptionSweep } from "./subscription-runner.js";
 import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
-import { BrowserCollector } from "@price-radar/browser-collector";
+import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
 import { DujiaoCollector } from "@price-radar/dujiao-collector";
 import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
@@ -131,8 +132,15 @@ async function main(): Promise<void> {
       return;
     }
     if (command === "refresh-subscriptions") {
-      const result = await refreshOfficialSubscriptionChannels(database.db);
+      // `refresh-subscriptions featured` limits Apple/Google/OpenAI to the featured regions.
+      const result = await runSubscriptionSweep(config.databaseUrl, {
+        force: true,
+        scope: argument === "featured" ? "featured" : "full",
+        fetchDocuments: (urls) => fetchDocumentsWithBrowser(urls, config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}),
+        onError: (source, error) => process.stderr.write(`official subscription source failed: ${source}: ${error instanceof Error ? error.message : String(error)}\n`),
+      });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (result.status === "failed") process.exitCode = 1;
       return;
     }
     if (command === "refresh-official-api") {

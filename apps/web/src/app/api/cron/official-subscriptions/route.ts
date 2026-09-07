@@ -1,18 +1,30 @@
 import { timingSafeEqual } from "node:crypto";
-import * as databaseSchema from "@price-radar/database/schema";
-import { refreshOfficialSubscriptionChannels } from "@price-radar/price-channels/subscriptions";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { NextResponse } from "next/server";
 import { databasePool } from "@/lib/database";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+
+const REFRESH_REQUEST_KIND = "official_subscription_refresh";
 
 function secretsMatch(provided: string, expected: string): boolean {
   const providedBytes = Buffer.from(provided);
   const expectedBytes = Buffer.from(expected);
   return providedBytes.length === expectedBytes.length && timingSafeEqual(providedBytes, expectedBytes);
+}
+
+/** Authenticated manual trigger; Dokploy Worker executes the scan outside HTTP requests. */
+async function queueFullRefresh(): Promise<{ requestId: string | null; alreadyQueued: boolean }> {
+  const pending = await databasePool.query<{ id: string }>(
+    "select id from operator_job_requests where kind=$1 and status in ('pending','running') order by created_at desc limit 1",
+    [REFRESH_REQUEST_KIND],
+  );
+  if (pending.rows[0]) return { requestId: pending.rows[0].id, alreadyQueued: true };
+  const inserted = await databasePool.query<{ id: string }>(
+    "insert into operator_job_requests (kind,status,requested_by,reason) values ($1,'pending','cron','scheduled official subscription sweep') returning id",
+    [REFRESH_REQUEST_KIND],
+  );
+  return { requestId: inserted.rows[0]?.id ?? null, alreadyQueued: false };
 }
 
 async function refresh(request: Request): Promise<NextResponse> {
@@ -44,9 +56,11 @@ async function refresh(request: Request): Promise<NextResponse> {
         { headers: { "cache-control": "no-store" } },
       );
     }
-    const refreshed = await refreshOfficialSubscriptionChannels(drizzle(databasePool, { schema: databaseSchema }));
-    const result = { ok: true, refreshedAt: new Date().toISOString(), ...refreshed } as const;
-    return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
+    const queued = await queueFullRefresh();
+    return NextResponse.json(
+      { ok: true, queuedAt: new Date().toISOString(), queuedFullSweep: queued },
+      { headers: { "cache-control": "no-store" } },
+    );
   } catch (error) {
     console.error("official subscription refresh failed", error);
     return NextResponse.json(

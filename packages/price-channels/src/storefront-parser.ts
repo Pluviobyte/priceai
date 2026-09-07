@@ -117,38 +117,7 @@ export function officialPageConfirmsPrice(html: string, requiredTerms: readonly 
 }
 
 function parseNumber(value: string, currency: string): number | null {
-  const compact = value.replace(/[\s\u00a0]/g, "");
-  const match = compact.match(/[0-9][0-9.,]*/);
-  if (!match) return null;
-
-  let raw = match[0];
-  const suffix = compact.slice((match.index ?? 0) + raw.length).toLowerCase();
-  const isIndonesianMillion = currency === "IDR" && suffix.startsWith("juta");
-  const isIndonesianThousand = currency === "IDR" && suffix.startsWith("ribu");
-
-  if (isIndonesianMillion) {
-    raw = raw.replace(/\./g, "").replace(",", ".");
-  } else if (currency === "IDR" && !isIndonesianThousand && /^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(raw)) {
-    // Indonesian storefronts use periods for thousands, including a single
-    // separator (Rp 14.500). Number("14.500") would silently divide it by 1,000.
-    raw = raw.replaceAll(".", "").replace(",", ".");
-  } else if (raw.includes(",") && raw.includes(".")) {
-    const decimalMark = raw.lastIndexOf(",") > raw.lastIndexOf(".") ? "," : ".";
-    const thousandsMark = decimalMark === "," ? "." : ",";
-    raw = raw.replaceAll(thousandsMark, "").replace(decimalMark, ".");
-  } else if (raw.includes(",")) {
-    const trailing = raw.length - raw.lastIndexOf(",") - 1;
-    raw = trailing > 0 && trailing <= 2 ? raw.replace(",", ".") : raw.replaceAll(",", "");
-  } else if ((raw.match(/\./g) ?? []).length > 1) {
-    const trailing = raw.length - raw.lastIndexOf(".") - 1;
-    raw = trailing === 2 ? `${raw.slice(0, raw.lastIndexOf(".")).replaceAll(".", "")}.${raw.slice(raw.lastIndexOf(".") + 1)}` : raw.replaceAll(".", "");
-  }
-
-  const amount = Number(raw);
-  if (!Number.isFinite(amount)) return null;
-  if (isIndonesianMillion) return amount * 1_000_000;
-  if (isIndonesianThousand) return amount * 1_000;
-  return amount;
+  return parseLocalizedAmount(value, currency);
 }
 
 export function parseAppStorePriceListings(html: string, currency: string): AppStorePriceListing[] {
@@ -236,4 +205,187 @@ export function extractClaudePlanPrice(html: string, planCode: string): number |
 
 export function hasAmbiguousAppStorePrices(listings: readonly AppStorePriceListing[], name: string): boolean {
   return new Set(listings.filter(row => row.rawPlanName.toLocaleLowerCase("en-US") === name.toLocaleLowerCase("en-US")).map(row => row.amount)).size > 1;
+}
+
+// ---------------------------------------------------------------------------
+// 2026-09-07：结构化 App Store 解析、币种感知金额解析与同名重复项规则。
+// ---------------------------------------------------------------------------
+
+const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+
+/**
+ * 按币种解析本地化金额字符串。分隔符规则：同时出现逗号和句点时，靠后的是小数点；
+ * 只有一种分隔符时，出现多次或后跟三位数字视为千分位（三位小数币种除外），否则视为小数点。
+ * 空格与不间断空格一律视为千分位。印尼 ribu / juta 缩写按千、百万放大。
+ */
+export function parseLocalizedAmount(display: string, currency: string): number | null {
+  const compact = display.replace(/[  ]/g, " ").trim();
+  const match = compact.match(/[0-9](?:[0-9.,]|\s(?=[0-9]{3}(?![0-9])))*/);
+  if (!match) return null;
+  let raw = match[0].replace(/\s/g, "");
+  const suffix = compact.slice((match.index ?? 0) + match[0].length).trim().toLowerCase();
+  const isIndonesianMillion = currency === "IDR" && suffix.startsWith("juta");
+  const isIndonesianThousand = currency === "IDR" && suffix.startsWith("ribu");
+  if (isIndonesianMillion || isIndonesianThousand) {
+    raw = raw.replace(/\./g, "").replace(",", ".");
+  } else {
+    const commas = (raw.match(/,/g) ?? []).length;
+    const dots = (raw.match(/\./g) ?? []).length;
+    if (commas && dots) {
+      const decimalMark = raw.lastIndexOf(",") > raw.lastIndexOf(".") ? "," : ".";
+      raw = raw.replaceAll(decimalMark === "," ? "." : ",", "").replace(decimalMark, ".");
+    } else if (commas || dots) {
+      const mark = commas ? "," : ".";
+      const count = commas || dots;
+      const trailing = raw.length - raw.lastIndexOf(mark) - 1;
+      const grouping = count > 1 || (trailing === 3 && !THREE_DECIMAL_CURRENCIES.has(currency));
+      raw = grouping ? raw.replaceAll(mark, "") : raw.replace(mark, ".");
+    }
+  }
+  const amount = Number(raw);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  if (isIndonesianMillion) return amount * 1_000_000;
+  if (isIndonesianThousand) return amount * 1_000;
+  return amount;
+}
+
+const KNOWN_CURRENCY_CODES = new Set([
+  "AED", "AUD", "BGN", "BHD", "BRL", "CAD", "CHF", "CLP", "CNY", "COP", "CZK", "DKK", "EGP", "EUR", "GBP", "HKD", "HUF",
+  "IDR", "ILS", "INR", "IQD", "ISK", "JOD", "JPY", "KES", "KRW", "KWD", "KZT", "LKR", "MAD", "MXN", "MYR", "NGN", "NOK",
+  "NZD", "OMR", "PEN", "PHP", "PKR", "PLN", "QAR", "RON", "RSD", "RUB", "SAR", "SEK", "SGD", "THB", "TRY", "TWD", "TZS",
+  "UAH", "USD", "VND", "ZAR",
+]);
+
+// 前缀顺序重要：复合符号（E£、R$、NT$）必须先于单字符符号匹配。
+const CURRENCY_SYMBOLS: ReadonlyArray<readonly [string, string]> = [
+  ["E£", "EGP"], ["R$", "BRL"], ["NT$", "TWD"], ["HK$", "HKD"], ["S$", "SGD"], ["A$", "AUD"], ["CA$", "CAD"], ["$CA", "CAD"],
+  ["NZ$", "NZD"], ["MX$", "MXN"], ["US$", "USD"], ["₹", "INR"], ["₺", "TRY"], ["₦", "NGN"], ["₫", "VND"], ["đ", "VND"],
+  ["₩", "KRW"], ["￦", "KRW"], ["£", "GBP"], ["€", "EUR"], ["Rp", "IDR"], ["₱", "PHP"], ["฿", "THB"], ["zł", "PLN"],
+  ["Kč", "CZK"], ["Ft", "HUF"], ["CHF", "CHF"], ["₪", "ILS"], ["₸", "KZT"], ["₾", "GEL"], ["₴", "UAH"], ["₡", "CRC"],
+  ["₲", "PYG"], ["₼", "AZN"], ["֏", "AMD"], ["лв", "BGN"], ["ден", "MKD"], ["дин", "RSD"],
+];
+
+/**
+ * 从展示字符串识别币种。三字母 ISO 代码优先；仅有 $、¥、Rs、kr 等多义符号时返回 null，
+ * 由调用方用商店目录的币种补足，并在两者冲突时拒绝入库。
+ */
+export function detectCurrencyFromDisplay(display: string): string | null {
+  const text = display.replace(/[  ]/g, " ");
+  const iso = text.match(/(?<![A-Z])([A-Z]{3})(?![A-Z])/);
+  if (iso && KNOWN_CURRENCY_CODES.has(iso[1]!)) return iso[1]!;
+  for (const [symbol, currency] of CURRENCY_SYMBOLS) {
+    if (text.includes(symbol)) return currency;
+  }
+  if (/^R\s?[0-9]/.test(text.trim())) return "ZAR";
+  return null;
+}
+
+export type AppStoreListingParser = "serialized_json" | "legacy_span" | "none";
+
+export interface AppStoreListingParse {
+  listings: AppStorePriceListing[];
+  parser: AppStoreListingParser;
+  storefront: string | null;
+  annotationCount: number;
+}
+
+/**
+ * 优先读取 Apple 页面内嵌的 `serialized-server-data` JSON：内购列表是 `$kind: "Annotation"`
+ * 且 `items_V3` 含 `textPair` 的块，`leadingText` 为内购名，`trailingText` 为本币标价。
+ * JSON 缺失时回退到相邻 span 解析并标明解析器。
+ */
+export function parseAppStoreListings(html: string, currency: string): AppStoreListingParse {
+  const block = html.match(/<script[^>]*id="serialized-server-data"[^>]*>([\s\S]*?)<\/script>/i);
+  if (block?.[1]) {
+    try {
+      const data = JSON.parse(block[1]) as unknown;
+      const listings: AppStorePriceListing[] = [];
+      let annotationCount = 0;
+      const stack: unknown[] = [data];
+      while (stack.length) {
+        const node = stack.pop();
+        if (Array.isArray(node)) {
+          for (const item of node) stack.push(item);
+          continue;
+        }
+        if (!node || typeof node !== "object") continue;
+        const record = node as Record<string, unknown>;
+        const items = record.items_V3;
+        if (record.$kind === "Annotation" && Array.isArray(items)) {
+          const pairs = items.filter((item): item is { leadingText: string; trailingText: string } =>
+            Boolean(item) && typeof item === "object" && (item as Record<string, unknown>).$kind === "textPair"
+            && typeof (item as Record<string, unknown>).leadingText === "string"
+            && typeof (item as Record<string, unknown>).trailingText === "string");
+          if (pairs.length) annotationCount += 1;
+          for (const pair of pairs) {
+            const rawPlanName = decodeInlineHtml(pair.leadingText);
+            const displayAmount = decodeInlineHtml(pair.trailingText);
+            if (!rawPlanName || !/[0-9]/.test(displayAmount)) continue;
+            const amount = parseLocalizedAmount(displayAmount, currency);
+            if (amount === null) continue;
+            listings.push({ rawPlanName, displayAmount, amount });
+          }
+          continue;
+        }
+        for (const value of Object.values(record)) {
+          if (value && typeof value === "object") stack.push(value);
+        }
+      }
+      const storefront = block[1].match(/"storefront"\s*:\s*"([a-z]{2})"/)?.[1] ?? null;
+      return { listings, parser: "serialized_json", storefront, annotationCount };
+    } catch {
+      // Malformed JSON: fall back to the legacy markup parser below.
+    }
+  }
+  const listings = parseAppStorePriceListings(html, currency);
+  return { listings, parser: listings.length ? "legacy_span" : "none", storefront: null, annotationCount: 0 };
+}
+
+/** 从 Apple 页面最终 URL 提取商店码；无效商店码会被 Apple 重定向到 us。 */
+export function storefrontFromAppStoreUrl(url: string): string | null {
+  return url.match(/^https:\/\/apps\.apple\.com\/([a-z]{2})(?:\/|$)/i)?.[1]?.toLowerCase() ?? null;
+}
+
+export interface AppStoreListingResolution {
+  status: "selected" | "ambiguous_sku" | "sku_not_listed";
+  listing: AppStorePriceListing | null;
+  /** 同名候选项与同页哪些其他套餐金额相等，仅为线索。 */
+  duplicateOf: string[];
+  amounts: number[];
+  /** 唯一金额可以选中，多金额始终保持歧义；历史推断标签仅为兼容。 */
+  resolvedBy: "unique" | "duplicate_explained" | "vendor_monthly_amount" | null;
+}
+
+/** 保留同名多金额歧义，不用跨套餐或跨渠道金额相等推断 SKU 身份。 */
+export function resolveAppStoreListing(
+  listings: readonly AppStorePriceListing[],
+  rawPlanName: string,
+  options: { otherPlanNames?: readonly string[]; mustBeLessThanPlanName?: string; vendorMonthlyAmount?: number } = {},
+): AppStoreListingResolution {
+  const same = (left: string, right: string) => left.toLocaleLowerCase("en-US") === right.toLocaleLowerCase("en-US");
+  const matches = listings.filter((listing) => same(listing.rawPlanName, rawPlanName));
+  if (!matches.length) return { status: "sku_not_listed", listing: null, duplicateOf: [], amounts: [], resolvedBy: null };
+  const amounts = [...new Set(matches.map((listing) => listing.amount))];
+  const otherNames = (options.otherPlanNames ?? []).filter((name) => !same(name, rawPlanName));
+  const others = listings.filter((listing) => otherNames.some((name) => same(name, listing.rawPlanName)));
+  const explained = new Map<number, string>();
+  if (amounts.length > 1) {
+    for (const amount of amounts) {
+      const other = others.find((listing) => listing.amount === amount);
+      if (other) explained.set(amount, other.rawPlanName);
+    }
+  }
+  // Equal amounts across plans/channels are hints, never SKU or billing identity.
+  const remaining = amounts;
+  const duplicateOf = [...new Set(explained.values())];
+  const resolvedBy = amounts.length === 1 ? "unique" as const : null;
+  if (remaining.length !== 1) return { status: "ambiguous_sku", listing: null, duplicateOf, amounts, resolvedBy: null };
+  const listing = matches.find((item) => item.amount === remaining[0]) ?? null;
+  if (listing && options.mustBeLessThanPlanName) {
+    const bound = listings
+      .filter((item) => same(item.rawPlanName, options.mustBeLessThanPlanName!))
+      .sort((left, right) => left.amount - right.amount)[0];
+    if (bound && listing.amount >= bound.amount) return { status: "ambiguous_sku", listing: null, duplicateOf, amounts, resolvedBy: null };
+  }
+  return { status: listing ? "selected" : "ambiguous_sku", listing, duplicateOf, amounts, resolvedBy: listing ? resolvedBy : null };
 }

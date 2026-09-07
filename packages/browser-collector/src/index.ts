@@ -191,3 +191,76 @@ export class BrowserCollector implements CollectorAdapter {
     return this.#htmlDelegate.normalizeItem(item, context);
   }
 }
+
+// ---------------------------------------------------------------------------
+// 以真实 Chromium 读取受 Cloudflare 挑战保护的公开文档（例如 OpenAI 定价配置接口）。
+// ---------------------------------------------------------------------------
+
+export interface BrowserDocumentResult {
+  url: string;
+  status: number | null;
+  finalUrl: string;
+  text: string;
+  error?: string;
+}
+
+export interface BrowserDocumentFetchOptions {
+  executablePath?: string;
+  navigationTimeoutMs?: number;
+  challengeWaitMs?: number;
+}
+
+const DESKTOP_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+
+/**
+ * 顺序打开多个地址并返回页面正文文本。JSON 响应在 Chromium 里以 <pre> 呈现，
+ * innerText 即原始 JSON。遇到挑战页时等待其自动完成后再读一次。
+ */
+export async function fetchDocumentsWithBrowser(
+  urls: readonly string[],
+  options: BrowserDocumentFetchOptions = {},
+): Promise<BrowserDocumentResult[]> {
+  const browser = await chromium.launch({
+    headless: true,
+    ...(options.executablePath ? { executablePath: options.executablePath } : {}),
+  });
+  const results: BrowserDocumentResult[] = [];
+  try {
+    const context = await browser.newContext({
+      acceptDownloads: false,
+      serviceWorkers: "block",
+      userAgent: DESKTOP_USER_AGENT,
+      locale: "en-US",
+    });
+    const page = await context.newPage();
+    let blocked = 0;
+    for (const url of urls) {
+      if (blocked >= 3) {
+        results.push({url, status: null, finalUrl: url, text: "", error: "source_access_blocked_circuit_open"});
+        continue;
+      }
+      try {
+        const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: options.navigationTimeoutMs ?? 30_000 });
+        let status = response?.status() ?? null;
+        let text = await page.evaluate(() => document.body?.innerText ?? "");
+        if (!text.trim().startsWith("{") && (status === 403 || status === 503 || /challenge|just a moment/i.test(text))) {
+          await page.waitForTimeout(options.challengeWaitMs ?? 8_000);
+          text = await page.evaluate(() => document.body?.innerText ?? "");
+          // A JSON-looking body is not proof of HTTP success. Keep the observed status.
+          if (text.trim().startsWith("{")) {
+            const refreshed = await page.reload({waitUntil: "domcontentloaded", timeout: options.navigationTimeoutMs ?? 30_000});
+            status = refreshed?.status() ?? null;
+            text = await page.evaluate(() => document.body?.innerText ?? "");
+          }
+        }
+        blocked = status === 403 || status === 429 || status === 503 ? blocked + 1 : 0;
+        results.push({ url, status, finalUrl: page.url(), text });
+      } catch (error) {
+        results.push({ url, status: null, finalUrl: url, text: "", error: error instanceof Error ? error.message : "browser_fetch_failed" });
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+  return results;
+}

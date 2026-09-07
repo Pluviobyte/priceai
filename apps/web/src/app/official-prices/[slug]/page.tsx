@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG, OFFICIAL_SUBSCRIPTION_REGION_CATALOG } from "@price-radar/price-channels/subscription-catalog";
+import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../../site-footer";
 
@@ -92,7 +93,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
       {rows.length ? <div className="priceai-detail-table-wrap"><table>
         <thead><tr><th>地区</th><th>渠道</th><th>原币标价与周期</th><th>人民币估算</th><th>证据状态</th><th>官方证据</th></tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.id}>
-          <td><b>{countryNames[row.countryCode] ?? row.countryCode}</b><small>{row.countryCode}</small></td>
+          <td><b>{countryNames[row.countryCode] ?? regionDisplayName(row.countryCode)}</b><small>{row.countryCode}</small></td>
           <td>{channelNames[row.channel] ?? row.channel}</td>
           <td><b>{originalPrice(row)}</b><small>{hasVerifiedSubscriptionBilling(row) ? periodNames[row.billingPeriod] ?? row.billingPeriod : "周期待核验"}</small></td>
           <td><strong>{row.cnyEstimate !== null ? `≈ ¥${Number(row.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "换算待补"}</strong><small>{row.exchangeRateDate ? row.exchangeRateUrl ? <a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate}　↗</a> : `汇率日期 ${row.exchangeRateDate}` : "汇率日期待补"}</small></td>

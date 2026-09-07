@@ -4,6 +4,7 @@ import {
   OFFICIAL_SUBSCRIPTION_PLAN_CATALOG,
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
 } from "@price-radar/price-channels/subscription-catalog";
+import { findAppleStorefront, regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionCheck, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../../model-icons";
 import { SiteFooter } from "../../site-footer";
@@ -106,7 +107,14 @@ export default async function OfficialPriceRegionsPage({
     plans: OFFICIAL_SUBSCRIPTION_PLAN_CATALOG.filter((plan) => plan.vendor === vendor),
   })).filter((group) => group.plans.length);
 
-  const regionRows = OFFICIAL_SUBSCRIPTION_REGION_CATALOG.map((region) => {
+  // Featured regions first, then every other region that has a record or a source check for this plan.
+  const planChecks = checks.filter((check) => check.vendor === selectedPlan.vendor && check.planCode === selectedPlan.planCode);
+  const otherCodes = [...new Set([...planRows.map((row) => row.countryCode), ...planChecks.map((check) => check.countryCode)])]
+    .filter((code) => !OFFICIAL_SUBSCRIPTION_REGION_CATALOG.some((region) => region.countryCode === code))
+    .map((code) => ({ countryCode: code, displayName: regionDisplayName(code), currency: findAppleStorefront(code)?.currency ?? planRows.find((row) => row.countryCode === code)?.currency ?? "—" }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, "zh-CN"));
+  const regionCatalog = [...OFFICIAL_SUBSCRIPTION_REGION_CATALOG.map((region) => ({ countryCode: region.countryCode, displayName: region.displayName, currency: region.currency })), ...otherCodes];
+  const regionRows = regionCatalog.map((region) => {
     const byChannel = Object.fromEntries(channels.map((channel) => {
       const matching = planRows.filter((row) => row.countryCode === region.countryCode && row.channel === channel);
       return [channel, newestPriceRecord(matching)];
@@ -132,7 +140,7 @@ export default async function OfficialPriceRegionsPage({
           <div><p className="priceai-kicker">官方订阅 · 地区对照 · 目录周期：{periodNames[selectedPlan.billingPeriod] ?? selectedPlan.billingPeriod}</p><h1>{selectedPlan.displayName} 地区价格参考</h1></div>
         </div>
         <p>按地区查看官网、iOS Store 与 Google Play 的公开标价及证据状态。周期未核验的内购金额不能直接当作月费；人民币仅为汇率估算，各渠道税费和购买资格可能不同。</p>
-        <div className="priceai-region-refresh-state" role="status"><span aria-hidden="true" /><b>{databaseAvailable && latest ? `最新价格日期 ${priceDate(latest)}` : "等待首轮价格入库"}</b><small>系统每小时尝试检查来源；保留的历史记录会标明日期与证据状态。</small></div>
+        <div className="priceai-region-refresh-state" role="status"><span aria-hidden="true" /><b>{databaseAvailable && latest ? `最新价格日期 ${priceDate(latest)}` : "等待首轮价格入库"}</b><small>系统每日检查 Apple 各商店、Google 与 OpenAI 各国官网页面；保留的历史记录会标明日期与证据状态。</small></div>
       </section>
 
       <div className="priceai-catalog-toolbar priceai-region-toolbar">
@@ -148,7 +156,7 @@ export default async function OfficialPriceRegionsPage({
         <a className="priceai-region-official-link" href={selectedPlan.officialUrl} target="_blank" rel="noopener noreferrer nofollow">打开厂商页面　↗</a>
       </div>
 
-      <div className="priceai-catalog-status"><span>{OFFICIAL_SUBSCRIPTION_REGION_CATALOG.length} 个重点地区 · {planRows.length} 条公开价格记录</span><span>请先核对渠道、周期与证据状态</span></div>
+      <div className="priceai-catalog-status"><span>{OFFICIAL_SUBSCRIPTION_REGION_CATALOG.length} 个重点地区 + {otherCodes.length} 个其他地区 · {planRows.length} 条公开价格记录</span><span>请先核对渠道、周期与证据状态</span></div>
 
       <div className="priceai-region-table-wrap">
         <table className="priceai-region-table">

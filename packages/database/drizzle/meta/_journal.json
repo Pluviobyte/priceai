@@ -120,6 +120,13 @@
       "when": 1788764161861,
       "tag": "0016_many_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788797431332,
+      "tag": "0017_heavy_blindfold",
+      "breakpoints": true
     }
   ]
 }

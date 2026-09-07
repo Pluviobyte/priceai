@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
+import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, type OfficialSubscriptionPrice as Price, type OfficialSubscriptionCheck as Check } from "@/lib/public-pricing";
 import styles from "./price-comparison.module.css";
 
 const vendors: Record<string, string> = { openai: "ChatGPT", anthropic: "Claude", google: "Gemini", xai: "Grok" };
 const channels: Record<string, string> = { web: "官网直购", app_store: "iOS Store", google_play: "Google Play" };
 const periods: Record<string, string> = { month: "月付", year: "年付", one_time: "一次性" };
-const statuses: Record<string, string> = { fetch_failed: "来源暂不可读", regional_checkout_required: "需地区结算核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", billing_unverified: "公开内购金额 · 周期待核验", sku_not_listed: "公开列表未列出" };
+const statuses: Record<string, string> = { fetch_failed: "来源暂不可读", regional_checkout_required: "需登录或应用商店核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", billing_unverified: "公开内购金额 · 周期待核验", sku_not_listed: "公开列表未列出", not_available: "来源未提供地区页面", storefront_redirected: "商店重定向 · 未采集", country_fallback: "页面回落到其他地区 · 未采集", currency_mismatch: "币种不一致 · 未入库", currency_unknown: "币种无法确认 · 未入库", parser_drift: "页面结构变化 · 待修复", range_only: "仅公开价格区间" };
+const billingMethods: Record<string, string> = { explicit_sku_name: "内购名称明示周期", official_plan_document: "标准套餐周期依据（未验证账户结算）", same_country_vendor_page_match: "与同国官网金额一致（不能单独证明周期）", official_page_explicit_period: "官网页面明示按月", official_checkout_config_interval: "官网结算配置明示按月" };
+const taxLabels: Record<string, string> = { inclusive: "标价含税", exclusive: "标价不含税", checkout_required: "税费以结算页为准" };
 type Params = Record<string, string | string[] | undefined>;
 const first = (value: Params[string]) => (Array.isArray(value) ? value[0] : value) ?? "";
 const amount = (value: string | number) => Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -26,7 +29,12 @@ function Cell({ row, check, monthly, lowest }: { row: Price | undefined; check: 
     {exact && row && !hasVerifiedSubscriptionBilling(row) && <small>此金额尚不能认作目录所示周期的应付价</small>}
     <details className={styles.evidence}><summary>{exact ? "来源与核验" : "查看原因"}</summary>
       {row && <><p>{announcement ? "公告日期" : "价格核验"}：<time dateTime={row.verifiedAt.toISOString()}>{date(row.verifiedAt)}</time></p><p>原始内购名称：{row.rawPlanName}</p><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">价格来源 ↗</a>{row.exchangeRateDate && row.exchangeRateUrl && <p><a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate} ↗</a></p>}</>}
-      {typeof row?.evidence?.billingEvidenceUrl === "string" && <p><a href={row.evidence.billingEvidenceUrl} target="_blank" rel="noopener noreferrer nofollow">{row.evidence.billingEvidenceMethod === "official_plan_document" ? "标准套餐周期依据（未验证账户结算）" : "计费周期依据"} ↗</a></p>}
+      {typeof row?.evidence?.billingEvidenceUrl === "string" && <p><a href={row.evidence.billingEvidenceUrl} target="_blank" rel="noopener noreferrer nofollow">{billingMethods[String(row.evidence.billingEvidenceMethod)] ?? "计费周期依据"} ↗</a></p>}
+      {typeof row?.evidence?.taxTreatment === "string" && taxLabels[row.evidence.taxTreatment] && <p>{taxLabels[row.evidence.taxTreatment]}</p>}
+      {row?.evidence?.rolloutGated === true && <p>本币定价处于灰度，部分用户仍可能看到美元或欧元价</p>}
+      {Array.isArray(row?.evidence?.duplicateOf) && row.evidence.duplicateOf.length > 0 && <p>同名候选金额与 {row.evidence.duplicateOf.join("、")} 相同，尚不能确认是重复项</p>}
+      {row?.evidence?.resolvedBy === "vendor_monthly_amount" && Array.isArray(row.evidence.listedAmounts) && <p>同名内购项列出 {row.evidence.listedAmounts.map(String).join(" / ")}，按与同国官网月价相等的一项选定</p>}
+      {check?.status === "range_only" && typeof check.evidence?.lowerText === "string" && <p>应用内购买区间：{String(check.evidence.lowerText)} – {String(check.evidence.upperText ?? "")}</p>}
       {check ? <><p>{check.reason}</p><p>采集检查：{date(check.checkedAt)}</p><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看被检查的官方页面 ↗</a></> : <p>没有本地区、套餐与渠道的采集检查记录；不代表免费或不能购买。</p>}
     </details>
   </div>;
@@ -39,7 +47,8 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const channel = channels[requestedChannel] ? requestedChannel : "";
   const monthly = first(params.compare_basis) === "month";
   const freshOnly = first(params.compare_fresh) === "1";
-  const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...[...new Set(rows.map(row => row.countryCode))].filter(code => !regionCatalog.some(item => item.countryCode === code)).sort().map(code => ({ code, name: code }))];
+  const otherCodes = [...new Set(rows.map(row => row.countryCode))].filter(code => !regionCatalog.some(item => item.countryCode === code));
+  const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...otherCodes.map(code => ({ code, name: regionDisplayName(code) })).sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))];
   const region = regions.some(item => item.code === requestedRegion) ? requestedRegion : "";
   const visibleRegions = regions.filter(item => !region || item.code === region);
   const plans = catalog.filter(plan => (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));

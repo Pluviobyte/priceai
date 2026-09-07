@@ -8,7 +8,9 @@
     "./subscription-catalog": "./src/subscription-catalog.ts",
     "./subscriptions": "./src/subscriptions.ts",
     "./storefront-parser": "./src/storefront-parser.ts",
-    "./exchange-rates": "./src/exchange-rates.ts"
+    "./exchange-rates": "./src/exchange-rates.ts",
+    "./storefront-catalog": "./src/storefront-catalog.ts",
+    "./vendor-page-parsers": "./src/vendor-page-parsers.ts"
   },
   "scripts": {
     "test": "node --import tsx --test src/**/*.test.ts",

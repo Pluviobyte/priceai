@@ -28,14 +28,15 @@ export const OFFICIAL_SUBSCRIPTION_PLAN_CATALOG: readonly OfficialSubscriptionPl
   { vendor: "anthropic", planCode: "claude-pro-annual", displayName: "Claude Pro Annual", billingPeriod: "year", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
   { vendor: "anthropic", planCode: "claude-max-5x-monthly", displayName: "Claude Max 5x", billingPeriod: "month", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
   { vendor: "anthropic", planCode: "claude-max-20x-monthly", displayName: "Claude Max 20x", billingPeriod: "month", officialUrl: "https://support.claude.com/en/articles/11049762-choosing-a-claude-ai-plan" },
-  { vendor: "google", planCode: "google-ai-plus-monthly", displayName: "Google AI Plus (400 GB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
-  { vendor: "google", planCode: "google-ai-pro-monthly", displayName: "Google AI Pro (5 TB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
-  { vendor: "google", planCode: "google-ai-ultra-monthly", displayName: "Google AI Ultra (30 TB)", billingPeriod: "month", officialUrl: "https://one.google.com/about/google-ai-plans/" },
+  { vendor: "google", planCode: "google-ai-plus-monthly", displayName: "Google AI Plus (400 GB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
+  { vendor: "google", planCode: "google-ai-pro-monthly", displayName: "Google AI Pro (5 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
+  { vendor: "google", planCode: "google-ai-ultra-5x-monthly", displayName: "Google AI Ultra 5x (20 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
+  { vendor: "google", planCode: "google-ai-ultra-monthly", displayName: "Google AI Ultra 20x (30 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
   { vendor: "xai", planCode: "supergrok-monthly", displayName: "SuperGrok", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
   { vendor: "xai", planCode: "supergrok-plus-monthly", displayName: "SuperGrok Plus", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
 ];
 
-/** 首版地区对照范围。storefront 用于 Apple 公开商店 URL。 */
+/** 页面默认展示的重点地区。完整商店与国家目录见 storefront-catalog.ts。 */
 export const OFFICIAL_SUBSCRIPTION_REGION_CATALOG: readonly OfficialSubscriptionRegionCatalogItem[] = [
   { countryCode: "US", storefront: "us", displayName: "美国", currency: "USD" },
   { countryCode: "GB", storefront: "gb", displayName: "英国", currency: "GBP" },

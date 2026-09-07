@@ -1,0 +1,10 @@
+FROM node:24-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+COPY . .
+RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
+RUN npm ci --include=dev && npx playwright install --with-deps chromium && chmod -R a+rX /ms-playwright
+USER node
+HEALTHCHECK --interval=60s --timeout=5s --start-period=90s CMD node -e "const fs=require('fs');process.exit(Date.now()-Number(fs.readFileSync('/tmp/official-worker-heartbeat','utf8'))<120000?0:1)"
+ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
+CMD ["node", "--import", "tsx", "apps/worker/src/official-subscriptions.ts"]

@@ -1198,5 +1198,31 @@ export const officialSubscriptionChecks = pgTable("official_subscription_checks"
   status: text("status").notNull(),
   reason: text("reason").notNull(),
   evidenceUrl: text("evidence_url").notNull(),
+  httpStatus: integer("http_status"),
+  finalUrl: text("final_url"),
+  parsedCount: integer("parsed_count"),
+  evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
   checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [uniqueIndex("official_subscription_checks_identity_uidx").on(table.vendor, table.planCode, table.channel, table.countryCode)]);
+
+/** 各来源（Apple 商店、Google 官网、OpenAI 官网）逐国家的可用性登记，用于枚举与复扫。 */
+export const officialStorefronts = pgTable(
+  "official_storefronts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").notNull(),
+    countryCode: text("country_code").notNull(),
+    storefront: text("storefront"),
+    currency: text("currency"),
+    status: text("status").notNull().default("unknown"),
+    detail: text("detail"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    lastAvailableAt: timestamp("last_available_at", { withTimezone: true }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    uniqueIndex("official_storefronts_source_country_uidx").on(table.source, table.countryCode),
+    index("official_storefronts_source_status_idx").on(table.source, table.status),
+  ],
+);

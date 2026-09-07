@@ -15,6 +15,7 @@
     "@price-radar/database": "*",
     "@price-radar/object-storage": "*",
     "@price-radar/pipeline": "*",
+    "@price-radar/price-channels": "*",
     "bullmq": "6.0.0",
     "ioredis": "6.0.0",
     "pino": "10.3.1"

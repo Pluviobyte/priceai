@@ -52,11 +52,17 @@ interface SubscriptionRow {
   evidence: Record<string, unknown>;
 }
 
-const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 36 * 60 * 60 * 1_000;
+// Sources are swept once a day; allow one missed sweep before a quote counts as historical.
+const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 48 * 60 * 60 * 1_000;
 
 type SubscriptionEvidence = Pick<OfficialSubscriptionPrice, "verifiedAt"> & Partial<Pick<OfficialSubscriptionPrice, "priceKind" | "evidenceUrl" | "collectionStatus" | "billingPeriod" | "rawPlanName" | "channel" | "evidence">>;
 
 export function hasVerifiedSubscriptionBilling(row: SubscriptionEvidence): boolean {
+  if (row.channel === "app_store" && (
+    row.evidence?.billingEvidenceMethod === "same_country_vendor_page_match"
+    || ["duplicate_explained", "vendor_monthly_amount"].includes(String(row.evidence?.resolvedBy))
+    || (row.rawPlanName === "ChatGPT Plus" && row.evidence?.billingEvidenceMethod === "official_plan_document")
+  )) return false;
   if (row.evidence?.billingPeriod === row.billingPeriod && typeof row.evidence?.billingEvidenceUrl === "string") return true;
   // The original SKU itself may explicitly state its period. Never infer it from the amount.
   return row.channel === "app_store" && (row.billingPeriod === "month"
@@ -68,7 +74,7 @@ export function isFreshOfficialSubscriptionPrice(
   row: SubscriptionEvidence,
   now = Date.now(),
 ): boolean {
-  if (["ambiguous_sku", "sku_not_listed", "billing_unverified"].includes(row.collectionStatus ?? "")) return false;
+  if (["ambiguous_sku", "sku_not_listed", "billing_unverified", "not_available", "storefront_redirected", "country_fallback", "currency_mismatch", "currency_unknown"].includes(row.collectionStatus ?? "")) return false;
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return false;
   if (!hasVerifiedSubscriptionBilling(row)) return false;
   const verifiedAt = new Date(row.verifiedAt).getTime();
@@ -81,9 +87,12 @@ export function getOfficialSubscriptionPriceStatus(row: SubscriptionEvidence, no
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return "公告参考价 · 非当前报价";
   if (row.collectionStatus === "ambiguous_sku") return "同名多价 · 待核验";
   if (row.collectionStatus === "sku_not_listed") return "本次列表未列出 · 历史记录";
+  if (row.collectionStatus === "not_available") return "来源未提供本地区页面 · 历史记录";
+  if (["storefront_redirected", "country_fallback", "currency_mismatch", "currency_unknown"].includes(row.collectionStatus ?? "")) return "本次采集未确认 · 历史记录";
   if (!hasVerifiedSubscriptionBilling(row) || row.collectionStatus === "billing_unverified") return "公开内购金额 · 周期待核验";
   if (!isFreshOfficialSubscriptionPrice(row, now)) return "历史标价 · 待更新";
-  return row.channel === "web" ? "官网公开标价" : "商店公开标价";
+  if (row.channel === "web") return row.evidence?.rolloutGated === true ? "官网公开标价 · 本币定价灰度中" : "官网公开标价";
+  return "商店公开标价";
 }
 
 export function hasCurrentCnyEstimate(row: Pick<OfficialSubscriptionPrice, "cnyEstimate" | "exchangeRateDate">, now = Date.now()): boolean {
@@ -346,15 +355,20 @@ export async function getTransitOverview(): Promise<{ providers: TransitProvider
 export interface OfficialSubscriptionCheck {
   vendor: string; planCode: string; channel: string; countryCode: string;
   status: string; reason: string; evidenceUrl: string; checkedAt: Date;
+  evidence: Record<string, unknown>;
 }
 
+type CheckRow = { vendor: string; plan_code: string; channel: string; country_code: string; status: string; reason: string; evidence_url: string; checked_at: Date; evidence?: Record<string, unknown> | null };
+
 export async function getOfficialSubscriptionChecks(): Promise<OfficialSubscriptionCheck[]> {
-  const rows = await query<{ vendor: string; plan_code: string; channel: string; country_code: string; status: string; reason: string; evidence_url: string; checked_at: Date }>(
-    "select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at from official_subscription_checks",
-  ).catch((error: unknown) => {
-    // Rolling deployments may serve web code before migration 0016 completes.
-    if (error && typeof error === "object" && "code" in error && error.code === "42P01") return [];
+  const rows = await query<CheckRow>(
+    "select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at,evidence from official_subscription_checks",
+  ).catch(async (error: unknown) => {
+    const code = error && typeof error === "object" && "code" in error ? error.code : null;
+    // Rolling deployments may serve web code before migrations 0016/0017 complete.
+    if (code === "42P01") return [] as CheckRow[];
+    if (code === "42703") return query<CheckRow>("select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at from official_subscription_checks");
     throw error;
   });
-  return rows.map(row => ({ vendor: row.vendor, planCode: row.plan_code, channel: row.channel, countryCode: row.country_code, status: row.status, reason: row.reason, evidenceUrl: row.evidence_url, checkedAt: row.checked_at }));
+  return rows.map(row => ({ vendor: row.vendor, planCode: row.plan_code, channel: row.channel, countryCode: row.country_code, status: row.status, reason: row.reason, evidenceUrl: row.evidence_url, checkedAt: row.checked_at, evidence: row.evidence ?? {} }));
 }

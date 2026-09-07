@@ -23,6 +23,10 @@ grant insert on crawl_runs,raw_offer_snapshots,crawl_leases,semantic_duplicate_c
 grant update on sources,crawl_runs,crawl_leases to price_radar_browser;
 grant update on semantic_duplicate_candidates to price_radar_browser;
 grant delete on crawl_leases to price_radar_browser;
+-- Official subscription prices collected through the browser (OpenAI checkout config).
+grant select on canonical_products,exchange_rate_snapshots to price_radar_browser;
+grant select,insert,update on official_subscription_plans,official_subscription_prices,official_subscription_checks,official_storefronts to price_radar_browser;
+grant select,insert on official_subscription_price_history to price_radar_browser;
 grant usage,select on all sequences in schema public to price_radar_browser;
 
 alter default privileges in schema public grant select,insert,update on tables to price_radar_web;

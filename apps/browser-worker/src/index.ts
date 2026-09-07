@@ -1,11 +1,12 @@
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import pino from "pino";
-import { BrowserCollector } from "@price-radar/browser-collector";
+import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
 import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
 import { createDatabase, errorEvents, systemMetricSamples } from "@price-radar/database";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
 import { crawlSource } from "@price-radar/pipeline";
+import { collectOpenAiCheckoutConfigs } from "@price-radar/price-channels/subscriptions";
 
 const logger = pino({ name: "price-radar-browser-worker" });
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
@@ -23,7 +24,17 @@ const objectStore = new S3JsonObjectStore({
 const registry = new InMemoryCollectorRegistry();
 registry.register(new BrowserCollector(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : {}));
 
+const browserExecutable = process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : {};
+
 const worker = new Worker("browser-source-jobs", async (job) => {
+  if (job.name === "official.openai_pricing_config") {
+    // OpenAI's per-country checkout config sits behind a Cloudflare challenge; only a real browser can read it.
+    const countries = Array.isArray(job.data?.countries) ? (job.data.countries as unknown[]).filter((code): code is string => typeof code === "string") : [];
+    return collectOpenAiCheckoutConfigs(database.db, new Date(), {
+      fetchDocuments: (urls) => fetchDocumentsWithBrowser(urls, browserExecutable),
+      ...(countries.length ? { countries } : {}),
+    });
+  }
   if (job.name !== "source.crawl" || typeof job.data?.sourceId !== "string") throw new Error("invalid_browser_job");
   const result = await crawlSource(database.db, registry, job.data.sourceId, { rawObjectStore: objectStore });
   if (result.completeSnapshot) await publishQueue.add("snapshot.publish", {}, { jobId: `publish-after-browser-${result.runId}`, removeOnComplete: 100, removeOnFail: 500 });
