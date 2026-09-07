@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
-import { isFreshOfficialSubscriptionPrice, type OfficialSubscriptionPrice as Price, type OfficialSubscriptionCheck as Check } from "@/lib/public-pricing";
+import { isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, type OfficialSubscriptionPrice as Price, type OfficialSubscriptionCheck as Check } from "@/lib/public-pricing";
 import styles from "./price-comparison.module.css";
 
 const vendors: Record<string, string> = { openai: "ChatGPT", anthropic: "Claude", google: "Gemini", xai: "Grok" };
 const channels: Record<string, string> = { web: "官网直购", app_store: "iOS Store", google_play: "Google Play" };
 const periods: Record<string, string> = { month: "月付", year: "年付", one_time: "一次性" };
-const statuses: Record<string, string> = { fetch_failed: "来源暂不可读", regional_checkout_required: "需地区结算核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", sku_not_listed: "公开列表未列出" };
+const statuses: Record<string, string> = { fetch_failed: "来源暂不可读", regional_checkout_required: "需地区结算核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", billing_unverified: "公开内购金额 · 周期待核验", sku_not_listed: "公开列表未列出" };
 type Params = Record<string, string | string[] | undefined>;
 const first = (value: Params[string]) => (Array.isArray(value) ? value[0] : value) ?? "";
 const amount = (value: string | number) => Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -17,15 +17,16 @@ const date = (value: Date) => value.toLocaleString("zh-CN", { timeZone: "Asia/Sh
 function Cell({ row, check, monthly, lowest }: { row: Price | undefined; check: Check | undefined; monthly: boolean; lowest: boolean }) {
   const exact = row?.priceKind === "exact" && row.amount !== null;
   const announcement = row?.evidenceUrl.includes("/introducing-chatgpt-go/");
-  const fresh = row && isFreshOfficialSubscriptionPrice(row);
-  const divisor = monthly && row?.billingPeriod === "year" ? 12 : 1;
-  const state = announcement ? "公告参考价" : row?.collectionStatus === "ambiguous_sku" ? "套餐周期待核验" : exact && !fresh ? "历史价 · 待更新" : !exact ? statuses[check?.status ?? ""] ?? "尚未取得报价" : null;
+  const divisor = monthly && row?.billingPeriod === "year" && hasVerifiedSubscriptionBilling(row) ? 12 : 1;
+  const state = exact && row ? getOfficialSubscriptionPriceStatus(row) : statuses[check?.status ?? ""] ?? "尚未取得报价";
   return <div className={`${styles.quote}${lowest ? ` ${styles.lowest}` : ""}`}>
     {exact && row ? <><span className={styles.original}>{row.currency} {amount(Number(row.amount) / divisor)}{divisor === 12 && <small> / 月</small>}</span><strong>{row.cnyEstimate !== null ? `≈ ¥${amount(Number(row.cnyEstimate) / divisor)}` : "汇率待补"}</strong>{divisor === 12 && <small>年付总额 {row.currency} {amount(row.amount!)}</small>}</> : <span className={styles.missing}>{state}</span>}
     {exact && state && <em className={styles.state}>{state}</em>}
-    {lowest && <em className={styles.best}>本套餐 · 同渠道较低</em>}
+    {lowest && <em className={styles.best}>同渠道标价折算较低</em>}
+    {exact && row && !hasVerifiedSubscriptionBilling(row) && <small>此金额尚不能认作目录所示周期的应付价</small>}
     <details className={styles.evidence}><summary>{exact ? "来源与核验" : "查看原因"}</summary>
       {row && <><p>{announcement ? "公告日期" : "价格核验"}：<time dateTime={row.verifiedAt.toISOString()}>{date(row.verifiedAt)}</time></p><p>原始内购名称：{row.rawPlanName}</p><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">价格来源 ↗</a>{row.exchangeRateDate && row.exchangeRateUrl && <p><a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate} ↗</a></p>}</>}
+      {typeof row?.evidence?.billingEvidenceUrl === "string" && <p><a href={row.evidence.billingEvidenceUrl} target="_blank" rel="noopener noreferrer nofollow">{row.evidence.billingEvidenceMethod === "official_plan_document" ? "标准套餐周期依据（未验证账户结算）" : "计费周期依据"} ↗</a></p>}
       {check ? <><p>{check.reason}</p><p>采集检查：{date(check.checkedAt)}</p><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看被检查的官方页面 ↗</a></> : <p>没有本地区、套餐与渠道的采集检查记录；不代表免费或不能购买。</p>}
     </details>
   </div>;
@@ -51,7 +52,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
       const key = keyOf({ ...plan, channel, countryCode: region.code });
       return { region, row: newest(index.get(key) ?? []), check: checkIndex.get(key) };
     });
-    const comparable = cells.flatMap(cell => cell.row && cell.row.priceKind === "exact" && cell.row.cnyEstimate !== null && isFreshOfficialSubscriptionPrice(cell.row) ? [Number(cell.row.cnyEstimate)] : []);
+    const comparable = cells.flatMap(cell => cell.row && cell.row.priceKind === "exact" && hasCurrentCnyEstimate(cell.row) && isFreshOfficialSubscriptionPrice(cell.row) ? [Number(cell.row.cnyEstimate)] : []);
     return { plan, channel, cells, minimum: comparable.length > 1 ? Math.min(...comparable) : null };
   })).filter(group => !freshOnly || group.cells.some(cell => cell.row && isFreshOfficialSubscriptionPrice(cell.row) && cell.row.priceKind === "exact"));
   const total = plans.length * selectedChannels.length * visibleRegions.length;
@@ -67,11 +68,11 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
       <label htmlFor="compare-channel">购买渠道<select id="compare-channel" name="compare_channel" defaultValue={channel}><option value="">全部渠道</option>{Object.entries(channels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label htmlFor="compare-region">地区<select id="compare-region" name="compare_region" defaultValue={region}><option value="">全部地区</option>{regions.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
       <label htmlFor="compare-basis">金额口径<select id="compare-basis" name="compare_basis" defaultValue={monthly ? "month" : "cycle"}><option value="cycle">每期总价</option><option value="month">每月折算</option></select></label>
-      <label className={styles.checkbox}><input type="checkbox" name="compare_fresh" value="1" defaultChecked={freshOnly} />只看有新核验价的行</label>
+      <label className={styles.checkbox}><input type="checkbox" name="compare_fresh" value="1" defaultChecked={freshOnly} />只看周期明确且近期核验的行</label>
       <button type="submit">更新对照表</button><Link href="/official-prices#price-comparison">重置</Link>
     </form>
-    <div className={styles.coverage} role="status"><b>{current} / {total} 项有新核验价</b><span>{historical} 项为历史或待核验价格</span><span>{total - current - historical} 项尚无精确价</span></div>
-    <p className={styles.meta}>{plans.length} 个套餐 · {visibleRegions.length} 个地区 · {groups.length} 行<span>较低价只比较当前筛选地区、同套餐、同渠道；不跨档位排名</span></p>
+    <div className={styles.coverage} role="status"><b>{current} / {total} 项周期明确且近期核验</b><span>{historical} 项为历史或待核验金额</span><span>{total - current - historical} 项尚无精确价</span></div>
+    <p className={styles.meta}>{plans.length} 个目录套餐 · {visibleRegions.length} 个地区 · {groups.length} 行<span>仅比较同套餐同渠道的公开标价折算，未统一税费与购买资格</span></p>
     {checks === null && <p role="status">采集状态暂不可用，已保存的价格仍可查看。</p>}
     {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !groups.length ? <p role="status">当前条件下没有新核验报价，请取消勾选或重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
       <table className={styles.table}>
@@ -79,7 +80,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
         <thead><tr><th scope="col" className={styles.identity}>AI / 套餐 / 渠道</th>{visibleRegions.map(item => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}</tr></thead>
         <tbody>{groups.map(({ plan, channel, cells, minimum }, index) => <tr key={`${plan.planCode}:${channel}`} className={index === 0 || groups[index - 1]?.plan.planCode !== plan.planCode ? styles.groupStart : undefined}>
           <th scope="row" className={styles.identity}><span className={styles.vendor}>{vendors[plan.vendor]}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod]}{plan.billingPeriod === "year" ? " · 整年扣款" : ""}</small><span className={styles.channel}>{channels[channel]}</span></th>
-          {cells.map(({ region, row, check }) => <td key={region.code}><Cell row={row} check={check} monthly={monthly} lowest={Boolean(row && visibleRegions.length > 1 && isFreshOfficialSubscriptionPrice(row) && row.cnyEstimate !== null && minimum !== null && Number(row.cnyEstimate) === minimum)} /></td>)}
+          {cells.map(({ region, row, check }) => <td key={region.code}><Cell row={row} check={check} monthly={monthly} lowest={Boolean(row && visibleRegions.length > 1 && isFreshOfficialSubscriptionPrice(row) && hasCurrentCnyEstimate(row) && minimum !== null && Number(row.cnyEstimate) === minimum)} /></td>)}
         </tr>)}</tbody>
       </table>
     </div>}

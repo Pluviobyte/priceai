@@ -22,6 +22,10 @@ export interface OfficialSubscriptionPrice {
   exchangeRateUrl: string | null;
   historyCount: number;
   collectionStatus?: string | null;
+  evidence?: Record<string, unknown>;
+  billingVerified?: boolean;
+  evidenceStatus?: string;
+  eligibleForComparison?: boolean;
 }
 
 interface SubscriptionRow {
@@ -45,18 +49,57 @@ interface SubscriptionRow {
   exchange_rate_date: string | null;
   exchange_rate_url: string | null;
   history_count: string;
+  evidence: Record<string, unknown>;
 }
 
 const OFFICIAL_SUBSCRIPTION_FRESHNESS_MS = 36 * 60 * 60 * 1_000;
 
+type SubscriptionEvidence = Pick<OfficialSubscriptionPrice, "verifiedAt"> & Partial<Pick<OfficialSubscriptionPrice, "priceKind" | "evidenceUrl" | "collectionStatus" | "billingPeriod" | "rawPlanName" | "channel" | "evidence">>;
+
+export function hasVerifiedSubscriptionBilling(row: SubscriptionEvidence): boolean {
+  if (row.evidence?.billingPeriod === row.billingPeriod && typeof row.evidence?.billingEvidenceUrl === "string") return true;
+  // The original SKU itself may explicitly state its period. Never infer it from the amount.
+  return row.channel === "app_store" && (row.billingPeriod === "month"
+    ? / - Monthly$/i.test(row.rawPlanName ?? "")
+    : row.billingPeriod === "year" && / - Annual$/i.test(row.rawPlanName ?? ""));
+}
+
 export function isFreshOfficialSubscriptionPrice(
-  row: Pick<OfficialSubscriptionPrice, "verifiedAt"> & { evidenceUrl?: string; collectionStatus?: string | null },
+  row: SubscriptionEvidence,
   now = Date.now(),
 ): boolean {
-  if (row.collectionStatus === "ambiguous_sku") return false;
+  if (["ambiguous_sku", "sku_not_listed", "billing_unverified"].includes(row.collectionStatus ?? "")) return false;
   if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return false;
+  if (!hasVerifiedSubscriptionBilling(row)) return false;
   const verifiedAt = new Date(row.verifiedAt).getTime();
   return Number.isFinite(verifiedAt) && verifiedAt <= now + 5 * 60_000 && now - verifiedAt <= OFFICIAL_SUBSCRIPTION_FRESHNESS_MS;
+}
+
+export function getOfficialSubscriptionPriceStatus(row: SubscriptionEvidence, now = Date.now()): string {
+  if (row.priceKind === "unknown") return "未公开套餐精确价";
+  if (row.priceKind === "range") return "应用价格区间 · 非套餐报价";
+  if (row.evidenceUrl?.includes("/introducing-chatgpt-go/")) return "公告参考价 · 非当前报价";
+  if (row.collectionStatus === "ambiguous_sku") return "同名多价 · 待核验";
+  if (row.collectionStatus === "sku_not_listed") return "本次列表未列出 · 历史记录";
+  if (!hasVerifiedSubscriptionBilling(row) || row.collectionStatus === "billing_unverified") return "公开内购金额 · 周期待核验";
+  if (!isFreshOfficialSubscriptionPrice(row, now)) return "历史标价 · 待更新";
+  return row.channel === "web" ? "官网公开标价" : "商店公开标价";
+}
+
+export function hasCurrentCnyEstimate(row: Pick<OfficialSubscriptionPrice, "cnyEstimate" | "exchangeRateDate">, now = Date.now()): boolean {
+  if (row.cnyEstimate === null || !Number.isFinite(Number(row.cnyEstimate)) || Number(row.cnyEstimate) <= 0 || !row.exchangeRateDate) return false;
+  const day = Date.parse(`${row.exchangeRateDate}T00:00:00Z`);
+  const today = Math.floor(now / 86_400_000) * 86_400_000;
+  return Number.isFinite(day) && day <= today && today - day <= 7 * 86_400_000;
+}
+
+/** A stable reference, not the cheapest quote across different tax/checkout conditions. */
+export function selectOfficialSubscriptionReference(rows: OfficialSubscriptionPrice[], now = Date.now()): OfficialSubscriptionPrice | null {
+  return [...rows].filter(row => row.priceKind === "exact" && row.amount !== null && isFreshOfficialSubscriptionPrice(row, now))
+    .sort((a, b) => Number(b.countryCode === "US") - Number(a.countryCode === "US")
+      || Number(b.channel === "web") - Number(a.channel === "web")
+      || b.verifiedAt.getTime() - a.verifiedAt.getTime()
+      || a.countryCode.localeCompare(b.countryCode))[0] ?? null;
 }
 
 export interface OfficialReferencePrice {
@@ -178,7 +221,7 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
     `select p.id, pl.vendor, pl.plan_code, pl.display_name as plan_name,
             pl.billing_period, p.channel, p.country_code, p.currency,
             p.price_kind, p.amount, p.lower_amount, p.upper_amount,
-            p.cny_estimate, p.raw_plan_name, p.app_id, p.evidence_url,
+            p.cny_estimate, p.raw_plan_name, p.app_id, p.evidence_url, p.evidence,
             p.verified_at, er.effective_date::text as exchange_rate_date,
             er.source_url as exchange_rate_url,
             count(h.id)::text as history_count
@@ -194,15 +237,19 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
   );
   const checks = await getOfficialSubscriptionChecks();
   const statusIndex = new Map(checks.map(check => [`${check.vendor}:${check.planCode}:${check.channel}:${check.countryCode}`, check.status]));
-  return rows.map((row) => ({
+  const prices = rows.map((row) => ({
     id: row.id, vendor: row.vendor, planCode: row.plan_code, planName: row.plan_name,
     billingPeriod: row.billing_period, channel: row.channel, countryCode: row.country_code,
     currency: row.currency, priceKind: row.price_kind, amount: row.amount,
     lowerAmount: row.lower_amount, upperAmount: row.upper_amount,
     cnyEstimate: row.cny_estimate, rawPlanName: row.raw_plan_name, appId: row.app_id,
-    evidenceUrl: row.evidence_url, verifiedAt: row.verified_at,
+    evidenceUrl: row.evidence_url, verifiedAt: row.verified_at, evidence: row.evidence,
     exchangeRateDate: row.exchange_rate_date, exchangeRateUrl: row.exchange_rate_url,
     historyCount: Number(row.history_count), collectionStatus: statusIndex.get(`${row.vendor}:${row.plan_code}:${row.channel}:${row.country_code}`) ?? null,
+  }));
+  return prices.map(row => ({ ...row, billingVerified: hasVerifiedSubscriptionBilling(row),
+    evidenceStatus: getOfficialSubscriptionPriceStatus(row),
+    eligibleForComparison: row.priceKind === "exact" && isFreshOfficialSubscriptionPrice(row) && hasCurrentCnyEstimate(row),
   }));
 }
 

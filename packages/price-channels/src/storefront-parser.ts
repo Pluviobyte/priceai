@@ -23,6 +23,17 @@ function visibleTextFromHtml(html: string): string {
 }
 
 export function extractOfficialPagePrice(html: string, requiredTerms: readonly string[]): number | null {
+  const normalizedTerms = requiredTerms.join(" ").toLowerCase();
+  if (normalizedTerms === "supergrok" || normalizedTerms === "supergrok plus") {
+    return extractSuperGrokMonthlyPrice(html, normalizedTerms);
+  }
+  // OpenAI pages discuss several dollar prices in the same paragraph. Distance
+  // from the article title cannot establish which tier or billing period owns one.
+  if (normalizedTerms.includes("chatgpt plus")) return extractChatGptPlanPrice(html, "chatgpt-plus-monthly");
+  if (normalizedTerms.includes("chatgpt pro")) {
+    const tier = normalizedTerms.match(/\b(5|20)x\b/)?.[1];
+    return tier ? extractChatGptPlanPrice(html, `chatgpt-pro-${tier}x-monthly`) : null;
+  }
   const [anchorTerm, ...nearbyTerms] = requiredTerms;
   if (!anchorTerm) return null;
   const visibleText = visibleTextFromHtml(html);
@@ -51,6 +62,56 @@ export function extractOfficialPagePrice(html: string, requiredTerms: readonly s
   return candidates.sort((left, right) => left.score - right.score)[0]?.amount ?? null;
 }
 
+/** xAI price cards are identified by their exact heading, not a name prefix. */
+function extractSuperGrokMonthlyPrice(html: string, normalizedPlanName: string): number | null {
+  const headings = [...html.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
+  const amounts = new Set<number>();
+  for (let index = 0; index < headings.length; index++) {
+    const heading = headings[index]!;
+    if (visibleTextFromHtml(heading[2]!).toLowerCase() !== normalizedPlanName) continue;
+    const start = heading.index! + heading[0].length;
+    const card = visibleTextFromHtml(html.slice(start, headings[index + 1]?.index ?? html.length));
+    // An annual payment expressed as a monthly equivalent is a different offer.
+    if (/\b(?:annual(?:ly)?|year(?:ly)?)\b/i.test(card)) continue;
+    for (const price of card.matchAll(/(?<![\w$])(?:US\s*\$|USD\s*\$?|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:USD\s*)?(?:\/\s*month\b|per\s+month\b)/gi)) {
+      const amount = Number(price[1]!.replaceAll(",", ""));
+      if (Number.isFinite(amount) && amount > 0) amounts.add(amount);
+    }
+  }
+  return amounts.size === 1 ? [...amounts][0]! : null;
+}
+
+/** A monthly OpenAI quote requires the plan, amount and period in the same clause. */
+export function extractChatGptPlanPrice(html: string, planCode: string): number | null {
+  const requestedTier = planCode.match(/^chatgpt-pro-(5|20)x-monthly$/)?.[1];
+  if (planCode !== "chatgpt-plus-monthly" && !requestedTier) return null;
+  const text = visibleTextFromHtml(html);
+  if (!/\bChatGPT\b/i.test(text)) return null;
+  // Stop at every plan reference, including comparison targets such as "than
+  // Plus", so neither a neighboring card nor a second Pro clause can supply a price.
+  const mentions = [...text.matchAll(/\b(?:ChatGPT\s+)?(Go|Plus|Pro)(?:\s+(5|20)x)?\b/gi)];
+  const amounts = new Set<number>();
+  for (let index = 0; index < mentions.length; index++) {
+    const mention = mentions[index]!;
+    const kind = mention[1]!.toLowerCase();
+    if (kind !== (requestedTier ? "pro" : "plus")) continue;
+    const start = mention.index! + mention[0].length;
+    const clause = text.slice(start, Math.min(mentions[index + 1]?.index ?? text.length, start + 220));
+    // A displayed monthly equivalent with an annual payment is not a monthly subscription.
+    if (/\b(?:annual(?:ly)?|year(?:ly)?)\b/i.test(clause)) continue;
+    const tiers = new Set([mention[2], ...[...clause.matchAll(/\b(5|20)x\b/gi)].map(match => match[1])].filter(Boolean));
+    if (requestedTier && (tiers.size !== 1 || !tiers.has(requestedTier))) continue;
+    // Plain $ is accepted only as an OpenAI USD reference. A$, S$, HK$, etc.
+    // must not become USD, and annual or unspecified amounts are not month fees.
+    const prices = clause.matchAll(/(?<![\w$])(?:US\s*\$|USD\s*\$?|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:USD\s*)?(?:\/\s*month\b|per\s+month\b)/gi);
+    for (const price of prices) {
+      const amount = Number(price[1]!.replaceAll(",", ""));
+      if (Number.isFinite(amount) && amount > 0) amounts.add(amount);
+    }
+  }
+  return amounts.size === 1 ? [...amounts][0]! : null;
+}
+
 export function officialPageConfirmsPrice(html: string, requiredTerms: readonly string[], amount: number): boolean {
   return extractOfficialPagePrice(html, requiredTerms) === amount;
 }
@@ -67,6 +128,10 @@ function parseNumber(value: string, currency: string): number | null {
 
   if (isIndonesianMillion) {
     raw = raw.replace(/\./g, "").replace(",", ".");
+  } else if (currency === "IDR" && !isIndonesianThousand && /^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(raw)) {
+    // Indonesian storefronts use periods for thousands, including a single
+    // separator (Rp 14.500). Number("14.500") would silently divide it by 1,000.
+    raw = raw.replaceAll(".", "").replace(",", ".");
   } else if (raw.includes(",") && raw.includes(".")) {
     const decimalMark = raw.lastIndexOf(",") > raw.lastIndexOf(".") ? "," : ".";
     const thousandsMark = decimalMark === "," ? "." : ",";
@@ -135,15 +200,38 @@ export function extractClaudePlanPrice(html: string, planCode: string): number |
   const names: Record<string, string> = { "claude-pro-monthly": "Pro", "claude-pro-annual": "Pro", "claude-max-5x-monthly": "Max 5x", "claude-max-20x-monthly": "Max 20x" };
   const name = names[planCode];
   if (!name) return null;
-  for (const row of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
-    const cells = [...row[1]!.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(cell => visibleTextFromHtml(cell[1]!));
-    if (cells[0]?.trim() !== name || !cells[1]) continue;
-    const pattern = planCode.endsWith("annual") ? /\$\s*([0-9.]+)\s*\/\s*year/i : name === "Pro" ? /\$\s*([0-9.]+)\s*\/\s*month/i : /\$\s*([0-9.]+)/;
-    const match = cells[1].match(pattern);
-    const amount = match ? Number(match[1]) : NaN;
-    return Number.isFinite(amount) && amount > 0 ? amount : null;
+  const requestedPeriod = planCode.endsWith("annual") ? "year" : "month";
+  const amounts = new Set<number>();
+  const tables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)].map(table => table[1]!);
+  for (const table of tables.length ? tables : [html]) {
+    // The live guide uses ordinary td elements for its bold column headings.
+    const rows = [...table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(row =>
+      [...row[1]!.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(cell => visibleTextFromHtml(cell[1]!)));
+    const headers = rows.find(row => row.includes("Plan") && row.includes("Price"));
+    const nameIndex = headers?.indexOf("Plan") ?? 0;
+    const priceIndex = headers?.indexOf("Price") ?? 1;
+    const intervalIndex = headers?.indexOf("Billing Interval") ?? -1;
+    for (const cells of rows) {
+      const priceCell = cells[priceIndex];
+      if (cells[nameIndex] !== name || !priceCell) continue;
+      const interval = intervalIndex >= 0 ? cells[intervalIndex]?.toLowerCase() : undefined;
+      if (requestedPeriod === "month" && (/\b(?:annual(?:ly)?|yearly)\b/i.test(priceCell) || /^(?:annual(?:ly)?|yearly)$/.test(interval ?? ""))) continue;
+      if (requestedPeriod === "year" && interval === "monthly") continue;
+      for (const match of priceCell.matchAll(/(?<![\w$])(?:US\s*\$|USD\s*\$?|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:USD\s*)?(?:\/|per)\s*(month|year)\b/gi)) {
+        if (match[2]?.toLowerCase() !== requestedPeriod) continue;
+        const amount = Number(match[1]!.replaceAll(",", ""));
+        if (Number.isFinite(amount) && amount > 0) amounts.add(amount);
+      }
+      // A bare Max amount is usable only with the same row's explicit billing column.
+      const expectedInterval = requestedPeriod === "month" ? "monthly" : "annual";
+      const bare = priceCell.match(/^(?:US\s*\$|USD\s*\$?|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:USD)?$/i);
+      if (interval === expectedInterval && bare) {
+        const amount = Number(bare[1]!.replaceAll(",", ""));
+        if (Number.isFinite(amount) && amount > 0) amounts.add(amount);
+      }
+    }
   }
-  return null;
+  return amounts.size === 1 ? [...amounts][0]! : null;
 }
 
 export function hasAmbiguousAppStorePrices(listings: readonly AppStorePriceListing[], name: string): boolean {

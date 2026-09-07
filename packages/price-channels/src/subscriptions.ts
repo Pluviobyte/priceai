@@ -1,3 +1,4 @@
+import { parseEcbCnyRates } from "@price-radar/price-channels/exchange-rates";
 import { createHash } from "node:crypto";
 import {
   exchangeRateSnapshots,
@@ -8,7 +9,7 @@ import {
   officialSubscriptionChecks,
 } from "@price-radar/database/schema";
 import * as databaseSchema from "@price-radar/database/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import {
   OFFICIAL_SUBSCRIPTION_PLAN_CATALOG,
@@ -165,10 +166,13 @@ async function latestCnyRate(database: Database, currency: string) {
   const [row] = await database
     .select({ id: exchangeRateSnapshots.id, rate: exchangeRateSnapshots.rate })
     .from(exchangeRateSnapshots)
-    .where(and(eq(exchangeRateSnapshots.baseCurrency, currency), eq(exchangeRateSnapshots.quoteCurrency, "CNY")))
+    .where(and(eq(exchangeRateSnapshots.baseCurrency, currency), eq(exchangeRateSnapshots.quoteCurrency, "CNY"),
+      lte(exchangeRateSnapshots.effectiveDate, new Date().toISOString().slice(0, 10)),
+      gte(exchangeRateSnapshots.effectiveDate, new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10)),
+      gt(exchangeRateSnapshots.rate, "0")))
     .orderBy(desc(exchangeRateSnapshots.effectiveDate))
     .limit(1);
-  return row ? { id: row.id, rate: Number(row.rate) } : null;
+  return row && Number.isFinite(Number(row.rate)) ? { id: row.id, rate: Number(row.rate) } : null;
 }
 
 async function upsertPrice(
@@ -287,9 +291,10 @@ export async function seedVerifiedSubscriptionPrices(database: Database): Promis
   }
   await upsertPrice(database, GO_ANNOUNCEMENT_PRICE, new Date("2026-01-16T00:00:00.000Z"), { preserveVerifiedAtWhenUnchanged: true });
   // Explicit manual source review on 2026-09-07; scheduled refreshes keep this fixed timestamp.
-  const reviewedAt = new Date("2026-09-07T06:58:00.000Z");
-  for (const price of VERIFIED_WEB_PRICES.filter(price => price.vendor === "openai" || price.vendor === "xai")) {
-    await upsertPrice(database, { ...price, evidence: { ...price.evidence, verificationMethod: "official_document_manual_review", reviewDocument: "docs/research/official-subscription-audit-2026-09-07.md" } }, reviewedAt, { preserveVerifiedAtWhenUnchanged: true });
+  const reviewedAt = new Date("2026-09-07T09:04:00.000Z");
+  for (const price of VERIFIED_WEB_PRICES) {
+    const plan = PLAN_SEEDS.find(plan => plan.planCode === price.planCode)!;
+    await upsertPrice(database, { ...price, evidence: { ...price.evidence, sourceKind: "official_public_price", billingPeriod: plan.billingPeriod, billingEvidenceUrl: price.evidenceUrl, taxTreatment: "checkout_required", verificationMethod: "official_document_manual_review", reviewDocument: "docs/research/official-subscription-verification-2026-09-07.md" } }, reviewedAt, { preserveVerifiedAtWhenUnchanged: true });
   }
   return VERIFIED_WEB_PRICES.length + 1;
 }
@@ -353,7 +358,7 @@ export async function verifyOfficialWebPrices(database: Database, verifiedAt = n
       if (amount !== null && price.amount !== undefined && (amount < price.amount * 0.25 || amount > price.amount * 4)) amount = null;
     }
     if (amount !== null && price) {
-      await upsertPrice(database, { ...price, amount, evidence: { ...price.evidence, publicPageParsed: true } }, verifiedAt);
+      await upsertPrice(database, { ...price, amount, evidence: { ...price.evidence, sourceKind: "official_public_price", publicPageParsed: true, billingPeriod: plan.billingPeriod, billingEvidenceUrl: price.evidenceUrl, taxTreatment: "checkout_required" } }, verifiedAt);
       verified++;
     }
     for (const region of OFFICIAL_SUBSCRIPTION_REGION_CATALOG) {
@@ -394,6 +399,12 @@ export async function collectAppleAppStorePrices(database: Database, verifiedAt 
             hasAlias ? "ambiguous_sku" : "sku_not_listed", hasAlias ? "公开内购项无法可靠对应月付套餐，保留历史价格待核验" : "公开内购列表未列出此套餐，不代表不能购买", evidenceUrl, verifiedAt);
           continue;
         }
+        const explicitPeriod = / - Monthly$/i.test(alias.rawPlanName) ? "month" : / - Annual$/i.test(alias.rawPlanName) ? "year" : null;
+        // OpenAI documents monthly-only Go/Plus/Pro plans. This confirms the plan period,
+        // not a logged-in customer's SKU eligibility, introductory offer or final charge.
+        const billingPeriod = explicitPeriod ?? (target.vendor === "openai" ? "month" : null);
+        const billingEvidenceUrl = explicitPeriod ? evidenceUrl : target.vendor === "openai"
+          ? "https://help.openai.com/en/articles/11989085-what-is-chatgpt-go" : null;
         await upsertPrice(database, {
           vendor: target.vendor,
           planCode: alias.planCode,
@@ -410,9 +421,16 @@ export async function collectAppleAppStorePrices(database: Database, verifiedAt 
             publicListing: true,
             storefront: region.storefront,
             displayedAmount: listing.displayAmount,
+            sourceKind: "public_store_listing",
+            billingPeriod,
+            ...(billingEvidenceUrl ? { billingEvidenceUrl, billingEvidenceMethod: explicitPeriod ? "explicit_sku_name" : "official_plan_document" } : {}),
+            ...(target.vendor === "openai" ? { additionalBillingSources: ["https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", "https://chatgpt.com/plans/pro/"], checkoutVerified: false } : {}),
+            taxTreatment: "checkout_required",
           },
         }, verifiedAt);
-        await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode, "verified", "已解析对应内购项；周期按标准套餐映射，结算时复核", evidenceUrl, verifiedAt);
+        await recordCheck(database, { vendor: target.vendor, planCode: alias.planCode }, "app_store", region.countryCode,
+          billingPeriod ? "verified" : "billing_unverified",
+          explicitPeriod ? "官方内购名称明确标注周期；金额为公开标价，税费及购买资格仍需结算复核" : billingPeriod ? "金额来自商店公开列表，标准套餐月付周期由 OpenAI 官方文档交叉确认；未核验具体账户结算及优惠资格" : "公开内购项未注明计费周期或优惠条件；仅保存标价，不作为已核验月费参与比较", evidenceUrl, verifiedAt);
         saved += 1;
       }
       return saved;
@@ -437,26 +455,6 @@ export async function checkGooglePlayPrices(database: Database, checkedAt = new 
   return results.reduce((sum, count) => sum + count, 0);
 }
 
-function parseEcbCsv(csv: string): Map<string, { date: string; rate: number }> {
-  const lines = csv.trim().split(/\r?\n/);
-  const headers = lines[0]?.split(",").map((item) => item.replace(/^"|"$/g, "")) ?? [];
-  const currencyIndex = headers.indexOf("CURRENCY");
-  const dateIndex = headers.indexOf("TIME_PERIOD");
-  const valueIndex = headers.indexOf("OBS_VALUE");
-  if (currencyIndex < 0 || dateIndex < 0 || valueIndex < 0) throw new Error("ecb_csv_shape_changed");
-  const latest = new Map<string, { date: string; rate: number }>();
-  for (const line of lines.slice(1)) {
-    const columns = line.split(",").map((item) => item.replace(/^"|"$/g, ""));
-    const currency = columns[currencyIndex];
-    const date = columns[dateIndex];
-    const rate = Number(columns[valueIndex]);
-    if (!currency || !date || !Number.isFinite(rate)) continue;
-    const previous = latest.get(currency);
-    if (!previous || date > previous.date) latest.set(currency, { date, rate });
-  }
-  return latest;
-}
-
 export async function refreshEcbCnyRates(database: Database): Promise<number> {
   const currencies = [...new Set([
     "CNY",
@@ -467,23 +465,11 @@ export async function refreshEcbCnyRates(database: Database): Promise<number> {
   const startYear = new Date().getUTCFullYear() - 1;
   const sourceUrl = `https://data-api.ecb.europa.eu/service/data/EXR/D.${currencies.join("+")}.EUR.SP00.A?format=csvdata&startPeriod=${startYear}-01-01`;
   const csv = await fetchText(sourceUrl);
-  const values = parseEcbCsv(csv);
-  const cny = values.get("CNY");
-  if (!cny) throw new Error("ecb_cny_missing");
-  const rows: Array<{ baseCurrency: string; quoteCurrency: "CNY"; rate: number; effectiveDate: string }> = [
-    { baseCurrency: "EUR", quoteCurrency: "CNY", rate: cny.rate, effectiveDate: cny.date },
-  ];
-  for (const currency of currencies) {
-    if (currency === "CNY") continue;
-    const value = values.get(currency);
-    if (!value) continue;
-    rows.push({
-      baseCurrency: currency,
-      quoteCurrency: "CNY",
-      rate: cny.rate / value.rate,
-      effectiveDate: cny.date < value.date ? cny.date : value.date,
-    });
-  }
+  const rows = parseEcbCnyRates(csv).map(row => ({
+    baseCurrency: row.currency, quoteCurrency: "CNY" as const,
+    rate: row.rate, effectiveDate: row.effectiveDate,
+  }));
+  if (!rows.length) throw new Error("ecb_current_cny_missing");
   for (const row of rows) {
     await database.insert(exchangeRateSnapshots).values({
       ...row,
