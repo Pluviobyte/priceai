@@ -27,7 +27,7 @@ export async function runSubscriptionSweep(databaseUrl: string, options: Subscri
     const times = (await client.query("select max(finished_at) filter(where status='success' and result->>'scope'='full') as success, max(finished_at) filter(where result->>'scope'='full') as attempt from operator_job_requests where kind=$1", [KIND])).rows[0];
     if (!options.force && !pending && !sweepIsDue(times.success, times.attempt, Date.now(), options.intervalMs ?? 86_400_000)) return { status: "skipped", reason: "not_due" };
     requestId = pending?.id ?? (await client.query("insert into operator_job_requests(kind,status,requested_by,reason) values($1,'pending','dokploy-worker','daily full subscription sweep') returning id", [KIND])).rows[0].id;
-    await client.query("update operator_job_requests set status='running',started_at=now(),finished_at=null where id=$1", [requestId]);
+    const startedAt = (await client.query("update operator_job_requests set status='running',started_at=now(),finished_at=null where id=$1 returning started_at", [requestId])).rows[0].started_at;
     const errors: string[] = [];
     const result = await refreshOfficialSubscriptionChannels(drizzle(client, { schema }), {
       ...options,
@@ -37,9 +37,11 @@ export async function runSubscriptionSweep(databaseUrl: string, options: Subscri
     if (!result.appStorePrices) errors.push("Apple sweep returned no prices");
     if (!result.googleWebPrices) errors.push("Google sweep returned no prices");
     if (!result.openAiWebPrices || result.openAiWebSkipped) errors.push("OpenAI browser sweep incomplete");
-    const status = errors.length ? "failed" : "success";
-    await client.query("update operator_job_requests set status=$2,result=$3,error_message=$4,finished_at=now() where id=$1", [requestId, status, JSON.stringify(result), errors.length ? errors.join("; ").slice(0, 2000) : null]);
-    return { status, requestId, ...result, errors };
+    const failedChecks = (await client.query("select channel,status,count(*)::int as affected_quotes,count(distinct evidence_url)::int as source_pages from official_subscription_checks where checked_at >= $1 and status in ('fetch_failed','parser_drift','storefront_redirected','country_fallback','currency_mismatch','currency_unknown') group by channel,status", [startedAt])).rows;
+    const status = errors.length ? "failed" : failedChecks.length ? "partial" : "success";
+    const summary = {...result, failedChecks};
+    await client.query("update operator_job_requests set status=$2,result=$3,error_message=$4,finished_at=now() where id=$1", [requestId, status, JSON.stringify(summary), errors.length ? errors.join("; ").slice(0, 2000) : null]);
+    return { status, requestId, ...summary, errors };
   } catch (error) {
     if (requestId) await client.query("update operator_job_requests set status='failed',result=$2,error_message=$3,finished_at=now() where id=$1", [requestId, JSON.stringify({scope: options.scope ?? "full"}), error instanceof Error ? error.message.slice(0,2000) : "sweep_failed"]).catch(() => undefined);
     throw error;

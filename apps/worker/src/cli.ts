@@ -140,7 +140,7 @@ async function main(): Promise<void> {
         onError: (source, error) => process.stderr.write(`official subscription source failed: ${source}: ${error instanceof Error ? error.message : String(error)}\n`),
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-      if (result.status === "failed") process.exitCode = 1;
+      if (["failed", "partial"].includes(result.status)) process.exitCode = 1;
       return;
     }
     if (command === "refresh-official-api") {

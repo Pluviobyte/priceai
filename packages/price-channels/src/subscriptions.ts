@@ -79,6 +79,7 @@ export interface SubscriptionRefreshOptions {
   scope?: RefreshScope;
   fetchDocuments?: BrowserDocumentFetcher;
   onError?: (source: string, error: unknown) => void;
+  onProgress?: (source: string, result: Record<string, unknown>) => void;
 }
 
 export interface SubscriptionRefreshResult {
@@ -1079,14 +1080,18 @@ export async function refreshOfficialSubscriptionChannels(
   const report = (source: string, error: unknown) => options.onError?.(source, error);
   let exchangeRates = 0;
   try { exchangeRates = await refreshEcbCnyRates(database); } catch (error) { report("ecb", error); }
+  options.onProgress?.("exchange_rates", {count: exchangeRates});
   const seededPrices = await seedVerifiedSubscriptionPrices(database);
   const verifiedWebPrices = await verifyOfficialWebPrices(database, verifiedAt);
   let google: GoogleWebCollectionResult = { prices: 0, countries: 0, monthlyAmounts: new Map() };
   try { google = await collectGoogleWebPrices(database, verifiedAt, { scope }); } catch (error) { report("google_web", error); }
+  options.onProgress?.("google_web", {prices: google.prices, countries: google.countries});
   let apple: AppleCollectionResult = { prices: 0, storefronts: 0, throttleRetries: 0, throttleCooldownMs: 0 };
   try { apple = await collectAppleAppStorePrices(database, verifiedAt, { scope, googleWebMonthlyAmounts: google.monthlyAmounts }); } catch (error) { report("apple", error); }
+  options.onProgress?.("apple", {...apple});
   let play: GooglePlayCollectionResult = { ranges: 0, checks: 0 };
   try { play = await collectGooglePlayRanges(database, verifiedAt); } catch (error) { report("google_play", error); }
+  options.onProgress?.("google_play", {...play});
   let openAi: OpenAiWebCollectionResult = { prices: 0, countries: 0, notAvailable: 0 };
   let openAiSkipped = true;
   if (options.fetchDocuments) {

@@ -16,6 +16,7 @@ try {
     try {
       const result = await runSubscriptionSweep(config.databaseUrl, {
         intervalMs: config.officialSubscriptionRefreshIntervalMs,
+        onProgress: (source, result) => console.log(JSON.stringify({event:"official_source_completed",source,...result})),
         fetchDocuments: urls => fetchDocumentsWithBrowser(urls, config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}),
       });
       if (result.status !== "skipped") console.log(JSON.stringify({event: "official_subscription_sweep", ...result}));

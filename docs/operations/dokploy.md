@@ -9,7 +9,7 @@
 
 官方 Worker 设置 WORKER_DATABASE_URL（或者 DATABASE_URL）连接当前 PostgreSQL，OFFICIAL_SUBSCRIPTION_REFRESH_INTERVAL_MS=86400000。不需要 Redis、对象存储或其他平台定时器。普通渠道爬虫和它的 Browser Worker 仍是另外的进程；它们不再负责官方订阅的日常调度。
 
-Web 保持 INITIALIZE_OFFICIAL_SUBSCRIPTIONS=false，先部署 Web 使迁移 0017 生效，再部署官方 Worker。停用 Web 原先每小时执行 refresh-subscriptions 的 Dokploy Schedule。首次启动没有完整成功记录时扫描全部地区；随后每分钟判断是否到期，按完整成功运行时间计 24 小时。各个页面的 checked_at 不影响调度。失败保留历史价格，失败运行一小时后重试；不把源码/镜像缺少浏览器、整源无数据或抛出异常记成成功。
+Web 保持 INITIALIZE_OFFICIAL_SUBSCRIPTIONS=false，先部署 Web 使迁移 0017 生效，再部署官方 Worker。停用 Web 原先每小时执行 refresh-subscriptions 的 Dokploy Schedule。首次启动没有完整成功记录时扫描全部地区；随后每分钟判断是否到期，按完整成功运行时间计 24 小时。各个页面的 checked_at 不影响调度。失败保留历史价格，失败或部分国家访问/解析失败（partial）的运行一小时后重试；不把源码/镜像缺少浏览器、整源无数据或抛出异常记成成功。
 
 入口共享 PostgreSQL advisory lock 7410318，跨容器、CLI 与调度互斥；获取锁后恢复上次中断的 running 请求。operator_job_requests 保存范围、来源计数、错误与完成时间。Web 的 POST /api/cron/official-subscriptions 仅可选登记手动请求，需要 OFFICIAL_PRICE_REFRESH_SECRET；不执行 HTTP 长任务，不依赖外部定时服务。CLI 使用同一个运行器：
 
