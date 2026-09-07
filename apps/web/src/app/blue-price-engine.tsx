@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ModelIcon, MODEL_ICON_PATHS, type ModelIconName } from "./model-icons";
-import { OFFER_MODE_LABEL, type BaselineRow, type ChangeRow, type HomeSnapshot } from "@/lib/home-snapshot";
+import { OFFER_MODE_LABEL, type BaselineRow, type HomeSnapshot } from "@/lib/home-snapshot";
 
 const BRAND_TABS = [["全部", ""], ["ChatGPT", "OpenAI"], ["Claude", "Anthropic"], ["Gemini", "Google"], ["Grok", "xAI"]] as const;
 
@@ -73,15 +73,6 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
   </div>;
 }
 
-function ChangeLine({ change }: { change: ChangeRow }) {
-  const down = change.kind === "price-down" || change.kind === "restock";
-  return <div className="blue-engine-change">
-    <p><Link href={`/products/${change.productSlug}`}><strong>{change.productName}</strong></Link><span> · {change.merchantName}</span></p>
-    <p><s>{change.before}</s><strong>{change.after}</strong><em className={down ? "down" : "up"}>{change.delta}</em></p>
-    <time>{new Date(change.observedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time>
-  </div>;
-}
-
 /** 首屏：说清这个站是做什么的，并给出两个页内出口。 */
 export function PriceBaselineHero() {
   return <section className="blue-engine" aria-labelledby="hero-title">
@@ -105,7 +96,7 @@ export function PriceBaselineHero() {
  * 搜索是表格上方的次级工具，不是进入产品的门槛。
  */
 export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
-  const { baseline, changes, coverage, placeholder } = snapshot;
+  const { baseline, coverage, placeholder } = snapshot;
   return <section className="blue-engine" aria-labelledby="baseline-title">
     <div className="blue-engine-content">
       {!placeholder && <div className="blue-engine-stats">
@@ -136,24 +127,7 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
         {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
       </div>
 
-      <div className="blue-engine-bottom">
-        <article className="blue-engine-changes">
-          <header><h2>最近 24 小时的降价与补货</h2><Link href="/changes">全部异动 <span>→</span></Link></header>
-          {changes.length
-            ? changes.map((change) => <ChangeLine change={change} key={`${change.productSlug}-${change.merchantName}-${change.observedAt}`} />)
-            : <p className="blue-engine-nodata">这段时间没有记录到价格或库存变化。</p>}
-        </article>
-        <aside className="blue-engine-guide">
-          <span className="blue-engine-guide-label">读表提醒</span>
-          <h2>最低价不等于你能买到的价</h2>
-          <ol>
-            <li><span>01</span>先看交付方式：账号归谁，决定了这个价格值不值。</li>
-            <li><span>02</span>再看确认时间：长期没更新的低价通常已经不可买。</li>
-            <li><span>03</span>最后回原站核对：价格、库存和售后规则以商家页面为准。</li>
-          </ol>
-          <Link href="/methodology">我们怎么算最低价 <span>→</span></Link>
-        </aside>
-      </div>
+
     </div>
   </section>;
 }
