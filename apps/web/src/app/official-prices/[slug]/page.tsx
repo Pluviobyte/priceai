@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG, OFFICIAL_SUBSCRIPTION_REGION_CATALOG } from "@price-radar/price-channels/subscription-catalog";
+import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
-import { getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, sortCollectedSubscriptionPrices, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../../site-footer";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +12,6 @@ const vendorMap: Record<string, string> = { chatgpt: "openai", claude: "anthropi
 const companyNames: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI", google: "Google", xai: "xAI" };
 const channelNames: Record<string, string> = { web: "官网直购", app_store: "iOS Store", google_play: "Google Play" };
 const periodNames: Record<string, string> = { month: "月付", year: "年付", one_time: "一次性" };
-const channelOrder = ["web", "app_store", "google_play"];
-const regionOrder = OFFICIAL_SUBSCRIPTION_REGION_CATALOG.map((region) => region.countryCode);
 const countryNames: Record<string, string> = {
   AR: "阿根廷", AU: "澳大利亚", BO: "玻利维亚", BR: "巴西", CA: "加拿大", CL: "智利", CN: "中国大陆",
   CO: "哥伦比亚", EG: "埃及", GB: "英国", HK: "中国香港", ID: "印度尼西亚", IN: "印度", JP: "日本",
@@ -73,18 +71,14 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
   const planName = sample?.planName ?? catalogPlan!.displayName;
   const billingPeriod = sample?.billingPeriod ?? catalogPlan!.billingPeriod;
   const officialUrl = catalogPlan?.officialUrl ?? sample!.evidenceUrl;
-  const sorted = [...rows].sort((a, b) =>
-    channelOrder.indexOf(a.channel) - channelOrder.indexOf(b.channel)
-    || regionOrder.indexOf(a.countryCode) - regionOrder.indexOf(b.countryCode)
-    || a.rawPlanName.localeCompare(b.rawPlanName)
-    || new Date(b.verifiedAt).getTime() - new Date(a.verifiedAt).getTime());
+  const sorted = sortCollectedSubscriptionPrices(rows);
 
   return <div className="priceai-page priceai-official-detail-page">
 
     <main className="priceai-detail-shell">
       <Link className="priceai-detail-back" href="/official-prices">← 返回官方订阅</Link>
       <section className="priceai-detail-hero">
-        <div><span>官方订阅地区参考</span><h1>{planName}</h1><p>按购买渠道和地区列出公开标价、人民币估算与证据状态。周期待核验的内购金额不能直接当作标准月费；税费与购买资格以结算页为准。</p></div>
+        <div><span>官方订阅地区参考</span><h1>{planName}</h1><p>按采集价格的人民币估算由低到高排列，缺少精确价格或换算的记录置后。周期待核验的内购金额不能直接当作标准月费；税费与购买资格以结算页为准。</p></div>
         <dl><div><dt>厂商</dt><dd>{companyNames[vendor] ?? vendor}</dd></div><div><dt>价格记录</dt><dd>{rows.length || "待接入"}</dd></div><div><dt>目录周期</dt><dd>{periodNames[billingPeriod] ?? billingPeriod}</dd></div></dl>
       </section>
 

@@ -1,7 +1,8 @@
+import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
-import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, selectCollectedSubscriptionMinimum, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
 import { PriceComparison } from "./price-comparison";
@@ -176,7 +177,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
 
       <div className={`priceai-official-source-state${databaseAvailable && allRows.length ? " live" : " pending"}`} role="status">
         <span aria-hidden="true" />
-        <p><b>{databaseAvailable && allRows.length ? "官方公开标价参考" : "价格数据正在接入"}</b>{databaseAvailable && allRows.length ? "总览优先展示美国官网的已核验周期标价；商店金额单独注明来源。各地区实际扣款、税费和资格需在结算页确认。" : "先展示已有的官方套餐目录；具体金额请以厂商结算页为准。"}</p>
+        <p><b>{databaseAvailable && allRows.length ? "官方公开标价参考" : "价格数据正在接入"}</b>{databaseAvailable && allRows.length ? "官方最低价取当前筛选范围内采集记录的人民币最低金额，保留待核验及历史状态，不代表可购买价格。公开参考价优先展示美国官网的已核验周期标价；商店金额单独注明来源。各地区实际扣款、税费和资格需在结算页确认。" : "先展示已有的官方套餐目录；具体金额请以厂商结算页为准。"}</p>
       </div>
 
       <div className="priceai-catalog-toolbar priceai-official-toolbar">
@@ -197,15 +198,22 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
 
       {plans.length ? <div className="priceai-data-table-wrap priceai-official-table-wrap">
         <table className="priceai-data-table priceai-official-table">
-          <thead><tr><th>标准商品</th><th>目录周期</th><th>官方公开参考价</th><th>参考地区 / 渠道</th><th>采集记录</th><th>参考价日期</th></tr></thead>
+          <thead><tr><th>标准商品</th><th>目录周期</th><th>官方公开参考价</th><th>官方最低价</th><th>参考地区 / 渠道</th><th>采集记录</th><th>参考价日期</th></tr></thead>
           <tbody>{plans.map((plan) => {
             const reference = plan.reference;
+            const minimum = selectCollectedSubscriptionMinimum(plan.rows);
             const original = reference?.amount ? `${reference.currency} ${Number(reference.amount).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}` : "待核验";
             const estimate = reference?.cnyEstimate ? `≈ ¥${Number(reference.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : reference ? "人民币汇率待补" : "查看下方公开记录与缺失原因";
             return <tr key={plan.key}>
               <td><Link className="priceai-official-product" href={planHref(plan)}><ProductIcon vendor={plan.vendor} label={plan.planName} /><span><b>{plan.planName}</b><small>{companyNames[plan.vendor.toLowerCase()] ?? plan.vendor}</small></span></Link></td>
               <td><b>{periodNames[plan.billingPeriod] ?? plan.billingPeriod}</b><small>{vendorNames[plan.vendor.toLowerCase()] ?? plan.vendor}</small></td>
               <td>{reference ? <a href={reference.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><strong>{original} ↗</strong><small>{estimate}</small><em>{getOfficialSubscriptionPriceStatus(reference)}</em></a> : <Link href={planHref(plan)}><strong>{original}</strong><small>{estimate}</small></Link>}</td>
+              <td>{minimum ? <a href={minimum.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">
+                <strong>≈ ¥{Number(minimum.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ↗</strong>
+                <small>{minimum.currency} {Number(minimum.amount).toLocaleString("zh-CN", { maximumFractionDigits: 2 })} · {regionDisplayName(minimum.countryCode)}</small>
+                <small>{channelNames[minimum.channel] ?? minimum.channel}</small>
+                <em>{getOfficialSubscriptionPriceStatus(minimum)}</em>
+              </a> : <span>暂无可换算的采集报价</span>}</td>
               <td><b>{reference ? countryNames[reference.countryCode] ?? reference.countryCode : "—"}</b><small>{reference ? channelNames[reference.channel] : "尚无周期明确的当前标价"}</small></td>
               <td><b>{plan.rows.length || "—"}</b><small>{plan.rows.length ? "公开地区报价" : "等待价格入库"}</small></td>
               <td><span>{reference ? reference.verifiedAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }) : "—"}</span>{reference?.exchangeRateDate && <small>汇率 {reference.exchangeRateDate}</small>}<Link className="priceai-row-button" href={planHref(plan)}>查看　›</Link></td>

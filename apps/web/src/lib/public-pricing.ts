@@ -112,6 +112,23 @@ export function selectOfficialSubscriptionReference(rows: OfficialSubscriptionPr
       || a.countryCode.localeCompare(b.countryCode))[0] ?? null;
 }
 
+/** Sort collected exact amounts in CNY; records without a usable conversion follow. */
+export function sortCollectedSubscriptionPrices(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice[] {
+  const amount = (row: OfficialSubscriptionPrice) => row.priceKind === "exact" && row.amount !== null
+    && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0
+    && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0
+    ? Number(row.cnyEstimate) : Infinity;
+  return [...rows].sort((a, b) => amount(a) - amount(b)
+    || a.countryCode.localeCompare(b.countryCode) || a.channel.localeCompare(b.channel)
+    || a.id.localeCompare(b.id));
+}
+
+export function selectCollectedSubscriptionMinimum(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice | null {
+  return sortCollectedSubscriptionPrices(rows).find(row => row.priceKind === "exact"
+    && row.amount !== null && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0
+    && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0) ?? null;
+}
+
 export interface OfficialReferencePrice {
   planName: string;
   amount: string;
