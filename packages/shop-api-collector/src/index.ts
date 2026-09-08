@@ -219,7 +219,14 @@ export class LdxpShopApiCollector implements CollectorAdapter {
         this.#throttle.cooldown(url.hostname, retryAfter > 0 ? retryAfter * 1_000 : 30_000);
       }
       if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
-      if (!(response.headers.get("content-type") ?? "").includes("json")) throw new Error("shop_api_not_json");
+      if (!(response.headers.get("content-type") ?? "").includes("json")) {
+        const text = (await response.text()).slice(0, 32_768);
+        if (/_waf_|captcha|cf-chl-|challenge-platform|访问验证|安全验证/i.test(text)) {
+          this.#throttle.cooldown(url.hostname, 30_000);
+          throw new Error("shop_api_access_challenge");
+        }
+        throw new Error("shop_api_not_json");
+      }
       const envelope = (await response.json()) as ApiEnvelope;
       if (envelope.code !== 1) {
         throw new Error(`shop_api_rejected:${envelope.msg ?? "unknown"}`);

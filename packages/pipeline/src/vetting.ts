@@ -440,6 +440,9 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     const probes = await registry.probe(safeUrl, signal);
     const selected = probes.find((probe) => probe.supported && probe.identity);
     if (!selected?.identity) {
+      if (probes.some((probe) => /shop_api_access_challenge/.test(probe.reason ?? ""))) {
+        return defer("source_access_challenge:源站访问验证，稍后重试；持续受限需源站放行");
+      }
       const transient = probes.some((probe) => /timeout|fetch failed|ECONN|EAI_AGAIN|http_5\d\d|http_429/i.test(probe.reason ?? ""));
       if (transient) return defer("probe_transient_failure");
       const reasons = ["unsupported_storefront", ...probes.map((probe) => `${probe.collectorKind}:${probe.reason ?? "no"}`).slice(0, 8)];
