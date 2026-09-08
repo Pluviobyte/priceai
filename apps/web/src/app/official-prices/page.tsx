@@ -92,7 +92,12 @@ function groupPlans(rows: OfficialSubscriptionPrice[]): PlanGroup[] {
   return [...groups.entries()].map(([key, group]) => {
     const latest = group.rows.reduce<Date | null>((current, row) => !current || row.verifiedAt > current ? row.verifiedAt : current, null);
     return { key, ...group, reference: selectOfficialSubscriptionReference(group.rows), latest };
-  }).sort((a, b) => {
+  }).filter(plan => plan.planCode !== "claude-pro-annual").sort((a, b) => {
+    const claudeOrder = ["claude-pro-monthly", "claude-max-5x-monthly", "claude-max-20x-monthly"];
+    if (a.vendor === "anthropic" && b.vendor === "anthropic") {
+      const rank = (code: string) => claudeOrder.includes(code) ? claudeOrder.indexOf(code) : claudeOrder.length;
+      return rank(a.planCode) - rank(b.planCode) || a.planName.localeCompare(b.planName, "zh-CN");
+    }
     const vendorOrder = ["openai", "anthropic", "google", "xai"];
     return vendorOrder.indexOf(a.vendor) - vendorOrder.indexOf(b.vendor)
       || a.planName.localeCompare(b.planName, "zh-CN", { numeric: a.vendor === "openai" });
