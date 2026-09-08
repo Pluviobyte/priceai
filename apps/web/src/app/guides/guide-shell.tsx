@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import { SITE_NAME } from "../site-brand";
 
 type GuideIconName = "start" | "subscription" | "official" | "channel" | "api";
@@ -97,6 +98,6 @@ export function GuideShell({ children, toc = [], currentSlug = "getting-started"
       </div>
     </div>
 
-    <footer className="priceai-doc-footer"><div><strong><i aria-hidden="true" /> {SITE_NAME}</strong><p>把分散的 AI 订阅与 API 价格整理成可核验的购买清单。</p></div><nav aria-label="指南页脚导航"><Link href="/channels">卡网订阅</Link><Link href="/official-prices">官方订阅</Link><Link href="/official-api">官方 API</Link><Link href="/support">问题反馈</Link></nav></footer>
+    <footer className="priceai-doc-footer"><div><strong><i aria-hidden="true" /> {SITE_NAME}</strong><p>把分散的 AI 订阅与 API 价格整理成可核验的购买清单。</p></div><nav aria-label="指南页脚导航"><Link href="/channels">卡网订阅</Link><Link href="/official-prices">官方订阅</Link>{API_SECTIONS_ENABLED && <Link href="/official-api">官方 API</Link>}<Link href="/support">问题反馈</Link></nav></footer>
   </div>;
 }

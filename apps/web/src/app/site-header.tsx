@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { SPONSORS_ENABLED } from "@/lib/site-features";
+import { API_SECTIONS_ENABLED, SPONSORS_ENABLED } from "@/lib/site-features";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup, SITE_NAME } from "./site-brand";
@@ -34,7 +34,7 @@ const THEME_KEY = "priceai-theme";
  * 主导航按购买路径分组，而不是平铺频道：
  * 用户先认出“账号归谁、钱付给谁”这一层，再进入对应的比价工具页。
  */
-const PURCHASE_GROUPS: readonly NavGroup[] = [
+const PURCHASE_GROUPS: readonly NavGroup[] = ([
   {
     id: "subscription",
     kicker: "订阅",
@@ -53,7 +53,7 @@ const PURCHASE_GROUPS: readonly NavGroup[] = [
       { key: "transit", label: "中转 API", href: "/api-transit", note: "倍率、稳定性与延迟" },
     ],
   },
-];
+] satisfies readonly NavGroup[]).filter((group) => API_SECTIONS_ENABLED || group.id !== "api");
 
 const RESEARCH_LINKS: readonly NavLink[] = [
   { key: "changes", label: "异动", href: "/changes", note: "降价、补货与售罄" },

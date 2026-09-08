@@ -9,7 +9,10 @@ export function SiteFooter() {
         <Link className="priceai-footer-button" href="/#baseline">直接看全网底价　<span aria-hidden="true">↑</span></Link>
       </nav>
       <div className="priceai-footer-meta">
-        <span>PriceAI · 中立比价，不参与交易</span>
+        <div className="priceai-footer-signature">
+          <span className="priceai-footer-wordmark">Price<span>AI</span></span>
+          <p className="priceai-footer-disclaimer">中立比价，不参与交易</p>
+        </div>
         {SPONSORS_ENABLED && <Link href="/sponsors">赞助商与合作</Link>}
       </div>
     </footer>

@@ -4,6 +4,7 @@ import { SiteFooter } from "./site-footer";
 import { PriceBaselineHero, PriceBaselineTable } from "./blue-price-engine";
 import { ModelIcon, type ModelIconName } from "./model-icons";
 import { getHomeSnapshot } from "@/lib/home-snapshot";
+import { PURCHASE_PATHS_ENABLED } from "@/lib/site-features";
 
 export const dynamic = "force-dynamic";
 
@@ -149,7 +150,7 @@ export default async function HomePage() {
   return <div className="priceai-page"><main className="priceai-home">
     <PriceBaselineHero />
 
-    <section className="priceai-module-section" id="channels">
+    {PURCHASE_PATHS_ENABLED ? <section className="priceai-module-section" id="channels">
       <div className="priceai-container">
         <div className="priceai-section-heading">
           <p className="priceai-kicker">购买路径</p>
@@ -175,7 +176,7 @@ export default async function HomePage() {
         <div className="priceai-brand-title">目前已纳入对照的会员与模型厂商</div>
         <div className="priceai-brand-grid">{modelFamilies.map(({ icon, label }) => <div key={icon}><ModelIcon name={icon} label={label} /><span>{label}</span></div>)}</div>
       </div>
-    </section>
+    </section> : <div id="channels" />}
 
     <PriceBaselineTable snapshot={snapshot} />
 

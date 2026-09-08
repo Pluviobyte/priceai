@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import { GuideShell } from "./guide-shell";
 
 export const metadata: Metadata = { title: "PriceAI 快速入门：如何比价、判断渠道和选择购买路径 | PriceAI" };
@@ -32,7 +33,7 @@ export default function GuidesPage() {
     <div className="priceai-doc-paths">
       <Link href="/channels?stock=available"><span>01</span><div><strong>查第三方订阅渠道</strong><p>比较 ChatGPT、Claude、Gemini、Grok 等卡网渠道的价格、来源、库存和更新时间。</p></div><b aria-hidden="true">→</b></Link>
       <Link href="/official-prices"><span>02</span><div><strong>看官方订阅地区价</strong><p>了解官网价、地区价、支付方式、税费、汇率和账户地区，再判断是否适合自己。</p></div><b aria-hidden="true">→</b></Link>
-      <Link href="/official-api"><span>03</span><div><strong>比较官方 API</strong><p>对照供应商、模型、计价方式和额度，先确认 API 是否适合自己的调用场景。</p></div><b aria-hidden="true">→</b></Link>
+      {API_SECTIONS_ENABLED && <Link href="/official-api"><span>03</span><div><strong>比较官方 API</strong><p>对照供应商、模型、计价方式和额度，先确认 API 是否适合自己的调用场景。</p></div><b aria-hidden="true">→</b></Link>}
     </div>
 
     <h2 id="problems">解决什么问题</h2>

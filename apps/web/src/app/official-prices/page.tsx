@@ -1,6 +1,7 @@
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
 import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, selectCollectedSubscriptionMinimum, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
@@ -197,7 +198,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
           <select id="official-period" name="period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select>
           </div><button type="submit" className="official-filter-submit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>筛选</button></fieldset>
         </form>
-        <nav aria-label="官方价格相关页面"><Link className="active" href="/official-prices">套餐总览</Link><a href="#price-comparison">订阅价格对照表</a><Link href="/official-prices/regions">地区对照</Link><Link href="/official-api">官方 API</Link></nav>
+        <nav aria-label="官方价格相关页面"><Link className="active" href="/official-prices">套餐总览</Link><a href="#price-comparison">订阅价格对照表</a><Link href="/official-prices/regions">地区对照</Link>{API_SECTIONS_ENABLED && <Link href="/official-api">官方 API</Link>}</nav>
       </div>
       <div className="priceai-catalog-status"><span>{plans.length} 个匹配套餐</span>{(q || vendor || channel || period) && <Link href="/official-prices">清空全部条件</Link>}</div>
 

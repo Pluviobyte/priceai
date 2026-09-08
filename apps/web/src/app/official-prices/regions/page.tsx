@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import {
   OFFICIAL_SUBSCRIPTION_PLAN_CATALOG,
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
@@ -129,7 +130,7 @@ export default async function OfficialPriceRegionsPage({
     <nav className="priceai-category-rail" aria-label="官方价格页面">
       <Link href="/official-prices">套餐总览</Link>
       <Link className="active" href="/official-prices/regions">地区对照</Link>
-      <Link href="/official-api">官方 API</Link>
+      {API_SECTIONS_ENABLED && <Link href="/official-api">官方 API</Link>}
       <Link href="/guides/how-to-subscribe-ai-officially">购买指南</Link>
     </nav>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { API_SECTIONS_ENABLED, isApiSectionPath } from "@/lib/site-features";
 import {
   DEFAULT_ANNOUNCEMENT_CONFIG,
   type AnnouncementKind,
@@ -22,6 +23,8 @@ export function AnnouncementBanner() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
+  const announcements = config.announcements.filter((item) => API_SECTIONS_ENABLED || !isApiSectionPath(item.destinationUrl));
+
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/v1/announcements", { signal: controller.signal })
@@ -34,21 +37,21 @@ export function AnnouncementBanner() {
   }, []);
 
   useEffect(() => {
-    setCurrentIndex((index) => Math.min(index, Math.max(0, config.announcements.length - 1)));
-  }, [config.announcements.length]);
+    setCurrentIndex((index) => Math.min(index, Math.max(0, announcements.length - 1)));
+  }, [announcements.length]);
 
   useEffect(() => {
-    if (!config.rotationEnabled || paused || config.announcements.length < 2) return;
+    if (!config.rotationEnabled || paused || announcements.length < 2) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reducedMotion.matches) return;
     const interval = window.setInterval(() => {
-      setCurrentIndex((index) => (index + 1) % config.announcements.length);
+      setCurrentIndex((index) => (index + 1) % announcements.length);
     }, config.rotationIntervalMs);
     return () => window.clearInterval(interval);
-  }, [config.rotationEnabled, config.rotationIntervalMs, config.announcements.length, paused]);
+  }, [config.rotationEnabled, config.rotationIntervalMs, announcements.length, paused]);
 
-  if (!config.announcements.length) return null;
-  const announcement = config.announcements[currentIndex] ?? config.announcements[0];
+  if (!announcements.length) return null;
+  const announcement = announcements[currentIndex] ?? announcements[0];
   if (!announcement) return null;
 
   return (
@@ -72,9 +75,9 @@ export function AnnouncementBanner() {
         </div>
         <div className="site-announcement-controls">
           <a className="site-announcement-cta" href={announcement.destinationUrl}>{announcement.actionLabel}<span aria-hidden="true">→</span></a>
-          {config.announcements.length > 1 && (
+          {announcements.length > 1 && (
             <div className="site-announcement-pages" role="group" aria-label="切换站点公告">
-              {config.announcements.map((item, index) => (
+              {announcements.map((item, index) => (
                 <button
                   type="button"
                   className={index === currentIndex ? "active" : ""}
