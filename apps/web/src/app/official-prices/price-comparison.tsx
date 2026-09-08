@@ -51,7 +51,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...otherCodes.map(code => ({ code, name: regionDisplayName(code) })).sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))];
   const region = regions.some(item => item.code === requestedRegion) ? requestedRegion : "";
   const visibleRegions = regions.filter(item => !region || item.code === region);
-  const plans = catalog.filter(plan => (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));
+  const plans = catalog.filter(plan => plan.planCode !== "claude-pro-annual" && (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));
   const selectedChannels = Object.keys(channels).filter(value => !channel || channel === value);
   const checkIndex = new Map((checks ?? []).map(check => [keyOf(check), check]));
   const index = new Map<string, Price[]>();
