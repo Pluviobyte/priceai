@@ -95,7 +95,7 @@ function groupPlans(rows: OfficialSubscriptionPrice[]): PlanGroup[] {
   }).sort((a, b) => {
     const vendorOrder = ["openai", "anthropic", "google", "xai"];
     return vendorOrder.indexOf(a.vendor) - vendorOrder.indexOf(b.vendor)
-      || a.planName.localeCompare(b.planName, "zh-CN");
+      || a.planName.localeCompare(b.planName, "zh-CN", { numeric: a.vendor === "openai" });
   });
 }
 
