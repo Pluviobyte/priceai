@@ -21,7 +21,7 @@ export async function POST(
     return Response.json({ error: "invalid_source_action" }, { status: 400 });
   }
   const collectorKind = form.get("collectorKind");
-  const allowedCollectors = ["shop_api", "kami", "dujiao", "public_json", "generic_html", "custom_html", "browser", "merchant_feed"];
+  const allowedCollectors = ["shop_api", "shop_api_16688", "kami", "dujiao", "public_json", "generic_html", "custom_html", "browser", "merchant_feed"];
   if (action === "switch" && (typeof collectorKind !== "string" || !allowedCollectors.includes(collectorKind))) return Response.json({ error: "invalid_collector" }, { status: 400 });
   await updateAdminSource({ sourceId, action, reason, actorId: session.sub, ...(typeof collectorKind === "string" ? { collectorKind } : {}) });
   return NextResponse.redirect(new URL("/admin/sources", request.url), 303);

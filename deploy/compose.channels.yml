@@ -1,0 +1,25 @@
+# Dedicated Dokploy Compose service; attach to the existing Dokploy database network.
+services:
+  channel-worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile.worker
+      target: channels
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      WORKER_DATABASE_URL: ${WORKER_DATABASE_URL:?Set the database URL for this environment}
+      SOURCE_DISCOVERY_ENABLED: ${SOURCE_DISCOVERY_ENABLED:-true}
+      SOURCE_DIRECTORY_PROVIDERS: ${SOURCE_DIRECTORY_PROVIDERS:-}
+      SOURCE_DIRECTORY_IMPORT_INTERVAL_MS: ${SOURCE_DIRECTORY_IMPORT_INTERVAL_MS:-86400000}
+      CANDIDATE_VETTING_BATCH: ${CANDIDATE_VETTING_BATCH:-5}
+      CHANNEL_CRAWL_BATCH: ${CHANNEL_CRAWL_BATCH:-20}
+      CHANNEL_WORKER_TICK_MS: ${CHANNEL_WORKER_TICK_MS:-60000}
+      COLLECTOR_HOST_MIN_INTERVAL_MS: ${COLLECTOR_HOST_MIN_INTERVAL_MS:-700}
+      COLLECTOR_HOST_MAX_CONCURRENCY: ${COLLECTOR_HOST_MAX_CONCURRENCY:-2}
+      ALLOW_LOCAL_SYNTHETIC_DNS: "false"
+    networks:
+      - dokploy-network
+networks:
+  dokploy-network:
+    external: true

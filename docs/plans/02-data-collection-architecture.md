@@ -72,6 +72,10 @@ packages/ranking            排序和最低价口径
 
 候选只保存：`merchant_name`、`candidate_url`、`discovery_url`、`platform_hint`、`discovered_at` 和发现方式。不能直接成为正式报价。
 
+### 3.1 目录导入与自动检测（2026-09-08 实施）
+
+其他比价站的公开店铺目录和多租户平台的公开货源列表只提供"店铺在哪"。导入时先做无网络的身份归一（LDXP token、16688 shop_no、自建站域名，镜像域名合并），再写入 `source_candidates` 并记录被哪些目录收录；随后按批自动检测：URL 安全 → 平台探测 → 身份去重 → 试采 → AI 相关度 → 质量画像（缺货、无质保、联系方式、目录重合、价格离群）→ approve / review / reject。价格永远来自我们对店铺公开接口的采集，目录数据不进入报价层。实现说明见 `docs/implementation/source-vetting.md`。
+
 ## 4. 采集器接口
 
 ```ts

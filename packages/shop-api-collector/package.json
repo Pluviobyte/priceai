@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "@price-radar/collector-sdk": "*",
-    "@price-radar/schema": "*"
+    "@price-radar/schema": "*",
+    "@price-radar/source-signatures": "*"
   },
   "devDependencies": {
     "@types/node": "26.4.1",

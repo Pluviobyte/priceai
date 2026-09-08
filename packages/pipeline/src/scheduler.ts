@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
-import { sources, sourceSubmissions, type Database } from "@price-radar/database";
+import { and, asc, desc, eq, isNull, lte, or } from "drizzle-orm";
+import { sourceCandidates, sources, sourceSubmissions, type Database } from "@price-radar/database";
 
 export interface DueSource {
   id: string;
@@ -43,5 +43,24 @@ export async function findPendingSourceSubmissions(
       ),
     )
     .orderBy(asc(sourceSubmissions.updatedAt))
+    .limit(limit);
+}
+
+/** Candidates waiting for automatic vetting, most widely listed first. */
+export async function findVettableCandidates(
+  db: Database,
+  limit = 5,
+  now = new Date(),
+): Promise<Array<{ id: string; candidateUrl: string; priority: number }>> {
+  return db
+    .select({ id: sourceCandidates.id, candidateUrl: sourceCandidates.candidateUrl, priority: sourceCandidates.priority })
+    .from(sourceCandidates)
+    .where(
+      and(
+        eq(sourceCandidates.status, "pending"),
+        or(isNull(sourceCandidates.nextVetAt), lte(sourceCandidates.nextVetAt, now)),
+      ),
+    )
+    .orderBy(desc(sourceCandidates.priority), asc(sourceCandidates.discoveredAt))
     .limit(limit);
 }

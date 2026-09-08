@@ -1,31 +1,32 @@
 import { runSubscriptionSweep } from "./subscription-runner.js";
-import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
 import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
 import { sources } from "@price-radar/database/schema";
 import { eq } from "drizzle-orm";
-import { DujiaoCollector } from "@price-radar/dujiao-collector";
-import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
-import { KamiCollector } from "@price-radar/kami-collector";
-import { JsonFeedCollector } from "@price-radar/json-feed-collector";
 import {
   assertSafePublicUrl,
   checkAggregatorCoverage,
   crawlSource,
   deliverNotificationOutbox,
+  enumerate16688SourceMarketplace,
   evaluatePriceAlerts,
   generateLlmExtractionCandidates,
   discoverSourcesWithBrave,
   discoverSourcesWithGrok,
+  importSourceDirectories,
   onboardSource,
   precheckSourceSubmission,
   publishLatestSnapshots,
+  refreshSourceQualityProfiles,
+  repairShopApiEntryUrls,
   rollbackPublication,
   seedCanonicalProducts,
   storePublicGenerationSnapshot,
+  vetNextCandidates,
 } from "@price-radar/pipeline";
-import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
+import { runChannelCycle } from "./channel-cycle.js";
+import { createCollectorRegistry } from "./registry.js";
 import {
   refreshAllTransitProviders,
   refreshOfficialSubscriptionChannels,
@@ -44,14 +45,7 @@ async function main(): Promise<void> {
     accessKeyId: config.objectStorageAccessKey,
     secretAccessKey: config.objectStorageSecretKey,
   });
-  const registry = new InMemoryCollectorRegistry();
-  registry.register(new LdxpShopApiCollector());
-  registry.register(new KamiCollector());
-  registry.register(new DujiaoCollector());
-  registry.register(new GenericHtmlCollector());
-  registry.register(new GenericHtmlCollector({ kind: "custom_html" }));
-  registry.register(new JsonFeedCollector("public_json"));
-  registry.register(new JsonFeedCollector("merchant_feed"));
+  const registry = createCollectorRegistry();
   registry.register(
     new BrowserCollector({
       ...(config.browserExecutablePath
@@ -187,6 +181,44 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
+    if (command === "import-directories") {
+      // Reads public shop directories; results are candidates only, never prices.
+      const result = await importSourceDirectories(database.db);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "enumerate-16688") {
+      const result = await enumerate16688SourceMarketplace(database.db, { allCategories: argument === "all" });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "vet-candidates") {
+      const limit = argument ? Number(argument) : config.candidateVettingBatch;
+      const result = await vetNextCandidates(database.db, registry, { limit, ...(config.objectStorageConfigured ? { rawObjectStore } : {}) });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "refresh-quality-profiles") {
+      const result = await refreshSourceQualityProfiles(database.db, { limit: argument ? Number(argument) : 50, maxAgeMs: 0 });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "repair-entry-urls") {
+      const result = await repairShopApiEntryUrls(database.db, registry, { limit: argument ? Number(argument) : 50 });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "channel-cycle") {
+      // `channel-cycle force` re-reads the directories even when the last import is recent.
+      const result = await runChannelCycle(registry, config, {
+        forceDiscovery: argument === "force",
+        ...(config.objectStorageConfigured ? { rawObjectStore } : {}),
+        log: (event) => console.log(JSON.stringify(event)),
+      });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      if (result.status === "skipped") process.exitCode = 2;
+      return;
+    }
     if (command === "coverage-check") {
       if (!argument) throw new Error("usage: coverage-check <public-feed-url>");
       const result = await checkAggregatorCoverage(database.db, argument);
@@ -213,7 +245,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, publicSnapshot, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|discover-grok|discover-search|coverage-check|llm-extract-candidates|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|coverage-check|llm-extract-candidates|bootstrap> [argument]");
   } finally {
     await database.close();
     rawObjectStore.destroy();

@@ -73,3 +73,5 @@ export class InMemoryCollectorRegistry implements CollectorRegistry {
     return results.sort((left, right) => right.confidence - left.confidence);
   }
 }
+
+export { HostThrottle, hostThrottle, type HostThrottleOptions } from "./throttle.js";

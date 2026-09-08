@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -107,12 +108,33 @@ export const sourceCandidates = pgTable(
     submittedBy: text("submitted_by"),
     status: text("status").notNull().default("pending"),
     reviewNote: text("review_note"),
+    // Network-free identity guess used to collapse the same shop reached through
+    // several directories or mirror domains before any trial crawl runs.
+    platformKind: text("platform_kind"),
+    platformMerchantId: text("platform_merchant_id"),
+    // Number of independent discovery providers that listed this shop.
+    priority: integer("priority").notNull().default(0),
+    discoveryEvidence: jsonb("discovery_evidence")
+      .$type<Array<{ provider: string; url: string | null; seenAt: string; nameHint?: string }>>()
+      .notNull()
+      .default([]),
+    vettingResult: jsonb("vetting_result").$type<Record<string, unknown>>(),
+    vettedAt: timestamp("vetted_at", { withTimezone: true }),
+    nextVetAt: timestamp("next_vet_at", { withTimezone: true }),
+    sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
+    submissionId: uuid("submission_id").references(() => sourceSubmissions.id, { onDelete: "set null" }),
     discoveredAt: timestamp("discovered_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   },
-  (table) => [index("source_candidates_status_idx").on(table.status)],
+  (table) => [
+    index("source_candidates_status_idx").on(table.status),
+    index("source_candidates_vetting_queue_idx").on(table.status, table.priority, table.discoveredAt),
+    uniqueIndex("source_candidates_identity_uidx")
+      .on(table.platformKind, table.platformMerchantId)
+      .where(sql`platform_merchant_id is not null`),
+  ],
 );
 
 export const sources = pgTable(
@@ -1075,6 +1097,41 @@ export const semanticDuplicateCandidates = pgTable(
   (table) => [
     uniqueIndex("semantic_duplicate_pair_uidx").on(table.leftSnapshotId, table.rightSnapshotId),
     index("semantic_duplicate_status_idx").on(table.status, table.score),
+  ],
+);
+
+// Merchant-level vetting facts. They describe what a shop's public catalog looks
+// like (AI relevance, stock, warranty wording, overlap with other shops) and are
+// recomputed from complete crawl runs. They are facts for operators and merchant
+// pages, never fraud scores and never inputs to the minimum price.
+export const sourceQualityProfiles = pgTable(
+  "source_quality_profiles",
+  {
+    sourceId: uuid("source_id")
+      .primaryKey()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    crawlRunId: uuid("crawl_run_id").references(() => crawlRuns.id, { onDelete: "set null" }),
+    itemCount: integer("item_count").notNull().default(0),
+    aiRelevantCount: integer("ai_relevant_count").notNull().default(0),
+    aiRelevantShare: numeric("ai_relevant_share", { precision: 5, scale: 4 }).notNull().default("0"),
+    inStockCount: integer("in_stock_count").notNull().default(0),
+    outOfStockShare: numeric("out_of_stock_share", { precision: 5, scale: 4 }).notNull().default("0"),
+    noWarrantyShare: numeric("no_warranty_share", { precision: 5, scale: 4 }).notNull().default("0"),
+    riskFactCount: integer("risk_fact_count").notNull().default(0),
+    contactPresent: boolean("contact_present").notNull().default(false),
+    priceOutlierShare: numeric("price_outlier_share", { precision: 5, scale: 4 }),
+    priceComparableCount: integer("price_comparable_count").notNull().default(0),
+    catalogOverlapMax: numeric("catalog_overlap_max", { precision: 5, scale: 4 }),
+    catalogOverlapSourceId: uuid("catalog_overlap_source_id").references(() => sources.id, { onDelete: "set null" }),
+    merchantCreatedAt: timestamp("merchant_created_at", { withTimezone: true }),
+    verdict: text("verdict").notNull().default("review"),
+    reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
+    products: jsonb("products").$type<Record<string, number>>().notNull().default({}),
+    profileVersion: text("profile_version").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("source_quality_profiles_verdict_idx").on(table.verdict, table.computedAt),
   ],
 );
 

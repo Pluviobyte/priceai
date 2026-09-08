@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { llmExtractionCandidates, rawOfferSnapshots, semanticDuplicateCandidates, type Database } from "@price-radar/database";
 
-function tokens(value: string): Set<string> {
+export function tokens(value: string): Set<string> {
   const normalized = value.normalize("NFKC").toLowerCase().replace(/https?:\/\/\S+/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   const words = normalized.split(/\s+/).filter(Boolean);
   const result = new Set(words);
@@ -9,7 +9,7 @@ function tokens(value: string): Set<string> {
   return result;
 }
 
-function jaccard(left: Set<string>, right: Set<string>): number {
+export function jaccard(left: Set<string>, right: Set<string>): number {
   const intersection = [...left].filter((item) => right.has(item)).length;
   const union = new Set([...left, ...right]).size;
   return union ? intersection / union : 0;

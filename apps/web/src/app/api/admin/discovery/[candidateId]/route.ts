@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getAdminRequestSession, requestHasSameOrigin } from "@/lib/admin-auth";
 import { reviewSourceCandidate } from "@/lib/admin-data";
 
-const inputSchema = z.object({ candidateId: z.string().uuid(), action: z.enum(["precheck", "adapter", "reject"]), reason: z.string().trim().min(2).max(500) });
+const inputSchema = z.object({ candidateId: z.string().uuid(), action: z.enum(["precheck", "adapter", "reject", "requeue"]), reason: z.string().trim().min(2).max(500) });
 export async function POST(request: Request, { params }: { params: Promise<{ candidateId: string }> }) {
   if (!requestHasSameOrigin(request)) return Response.json({ error: "origin_mismatch" }, { status: 403 });
   const session = getAdminRequestSession(request);

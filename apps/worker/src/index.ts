@@ -1,13 +1,8 @@
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import pino from "pino";
-import { InMemoryCollectorRegistry } from "@price-radar/collector-sdk";
 import { createDatabase, errorEvents, operatorJobRequests, systemMetricSamples } from "@price-radar/database";
 import { eq, sql } from "drizzle-orm";
-import { DujiaoCollector } from "@price-radar/dujiao-collector";
-import { GenericHtmlCollector } from "@price-radar/generic-html-collector";
-import { KamiCollector } from "@price-radar/kami-collector";
-import { JsonFeedCollector } from "@price-radar/json-feed-collector";
 import {
   assertSafePublicUrl,
   checkAggregatorCoverage,
@@ -15,16 +10,21 @@ import {
   deliverNotificationOutbox,
   discoverSourcesWithBrave,
   discoverSourcesWithGrok,
+  enumerate16688SourceMarketplace,
   evaluatePriceAlerts,
   findDueSources,
   findPendingSourceSubmissions,
+  importSourceDirectories,
   precheckSourceSubmission,
   publishLatestSnapshots,
+  refreshSourceQualityProfiles,
+  repairShopApiEntryUrls,
   seedCanonicalProducts,
   storePublicGenerationSnapshot,
+  vetNextCandidates,
 } from "@price-radar/pipeline";
-import { LdxpShopApiCollector } from "@price-radar/shop-api-collector";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
+import { createCollectorRegistry } from "./registry.js";
 import {
   refreshAllTransitProviders,
   refreshOfficialSubscriptionChannels,
@@ -45,14 +45,7 @@ const rawObjectStore = new S3JsonObjectStore({
   accessKeyId: config.objectStorageAccessKey,
   secretAccessKey: config.objectStorageSecretKey,
 });
-const registry = new InMemoryCollectorRegistry();
-registry.register(new LdxpShopApiCollector());
-registry.register(new KamiCollector());
-registry.register(new DujiaoCollector());
-registry.register(new GenericHtmlCollector());
-registry.register(new GenericHtmlCollector({ kind: "custom_html" }));
-registry.register(new JsonFeedCollector("public_json"));
-registry.register(new JsonFeedCollector("merchant_feed"));
+const registry = createCollectorRegistry();
 
 interface SourceJobData {
   sourceId?: unknown;
@@ -214,10 +207,32 @@ async function refreshPriceChannels(): Promise<void> {
 }
 
 async function runSourceDiscovery(): Promise<void> {
+  if (!config.sourceDiscoveryEnabled) return;
   const query = process.env.SOURCE_DISCOVERY_QUERY ?? "AI subscription card shop ChatGPT Plus Claude Pro 发卡";
+  // Directories and the 16688 marketplace are candidates only; vetting decides what becomes a source.
+  const directories = await importSourceDirectories(database.db, { minIntervalMs: config.sourceDirectoryImportIntervalMs });
+  logger.info({ directories }, "source directories imported");
+  await enumerate16688SourceMarketplace(database.db, { minIntervalMs: config.sourceDirectoryImportIntervalMs }).catch((error: unknown) => logger.error({ error }, "16688 marketplace enumeration failed"));
   if (process.env.XAI_API_KEY) await discoverSourcesWithGrok(database.db, { apiKey: process.env.XAI_API_KEY, query });
   if (process.env.BRAVE_SEARCH_API_KEY) await discoverSourcesWithBrave(database.db, { apiKey: process.env.BRAVE_SEARCH_API_KEY, query });
   for (const feed of (process.env.AGGREGATOR_FEED_URLS ?? "").split(",").map((item) => item.trim()).filter(Boolean)) await checkAggregatorCoverage(database.db, feed);
+}
+
+let maintenanceRunning = false;
+async function runChannelMaintenance(): Promise<void> {
+  if (!config.sourceDiscoveryEnabled || maintenanceRunning) return;
+  maintenanceRunning = true;
+  try {
+    const repair = await repairShopApiEntryUrls(database.db, registry, { limit: 10 });
+    const vetting = await vetNextCandidates(database.db, registry, { limit: config.candidateVettingBatch, ...(config.objectStorageConfigured ? { rawObjectStore } : {}) });
+    const profiles = await refreshSourceQualityProfiles(database.db, { limit: 10, maxAgeMs: config.qualityProfileMaxAgeMs });
+    if (repair.repaired > 0 || vetting.attempted > 0 || profiles.refreshed > 0) {
+      const { results, ...counts } = vetting;
+      logger.info({ repair, vetting: counts, decisions: results.map((item) => ({ id: item.candidateId, status: item.status, reasons: item.reasons })), profiles }, "channel maintenance completed");
+    }
+  } finally {
+    maintenanceRunning = false;
+  }
 }
 
 const schedulerTimer = setInterval(() => {
@@ -241,6 +256,10 @@ const discoveryTimer = setInterval(() => {
   void runSourceDiscovery().catch((error: unknown) => logger.error({ error }, "source discovery failed"));
 }, 24 * 60 * 60 * 1_000);
 discoveryTimer.unref();
+const maintenanceTimer = setInterval(() => {
+  void runChannelMaintenance().catch((error: unknown) => logger.error({ error }, "channel maintenance failed"));
+}, 5 * 60 * 1_000);
+maintenanceTimer.unref();
 void enqueueDueSources().catch((error: unknown) => {
   logger.error({ error }, "initial source scheduling failed");
 });
@@ -254,8 +273,10 @@ void enqueueOperatorRequests().catch((error: unknown) => logger.error({ error },
 void refreshPriceChannels().catch((error: unknown) => {
   logger.error({ error }, "initial price channel refresh failed");
 });
-if (process.env.XAI_API_KEY || process.env.BRAVE_SEARCH_API_KEY || process.env.AGGREGATOR_FEED_URLS) {
-  void runSourceDiscovery().catch((error: unknown) => logger.error({ error }, "initial source discovery failed"));
+if (config.sourceDiscoveryEnabled) {
+  void runSourceDiscovery()
+    .then(() => runChannelMaintenance())
+    .catch((error: unknown) => logger.error({ error }, "initial source discovery failed"));
 }
 
 worker.on("completed", (job) => {
@@ -281,6 +302,7 @@ async function shutdown(signal: string): Promise<void> {
   clearInterval(schedulerTimer);
   clearInterval(priceRefreshTimer);
   clearInterval(discoveryTimer);
+  clearInterval(maintenanceTimer);
   await worker.close();
   await browserQueue.close();
   await queue.close();

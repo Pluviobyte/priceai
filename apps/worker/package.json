@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "start:official": "tsx src/official-subscriptions.ts",
-    "test": "node --import tsx --test src/subscription-runner.test.ts"
+    "test": "node --import tsx --test src/*.test.ts",
+    "start:channels": "tsx src/channel-worker.ts"
   },
   "dependencies": {
     "@price-radar/classifier": "*",
@@ -31,7 +32,9 @@
     "ioredis": "6.0.0",
     "pino": "10.3.1",
     "pg": "8.23.0",
-    "@price-radar/browser-collector": "*"
+    "@price-radar/browser-collector": "*",
+    "@price-radar/shop-api-16688-collector": "*",
+    "@price-radar/source-signatures": "*"
   },
   "devDependencies": {
     "@types/node": "26.4.1",

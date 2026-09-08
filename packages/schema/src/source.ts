@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const collectorKindSchema = z.enum([
   "shop_api",
+  "shop_api_16688",
   "kami",
   "dujiao",
   "public_json",
@@ -30,6 +31,10 @@ export const sourceIdentitySchema = z.object({
   canonicalEntryUrl: z.url(),
   merchantName: z.string().min(1).optional(),
   shopToken: z.string().min(1).optional(),
+  // Public shop facts exposed by the platform itself. They feed merchant vetting,
+  // never price comparison.
+  merchantCreatedAt: z.iso.datetime().optional(),
+  contact: z.record(z.string(), z.string()).optional(),
 });
 
 export type SourceIdentity = z.infer<typeof sourceIdentitySchema>;
@@ -43,6 +48,8 @@ export const sourceCandidateSchema = z.object({
     "search",
     "community",
     "aggregator",
+    "directory",
+    "platform",
   ]),
   discoveredAt: z.iso.datetime(),
   merchantNameHint: z.string().min(1).optional(),

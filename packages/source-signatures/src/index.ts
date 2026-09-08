@@ -30,6 +30,11 @@ const signatures: Signature[] = [
     htmlPatterns: [/shopApi\/Shop\//i, /goods_key/i, /shop_token/i],
   },
   {
+    collectorKind: "shop_api_16688",
+    paths: ["/shopApi/shop/detail", "/shopApi/goods/list"],
+    htmlPatterns: [/16688\.oss-accelerate\.aliyuncs\.com/i, /shopApi\/goods\/list/i],
+  },
+  {
     collectorKind: "kami",
     paths: ["/user/api/index/commodity"],
     htmlPatterns: [/user\/api\/index\/commodity/i, /异次元|kami/i],
@@ -71,3 +76,5 @@ export function matchSourceSignatures(
     .sort((left, right) => right.confidence - left.confidence);
 }
 
+
+export * from "./platforms.js";

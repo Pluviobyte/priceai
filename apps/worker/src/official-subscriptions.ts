@@ -8,7 +8,7 @@ const config = readWorkerConfig();
 let stopping = false;
 const idle = new AbortController();
 for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => { stopping = true; idle.abort(); });
-const heartbeat = () => writeFile("/tmp/official-worker-heartbeat", String(Date.now()));
+const heartbeat = () => Promise.all([writeFile("/tmp/official-worker-heartbeat", String(Date.now())), writeFile("/tmp/worker-heartbeat", String(Date.now()))]).catch(() => undefined);
 const timer = setInterval(() => { void heartbeat(); }, 30_000);
 await heartbeat();
 try {

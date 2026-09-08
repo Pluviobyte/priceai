@@ -39,6 +39,14 @@ export interface AdminSourceRow {
   lastRunStatus: string | null;
   lastRunFetched: number | null;
   lastRunError: string | null;
+  qualityProfile: {
+    verdict: string;
+    aiRelevantCount: number;
+    itemCount: number;
+    noWarrantyShare: number;
+    catalogOverlapMax: number | null;
+    computedAt: Date | null;
+  } | null;
 }
 
 export interface AdminRunDetail {
@@ -139,6 +147,12 @@ interface SourceRow {
   last_run_status: string | null;
   last_run_fetched: number | null;
   last_run_error: string | null;
+  profile_verdict: string | null;
+  profile_ai_relevant: number | null;
+  profile_item_count: number | null;
+  profile_no_warranty_share: string | null;
+  profile_overlap_max: string | null;
+  profile_computed_at: Date | null;
 }
 
 interface RunRow {
@@ -482,9 +496,16 @@ export async function getAdminSources(): Promise<AdminSourceRow[]> {
             lr.id as last_run_id,
             lr.status as last_run_status,
             lr.fetched_total as last_run_fetched,
-            lr.error_message as last_run_error
+            lr.error_message as last_run_error,
+            qp.verdict as profile_verdict,
+            qp.ai_relevant_count as profile_ai_relevant,
+            qp.item_count as profile_item_count,
+            qp.no_warranty_share::text as profile_no_warranty_share,
+            qp.catalog_overlap_max::text as profile_overlap_max,
+            qp.computed_at as profile_computed_at
        from sources s
        left join merchants m on m.id = s.merchant_id
+       left join source_quality_profiles qp on qp.source_id = s.id
        left join lateral (
          select cr.id, cr.status, cr.fetched_total, cr.error_message
            from crawl_runs cr
@@ -510,6 +531,16 @@ export async function getAdminSources(): Promise<AdminSourceRow[]> {
     lastRunStatus: row.last_run_status,
     lastRunFetched: row.last_run_fetched,
     lastRunError: row.last_run_error,
+    qualityProfile: row.profile_verdict
+      ? {
+          verdict: row.profile_verdict,
+          aiRelevantCount: row.profile_ai_relevant ?? 0,
+          itemCount: row.profile_item_count ?? 0,
+          noWarrantyShare: Number(row.profile_no_warranty_share ?? 0),
+          catalogOverlapMax: row.profile_overlap_max === null ? null : Number(row.profile_overlap_max),
+          computedAt: row.profile_computed_at,
+        }
+      : null,
   }));
 }
 
@@ -1022,17 +1053,82 @@ export async function saveAdminSponsorship(input: { id?: string; name: string; p
   finally { client.release(); }
 }
 
-export interface AdminDiscoveryCandidate { id: string; candidateUrl: string; merchantNameHint: string | null; discoveryKind: string; discoveryUrl: string | null; status: string; reviewNote: string | null; discoveredAt: Date; }
-
-export async function getAdminDiscoveryCandidates(): Promise<AdminDiscoveryCandidate[]> {
-  const rows = await query<{ id: string; candidate_url: string; merchant_name_hint: string | null; discovery_kind: string; discovery_url: string | null; status: string; review_note: string | null; discovered_at: Date }>(
-    `select id,candidate_url,merchant_name_hint,discovery_kind,discovery_url,status,review_note,discovered_at
-       from source_candidates where status in ('pending','adapter_needed') order by discovered_at desc limit 300`,
-  );
-  return rows.map((row) => ({ id: row.id, candidateUrl: row.candidate_url, merchantNameHint: row.merchant_name_hint, discoveryKind: row.discovery_kind, discoveryUrl: row.discovery_url, status: row.status, reviewNote: row.review_note, discoveredAt: row.discovered_at }));
+export interface AdminDiscoveryCandidate {
+  id: string;
+  candidateUrl: string;
+  merchantNameHint: string | null;
+  discoveryKind: string;
+  discoveryUrl: string | null;
+  status: string;
+  reviewNote: string | null;
+  discoveredAt: Date;
+  platformKind: string | null;
+  platformMerchantId: string | null;
+  priority: number;
+  providers: string[];
+  verdict: string | null;
+  reasons: string[];
+  vettedAt: Date | null;
+  nextVetAt: Date | null;
+  sourceId: string | null;
+  submissionId: string | null;
+  trialRunId: string | null;
+  profile: { itemCount: number; aiRelevantCount: number; inStockCount: number; noWarrantyShare: number; catalogOverlapMax: number | null } | null;
 }
 
-export async function reviewSourceCandidate(input: { candidateId: string; action: "precheck" | "adapter" | "reject"; reason: string; actorId: string }): Promise<void> {
+export interface AdminDiscoverySummary { status: string; count: number }
+
+export async function getAdminDiscoverySummary(): Promise<AdminDiscoverySummary[]> {
+  const rows = await query<{ status: string; count: string }>("select status,count(*)::text as count from source_candidates group by status order by count(*) desc");
+  return rows.map((row) => ({ status: row.status, count: Number(row.count) }));
+}
+
+export async function getAdminDiscoveryCandidates(): Promise<AdminDiscoveryCandidate[]> {
+  const rows = await query<{ id: string; candidate_url: string; merchant_name_hint: string | null; discovery_kind: string; discovery_url: string | null; status: string; review_note: string | null; discovered_at: Date; platform_kind: string | null; platform_merchant_id: string | null; priority: number; discovery_evidence: Array<{ provider?: string }> | null; vetting_result: Record<string, unknown> | null; vetted_at: Date | null; next_vet_at: Date | null; source_id: string | null; submission_id: string | null }>(
+    `select id,candidate_url,merchant_name_hint,discovery_kind,discovery_url,status,review_note,discovered_at,
+            platform_kind,platform_merchant_id,priority,discovery_evidence,vetting_result,vetted_at,next_vet_at,source_id,submission_id
+       from source_candidates
+      where status in ('review','vetting','pending','adapter_needed')
+      order by case status when 'review' then 0 when 'vetting' then 1 when 'pending' then 2 else 3 end, priority desc, discovered_at desc
+      limit 300`,
+  );
+  return rows.map((row) => {
+    const vetting = row.vetting_result ?? {};
+    const profile = vetting.profile as Record<string, unknown> | undefined;
+    return {
+      id: row.id,
+      candidateUrl: row.candidate_url,
+      merchantNameHint: row.merchant_name_hint,
+      discoveryKind: row.discovery_kind,
+      discoveryUrl: row.discovery_url,
+      status: row.status,
+      reviewNote: row.review_note,
+      discoveredAt: row.discovered_at,
+      platformKind: row.platform_kind,
+      platformMerchantId: row.platform_merchant_id,
+      priority: row.priority,
+      providers: [...new Set((row.discovery_evidence ?? []).map((item) => item.provider).filter((item): item is string => typeof item === "string"))],
+      verdict: typeof vetting.verdict === "string" ? vetting.verdict : typeof vetting.deferredReason === "string" ? `deferred:${vetting.deferredReason}` : null,
+      reasons: Array.isArray(vetting.reasons) ? vetting.reasons.filter((item): item is string => typeof item === "string") : [],
+      vettedAt: row.vetted_at,
+      nextVetAt: row.next_vet_at,
+      sourceId: row.source_id,
+      submissionId: row.submission_id,
+      trialRunId: typeof vetting.trialRunId === "string" ? vetting.trialRunId : null,
+      profile: profile
+        ? {
+            itemCount: Number(profile.itemCount ?? 0),
+            aiRelevantCount: Number(profile.aiRelevantCount ?? 0),
+            inStockCount: Number(profile.inStockCount ?? 0),
+            noWarrantyShare: Number(profile.noWarrantyShare ?? 0),
+            catalogOverlapMax: typeof profile.catalogOverlapMax === "number" ? profile.catalogOverlapMax : null,
+          }
+        : null,
+    };
+  });
+}
+
+export async function reviewSourceCandidate(input: { candidateId: string; action: "precheck" | "adapter" | "reject" | "requeue"; reason: string; actorId: string }): Promise<void> {
   const client = await databasePool.connect();
   try {
     await client.query("begin");
@@ -1040,7 +1136,7 @@ export async function reviewSourceCandidate(input: { candidateId: string; action
     const candidate = result.rows[0];
     if (!candidate) throw new Error("candidate_not_found");
     let submissionId: string | null = null;
-    const nextStatus = input.action === "precheck" ? "submitted_for_precheck" : input.action === "adapter" ? "adapter_needed" : "rejected";
+    const nextStatus = input.action === "precheck" ? "submitted_for_precheck" : input.action === "adapter" ? "adapter_needed" : input.action === "requeue" ? "pending" : "rejected";
     if (input.action === "precheck") {
       const inserted = await client.query<{ id: string }>(
         `insert into source_submissions(url,name,notes,status)
@@ -1049,7 +1145,7 @@ export async function reviewSourceCandidate(input: { candidateId: string; action
       );
       submissionId = inserted.rows[0]?.id ?? null;
     }
-    await client.query("update source_candidates set status=$2,review_note=$3,reviewed_at=now() where id=$1", [input.candidateId, nextStatus, input.reason]);
+    await client.query("update source_candidates set status=$2,review_note=$3,reviewed_at=now(),next_vet_at=case when $2='pending' then null else next_vet_at end where id=$1", [input.candidateId, nextStatus, input.reason]);
     await client.query(
       `insert into audit_logs(actor_id,action,target_type,target_id,reason,before_value,after_value)
        values($1,$2,'source_candidate',$3,$4,$5::jsonb,$6::jsonb)`,

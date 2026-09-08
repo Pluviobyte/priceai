@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CollectorAdapter, CollectorContext } from "@price-radar/collector-sdk";
+import { hostThrottle, type CollectorAdapter, type CollectorContext } from "@price-radar/collector-sdk";
 import {
   rawOfferInputSchema,
   type CatalogPage,
@@ -91,11 +91,15 @@ export class KamiCollector implements CollectorAdapter {
   }
 
   async #get(url: URL, signal: AbortSignal): Promise<Response> {
-    const response = await fetch(url, {
+    const response = await hostThrottle.run(url.hostname, () => fetch(url, {
       redirect: "error",
       headers: { accept: "application/json,text/html", "user-agent": "AIPriceRadar/0.1" },
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
-    });
+    }), signal);
+    if (response.status === 429 || response.status === 503) {
+      const retryAfter = Number(response.headers.get("retry-after") ?? 0);
+      hostThrottle.cooldown(url.hostname, retryAfter > 0 ? retryAfter * 1_000 : 30_000);
+    }
     if (!response.ok) throw new Error(`kami_http_${response.status}`);
     return response;
   }

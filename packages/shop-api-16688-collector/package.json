@@ -1,29 +1,22 @@
 {
-  "name": "@price-radar/pipeline",
+  "name": "@price-radar/shop-api-16688-collector",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
+  "exports": { ".": "./src/index.ts" },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
-    "@price-radar/classifier": "*",
-    "@price-radar/anomaly-detector": "*",
     "@price-radar/collector-sdk": "*",
-    "@price-radar/database": "*",
-    "@price-radar/ranking": "*",
     "@price-radar/schema": "*",
-    "drizzle-orm": "0.45.2",
     "@price-radar/source-signatures": "*"
   },
   "devDependencies": {
     "@types/node": "26.4.1",
-    "typescript": "5.9.3",
-    "tsx": "4.23.13"
+    "tsx": "4.23.13",
+    "typescript": "5.9.3"
   }
 }

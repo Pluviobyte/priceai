@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import type {
-  CollectorAdapter,
-  CollectorContext,
+import {
+  hostThrottle,
+  type CollectorAdapter,
+  type CollectorContext,
+  type HostThrottle,
 } from "@price-radar/collector-sdk";
 import {
   rawOfferInputSchema,
@@ -11,6 +13,7 @@ import {
   type SnapshotValidation,
   type SourceIdentity,
 } from "@price-radar/schema";
+import { failoverOrigins, familyForHost, shopApiPlatformKind } from "@price-radar/source-signatures";
 
 const GOODS_TYPES = ["card", "article", "resource", "equity"] as const;
 
@@ -29,6 +32,8 @@ interface ShopInfo {
   token: string;
   nickname?: string;
   link?: string;
+  createdAt?: string;
+  contact: Record<string, string>;
 }
 
 interface GoodsListData {
@@ -51,6 +56,17 @@ export interface ShopApiCollectorOptions {
   pageSize?: number;
   requestTimeoutMs?: number;
   userAgent?: string;
+  throttle?: HostThrottle;
+}
+
+/** Errors that justify retrying the same request on another family origin. */
+function failoverable(error: unknown): boolean {
+  const message = error instanceof Error ? `${error.name}:${error.message}${error.cause instanceof Error ? `:${error.cause.message}` : ""}` : String(error);
+  return /redirect|fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET|EAI_AGAIN|UND_ERR|certificate|shop_api_http_(?:30\d|403|404|5\d\d)|shop_api_not_json/i.test(message);
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -102,10 +118,20 @@ function asShopInfo(value: unknown): ShopInfo {
   if (!isRecord(value) || typeof value.token !== "string") {
     throw new Error("invalid_shop_info_payload");
   }
+  const contact: Record<string, string> = {};
+  for (const [field, key] of [["contact_qq", "qq"], ["contact_wechat", "wechat"], ["contact_telegram", "telegram"], ["contact_email", "email"]] as const) {
+    const text = optionalText(value[field]);
+    if (text) contact[key] = text;
+  }
+  const createdAt = typeof value.create_time === "number" && value.create_time > 0
+    ? new Date(value.create_time * 1_000).toISOString()
+    : undefined;
   return {
     token: value.token,
     ...(typeof value.nickname === "string" ? { nickname: value.nickname } : {}),
     ...(typeof value.link === "string" ? { link: value.link } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    contact,
   };
 }
 
@@ -161,38 +187,74 @@ export class LdxpShopApiCollector implements CollectorAdapter {
   readonly #pageSize: number;
   readonly #requestTimeoutMs: number;
   readonly #userAgent: string;
+  readonly #throttle: HostThrottle;
+  /** Origin that last answered for each platform family, so a rotated domain is learned once. */
+  readonly #preferredOrigin = new Map<string, string>();
 
   constructor(options: ShopApiCollectorOptions = {}) {
     this.#pageSize = options.pageSize ?? 100;
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.#userAgent =
       options.userAgent ?? "AIPriceRadar/0.1 (+https://localhost.invalid/source-policy)";
+    this.#throttle = options.throttle ?? hostThrottle;
   }
 
-  async #post(origin: string, path: string, body: unknown, signal: AbortSignal): Promise<unknown> {
-    const timeoutSignal = AbortSignal.timeout(this.#requestTimeoutMs);
-    const response = await fetch(new URL(path, origin), {
-      method: "POST",
-      redirect: "error",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "user-agent": this.#userAgent,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.any([signal, timeoutSignal]),
-    });
+  async #postOnce(origin: string, path: string, body: unknown, signal: AbortSignal): Promise<unknown> {
+    const url = new URL(path, origin);
+    return this.#throttle.run(url.hostname, async () => {
+      const timeoutSignal = AbortSignal.timeout(this.#requestTimeoutMs);
+      const response = await fetch(url, {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "user-agent": this.#userAgent,
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.any([signal, timeoutSignal]),
+      });
+      if (response.status === 429 || response.status === 503) {
+        const retryAfter = Number(response.headers.get("retry-after") ?? 0);
+        this.#throttle.cooldown(url.hostname, retryAfter > 0 ? retryAfter * 1_000 : 30_000);
+      }
+      if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
+      if (!(response.headers.get("content-type") ?? "").includes("json")) throw new Error("shop_api_not_json");
+      const envelope = (await response.json()) as ApiEnvelope;
+      if (envelope.code !== 1) {
+        throw new Error(`shop_api_rejected:${envelope.msg ?? "unknown"}`);
+      }
+      return envelope.data;
+    }, signal);
+  }
 
-    if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
-    const envelope = (await response.json()) as ApiEnvelope;
-    if (envelope.code !== 1) {
-      throw new Error(`shop_api_rejected:${envelope.msg ?? "unknown"}`);
+  /**
+   * Posts to the requested origin and, when that origin redirects or is down,
+   * retries the same request on the other domains of the same platform family.
+   */
+  async #post(origin: string, path: string, body: unknown, signal: AbortSignal): Promise<unknown> {
+    const family = familyForHost(new URL(origin).hostname);
+    const preferred = family ? this.#preferredOrigin.get(family.key) : undefined;
+    const origins = [...new Set([preferred ?? origin, origin, ...failoverOrigins(origin)])];
+    let lastError: unknown;
+    for (const [index, candidate] of origins.entries()) {
+      try {
+        const data = await this.#postOnce(candidate, path, body, signal);
+        if (family && candidate !== preferred) this.#preferredOrigin.set(family.key, candidate);
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (signal.aborted || index === origins.length - 1 || !failoverable(error)) throw error;
+      }
     }
-    return envelope.data;
+    throw lastError;
   }
 
   async probe(sourceUrl: URL, signal: AbortSignal): Promise<ProbeResult> {
     const evidence: string[] = [];
+    if (familyForHost(sourceUrl.hostname)?.platformKind === "shop_api_16688") {
+      return { supported: false, collectorKind: "shop_api", confidence: 0, evidence, reason: "host_owned_by_16688_collector" };
+    }
     if (!/^\/(?:shop|item)\//.test(sourceUrl.pathname)) {
       return {
         supported: false,
@@ -247,14 +309,31 @@ export class LdxpShopApiCollector implements CollectorAdapter {
       await this.#post(sourceUrl.origin, "/shopApi/Shop/info", { token }, signal),
     );
 
+    // The platform reports the shop's current public link. Trust it only when it
+    // stays inside the same family (or the same host), then prefer it as the
+    // canonical origin so rotated domains repair themselves on the next crawl.
+    const family = familyForHost(sourceUrl.hostname);
+    let canonicalOrigin = family?.primaryOrigin ?? sourceUrl.origin;
+    if (info.link) {
+      try {
+        const linkUrl = new URL(info.link);
+        const sameFamily = family ? familyForHost(linkUrl.hostname)?.key === family.key : linkUrl.hostname === sourceUrl.hostname;
+        if ((linkUrl.protocol === "https:" || linkUrl.protocol === "http:") && sameFamily) canonicalOrigin = linkUrl.origin;
+      } catch {
+        // Ignore malformed links; the family primary origin stays canonical.
+      }
+    }
+
     return {
-      platformKind: "ldxp_shop_api",
+      platformKind: shopApiPlatformKind(new URL(canonicalOrigin).hostname),
       platformMerchantId: info.token,
       shopToken: info.token,
-      canonicalEntryUrl: new URL(`/shop/${info.token}`, sourceUrl.origin).toString(),
+      canonicalEntryUrl: new URL(`/shop/${info.token}`, canonicalOrigin).toString(),
       ...(info.nickname || merchantName
         ? { merchantName: info.nickname ?? merchantName }
         : {}),
+      ...(info.createdAt ? { merchantCreatedAt: info.createdAt } : {}),
+      ...(Object.keys(info.contact).length > 0 ? { contact: info.contact } : {}),
     };
   }
 
