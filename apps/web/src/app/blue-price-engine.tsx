@@ -32,7 +32,7 @@ function Band({ row }: { row: BaselineRow }) {
   const width = Math.max(2, Math.min(100 - left, ((row.band.maxCny - row.band.minCny) / max) * 100));
   return <div className="blue-engine-range">
     <div className="blue-engine-range-track"><span className="blue-engine-range-fill" style={{ left: `${left}%`, width: `${width}%` }} /><i className="min" style={{ left: `${left}%` }} /><i className="max" /></div>
-    <small><span>{cny(row.band.minCny)}</span><span>{cny(row.official.cny)} 官方</span></small>
+    <small><span>{cny(row.band.minCny)}</span><span>{cny(row.official.cny)} 官方正价</span></small>
   </div>;
 }
 
@@ -45,10 +45,15 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
       <div><strong>{row.name}</strong><small>{row.spec}</small></div>
     </div>
 
-    <div className="blue-engine-official">
+    <div className="blue-engine-official" data-label="官方正价（折人民币）">
       {row.official
         ? <><strong>{cny(row.official.cny)}</strong><small><a href={row.official.evidenceUrl} target="_blank" rel="noopener noreferrer">{row.official.note} ↗</a></small></>
-        : <span className="blue-engine-nodata">官方价待确认</span>}
+        : <span className="blue-engine-nodata">官方正价待确认</span>}
+    </div>
+    <div className="blue-engine-official blue-engine-official-floor" data-label="官方底价（折人民币）">
+      {row.officialFloor
+        ? <><strong>{cny(row.officialFloor.cny)}</strong><small><a href={row.officialFloor.evidenceUrl} target="_blank" rel="noopener noreferrer">{row.officialFloor.note} ↗</a></small></>
+        : <span className="blue-engine-nodata">官方底价待确认</span>}
     </div>
 
     <div className="blue-engine-lowest">
@@ -80,7 +85,7 @@ export function PriceBaselineHero() {
       <div className="blue-engine-hero-inner">
         <span className="blue-engine-eyebrow"><i /> 权威中立比价雷达 · 不销售 · 不代收款 · 不替渠道背书</span>
         <h1 id="hero-title"><span>AI 订阅充值与 API 中转</span><span>实时行情与比价雷达</span></h1>
-        <p>汇集全网卡网现货与官网公开报价。一眼看清官方正价与各渠道底价差多少、当前是否能买到；先理清自充、代充、成品号与 API 的真实区别，买前心里有底，不花冤枉钱。</p>
+        <p>汇集全网卡网现货与官网公开报价。一眼看清官方正价与全网底价差多少、当前是否能买到；先理清自充、代充、成品号与 API 的真实区别，买前心里有底，不花冤枉钱。</p>
         {/* 两个出口都是页内跳转：主按钮查看底价，次按钮了解订阅渠道 */}
         <div className="blue-engine-hero-actions">
           <a className="blue-engine-cta primary" href="#baseline">查看全网底价 <span aria-hidden="true">↓</span></a>
@@ -108,7 +113,7 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
 
       <div className="blue-engine-heading" id="baseline">
         <p className="blue-engine-kicker">实时比价雷达</p>
-        <h2 id="baseline-title">官方原价 vs 渠道底价：一览全网真实行情</h2>
+        <h2 id="baseline-title">官方原价 vs 全网底价：一览全网真实行情</h2>
         <p>不用再去各家卡网反复翻找比价。这里直接对照官方汇率正价与渠道最新现货底价，并清楚标注交付方式、来源商家与库存更新时间。</p>
       </div>
       <div className="blue-engine-toolbar">
@@ -119,11 +124,11 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
         </form>
       </div>
 
-      <p className="blue-engine-legend">{placeholder ? "数据暂时读取失败，请稍后重试。" : "最低价口径：24 小时内验证过、标记有货、且与官方价同规格的报价。价格带和有效报价数按最低价对应的交付方式统计；渠道权益和税费可能不同。"}</p>
+      <p className="blue-engine-legend">{placeholder ? "数据暂时读取失败，请稍后重试。" : "官方正价为美国官网月付价；官方底价为已收录地区与官方渠道中，同套餐月付的有效最低价，购买资格与税费以原站为准。渠道最低价口径：24 小时内验证过、标记有货、且与官方价同规格的报价。价格带和有效报价数按最低价对应的交付方式统计；渠道权益和税费可能不同。"}</p>
 
       {snapshot.warnings?.map(warning => <p key={warning} role="status" className="blue-engine-nodata">{warning}</p>)}
       <div className="blue-engine-table">
-        <div className="blue-engine-table-head"><span>标准商品</span><span>官方价（折人民币）</span><span>渠道最低价与交付方式</span><span>价格分布</span><span>有效报价</span><span /></div>
+        <div className="blue-engine-table-head"><span>标准商品</span><span>官方正价（折人民币）</span><span>官方底价（折人民币）</span><span>渠道最低价</span><span>价格分布</span><span>有效报价</span><span /></div>
         {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
       </div>
 

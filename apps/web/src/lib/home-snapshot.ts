@@ -44,6 +44,8 @@ export interface BaselineRow {
   spec: string;
   /** 官方价，折人民币。区间价不进入这里，只认精确价。 */
   official: { cny: number; note: string; evidenceUrl: string } | null;
+  /** 已收录同套餐、同周期的官方地区/渠道最低价。 */
+  officialFloor?: { cny: number; note: string; evidenceUrl: string } | null;
   /** 当前可买最低价：24 小时内验证过、有货、与官方价同规格。 */
   lowest: {
     cny: number;
@@ -99,14 +101,29 @@ export interface HomeOffer {
 
 export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: HomeOffer[]): BaselineRow[] {
   return PLACEHOLDER.baseline.map(base => {
-    const reference = prices.filter(p => p.planCode === PLAN_CODES[base.slug] && p.channel === "web" && p.countryCode === "US" && p.priceKind === "exact" && isFreshOfficialSubscriptionPrice(p) && hasCurrentCnyEstimate(p))
+    const officialPrices = prices.filter(p => p.planCode === PLAN_CODES[base.slug] && p.billingPeriod === "month"
+      && ["web", "app_store", "google_play"].includes(p.channel) && p.priceKind === "exact"
+      && p.amount !== null && Number.isFinite(Number(p.amount)) && Number(p.amount) > 0
+      && isFreshOfficialSubscriptionPrice(p) && hasCurrentCnyEstimate(p));
+    const reference = officialPrices.filter(p => p.channel === "web" && p.countryCode === "US")
       .sort((a,b) => b.verifiedAt.getTime() - a.verifiedAt.getTime())[0];
+    const floor = [...officialPrices].sort((a,b) => Number(a.cnyEstimate) - Number(b.cnyEstimate)
+      || b.verifiedAt.getTime() - a.verifiedAt.getTime() || a.id.localeCompare(b.id))[0];
+    const officialQuote = (price: OfficialSubscriptionPrice | undefined) => {
+      if (!price) return null;
+      let region = price.countryCode;
+      try { region = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of(region) ?? region; } catch { /* Preserve unknown region codes. */ }
+      const channel = ({ web: "官网", app_store: "App Store", google_play: "Google Play" } as Record<string, string>)[price.channel];
+      return { cny: Number(price.cnyEstimate), evidenceUrl: price.evidenceUrl,
+        note: `${region} ${channel} ${price.currency} ${Number(price.amount)}/月 · ${price.verifiedAt.toLocaleDateString("zh-CN", {timeZone:"Asia/Shanghai"})}核验` };
+    };
     const eligible = offers.filter(o => o.slug === base.slug && o.currency === "CNY" && Number(o.price) > 0 && Number.isFinite(Number(o.price)))
       .sort((a,b) => Number(a.price)-Number(b.price) || b.verified_at.getTime()-a.verified_at.getTime() || a.id.localeCompare(b.id));
     const lowest = eligible[0];
     const sameMode = lowest ? eligible.filter(o => o.mode === lowest.mode) : [];
     return { ...base,
-      official: reference ? { cny: Number(reference.cnyEstimate), evidenceUrl: reference.evidenceUrl, note: `美国官网 ${reference.currency} ${Number(reference.amount)}/月 · ${reference.verifiedAt.toLocaleDateString("zh-CN", {timeZone:"Asia/Shanghai"})}核验` } : null,
+      official: officialQuote(reference),
+      officialFloor: officialQuote(floor),
       lowest: lowest ? { cny: Number(lowest.price), mode: lowest.mode, merchantName: lowest.merchant_name, warrantyNote: ["none","unknown"].includes(lowest.warranty_type) ? "质保未确认" : "商家标注质保，购买前复核" } : null,
       band: sameMode.length ? { minCny: Number(lowest!.price), maxCny: Math.max(...sameMode.map(o=>Number(o.price))) } : null,
       offerCount: sameMode.length, inStockMerchantCount: new Set(sameMode.map(o=>o.merchant_id)).size,
