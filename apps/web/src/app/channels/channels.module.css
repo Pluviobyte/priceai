@@ -25,6 +25,27 @@
 .tabs a[aria-current="page"] { border-color: var(--accent-deep); color: var(--accent-deep); }
 .textLink { color: var(--accent-deep); font-size: 13px; font-weight: 600; }
 .textLink:hover { text-decoration: underline; text-underline-offset: 4px; }
+.groupToggle { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -10px 0 22px; }
+.groupToggle > span { color: var(--color-text-muted); font-size: 12px; }
+.groupToggle a { padding: 5px 12px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-text-muted); font-size: 13px; font-weight: 600; }
+.groupToggle a:hover { border-color: var(--accent-deep); color: var(--accent-deep); }
+.groupToggle a[aria-current="true"] { border-color: var(--accent-deep); background: var(--color-surface); color: var(--accent-deep); }
+.groupToggle small { color: var(--color-text-muted); font-size: 12px; }
+.activeFilters { display: grid; gap: 10px; margin-bottom: 18px; }
+.specLock { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0; padding: 12px 14px; border: 1px solid var(--accent-deep); border-radius: 10px; background: var(--color-surface); font-size: 13px; }
+.specLockLabel { color: var(--accent-deep); font-size: 12px; font-weight: 600; }
+.specLockBody { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--color-text-body); }
+.specLockBody b { color: var(--color-text-primary); font-weight: 600; }
+.specLockBody span { color: var(--color-text-muted); font-size: 12px; }
+.specLockHint { color: var(--color-text-muted); font-size: 12px; }
+.chipClear { margin-left: auto; color: var(--accent-deep); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.chipClear:hover { text-decoration: underline; text-underline-offset: 4px; }
+.chips { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-panel); color: var(--color-text-body); font-size: 12px; }
+.chip:hover { border-color: var(--accent-deep); color: var(--accent-deep); }
+.chip > span { color: var(--color-text-muted); font-size: 11px; }
+.chip:hover > span { color: var(--accent-deep); }
+.delivery .deliverySelected .deliveryState { color: var(--accent-deep); font-weight: 600; }
 .filters { margin-bottom: 22px; }
 .searchRow { display: flex; gap: 12px; }
 .search { flex: 1; display: flex; align-items: center; gap: 12px; padding: 0 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-panel); }
@@ -95,6 +116,9 @@
   .workspaceHeading { align-items: flex-start; flex-wrap: wrap; padding-bottom: 14px; gap: 10px; }
   .tabs { width: 100%; gap: 24px; }
   .tabs a { font-size: 14px; padding-bottom: 10px; }
+  .groupToggle { margin: -4px 0 18px; gap: 8px; }
+  .specLock { padding: 10px 12px; }
+  .chipClear { margin-left: 0; }
   .searchRow { gap: 8px; }
   .search { padding: 0 10px; gap: 8px; }
   .search input { font-size: 13px; }

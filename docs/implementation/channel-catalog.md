@@ -1,6 +1,14 @@
 # 卡网订阅目录
 
-`/channels` 提供按规格比价、全部报价、卡网商家三个视图。`/subscriptions` 复用同一页面。搜索、筛选、排序、每页 24 条的分页均由服务端执行，条件保存在 URL。
+`/channels` 有两个标签:**比价** 与 **商家**。比价表另有一个显示开关——`合并同规格`(一行 = 一个可比规格的最低价)与 `展开每条报价`(一行 = 一条店铺原始报价);二者是同一批数据的两个缩放级别,不是并列的第三个实体。`/subscriptions` 复用同一页面。搜索、筛选、排序、每页 24 条的分页均由服务端执行,条件保存在 URL。
+
+URL 参数为 `view=compare|merchants` 与 `group=merged|expanded`(均为默认值时不出现在 URL)。拆分前的 `view=products|offers|merchants` 链接继续有效,由 `parseChannelFilters` 映射到新模型;`catalogView()` 把两个维度合成查询用的 `products|offers|merchants`。
+
+## 当前生效的限定始终可见
+
+页面把每一项限定渲染成可移除的筛选条:搜索词、模型、交付、期限、质保、币种、仅有货各一枚,点击即清除该项并保留其余。规格锁定单独成行,展开显示商品名与构成规格的六个部分(交付、期限、地区、账号归属、质保、币种),并按当前标签改写说明("只看这一规格的报价"/"只看有这一规格报价的商家")。规格由 `getChannelCatalog` 单独解析后随 `spec` 字段返回,因此在商家标签下(行内不含规格字段)以及其他筛选把结果清空时仍然可读。
+
+从合并视图进入某一规格的按钮会保留用户已有的搜索、库存与排序条件,只覆盖显示方式与规格键。
 
 ## 数据来源
 
@@ -18,6 +26,7 @@
 - 库存未知、缺货、过期报价可在全部状态中查阅，但不计入有货最低价。
 - 不同币种不直接比较数字。价格排序先按币种分段，再按各自金额排序。
 - 规格跳转用分组键保持完整条件，避免将同一产品的其他地区或质保混入。
+- 商家行显示店铺入口域名，同名但不同来源的商家不会看起来像重复行。
 
 报价复用现有 `/products/[slug]`、`/merchants/[slug]`、`/out/[offerId]` 和举报入口。举报提交后的目录显示接收提示。
 
@@ -29,7 +38,7 @@
 node --import tsx --test apps/web/tests/channel-catalog.test.ts
 ```
 
-默认运行筛选参数测试。设置 `CHANNEL_TEST_DATABASE_URL` 后启用 PostgreSQL 集成测试；测试通过独立连接创建会话临时表，不修改应用数据，连接关闭即清理。
+默认运行筛选参数、标签/显示开关拆分与筛选条测试。设置 `CHANNEL_TEST_DATABASE_URL` 后启用 PostgreSQL 集成测试；测试通过独立连接创建会话临时表，不修改应用数据，连接关闭即清理。
 
 ```sh
 CHANNEL_TEST_DATABASE_URL=postgresql://USER@127.0.0.1:PORT/TEST_DB node --import tsx --test apps/web/tests/channel-catalog.test.ts
