@@ -170,7 +170,9 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
     });
   } finally {
     await handle.close();
-    await admin.query(`drop database "${name}" with (force)`);
+    // The pool has drained. FORCE can terminate sockets still completing their
+    // graceful close and surface an asynchronous pg error after all tests pass.
+    await admin.query(`drop database "${name}"`);
     await admin.end();
   }
 });
