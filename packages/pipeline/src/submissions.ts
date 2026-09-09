@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
+import type { ProbeResult } from "@price-radar/schema";
 import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   crawlRuns,
@@ -61,12 +62,24 @@ async function saveRejectedPrecheck(
   };
 }
 
+/** Only reuse an in-memory result from the current vetting attempt, for exactly
+ * its verified canonical URL and a registered adapter. Manual submissions still
+ * probe normally; both URL security checks in precheck remain mandatory.
+ */
+export async function resolveSubmissionProbes(registry: CollectorRegistry, sourceUrl: URL, signal: AbortSignal, verifiedProbe?: ProbeResult): Promise<ProbeResult[]> {
+  signal.throwIfAborted();
+  if (verifiedProbe?.supported && verifiedProbe.identity && registry.get(verifiedProbe.collectorKind)
+    && verifiedProbe.identity.canonicalEntryUrl === sourceUrl.toString()) return [verifiedProbe];
+  return registry.probe(sourceUrl, signal);
+}
+
 export async function precheckSourceSubmission(
   db: Database,
   registry: CollectorRegistry,
   submissionId: string,
   signal: AbortSignal = new AbortController().signal,
   rawObjectStore?: RawObjectStore,
+  verifiedProbe?: ProbeResult,
 ): Promise<PrecheckSubmissionResult> {
   const [submission] = await db
     .select()
@@ -88,7 +101,7 @@ export async function precheckSourceSubmission(
     .set({ status: "prechecked", precheckResult: { safe: true }, updatedAt: new Date() })
     .where(eq(sourceSubmissions.id, submissionId));
 
-  const probeResults = await registry.probe(sourceUrl, signal);
+  const probeResults = await resolveSubmissionProbes(registry, sourceUrl, signal, verifiedProbe);
   const selected = probeResults.find((result) => result.supported && result.identity);
   if (!selected?.identity) {
     await db

@@ -516,7 +516,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     }).returning({ id: sourceSubmissions.id });
     if (!submission) throw new Error("submission_insert_failed");
     await db.update(sourceCandidates).set({ submissionId: submission.id }).where(eq(sourceCandidates.id, candidate.id));
-    const precheck = await precheckSourceSubmission(db, registry, submission.id, signal, options.rawObjectStore);
+    const precheck = await precheckSourceSubmission(db, registry, submission.id, signal, options.rawObjectStore, selected);
     if (!precheck.supported || !precheck.sourceId) {
       const [stored] = await db.select({ result: sourceSubmissions.precheckResult }).from(sourceSubmissions).where(eq(sourceSubmissions.id, submission.id));
       const precheckProbes = (stored?.result as { probes?: Array<{ reason?: string }> } | null)?.probes ?? [];

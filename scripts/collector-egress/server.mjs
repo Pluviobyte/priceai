@@ -16,6 +16,11 @@ export function validateRequest(input) {
   if (url.pathname.endsWith('goodsList') && (!['card','article','resource','equity'].includes(body.goods_type) || !Number.isInteger(body.current) || body.current < 1 || body.current > 1000 || !Number.isInteger(body.pageSize) || body.pageSize < 1 || body.pageSize > 100)) throw new Error('pagination_invalid');
   return { url, body: input.body };
 }
+export function relayIntervalMs(env = process.env) {
+  const value = Number(env.COLLECTOR_CN_INTERVAL_MS ?? 5000);
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('invalid_relay_interval');
+  return value;
+}
 export function createEgressServer({ token, intervalMs = 5000, fetchImpl = fetch }) {
   if (!token || token.length < 32) throw new Error('relay_token_required');
   let busy = false, nextAt = 0;
@@ -45,7 +50,9 @@ export function createEgressServer({ token, intervalMs = 5000, fetchImpl = fetch
   });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const server = createEgressServer({token:process.env.COLLECTOR_CN_TOKEN});
+  const intervalMs = relayIntervalMs();
+  const server = createEgressServer({token:process.env.COLLECTOR_CN_TOKEN, intervalMs});
+  console.log(JSON.stringify({event:'egress_started',intervalMs}));
   server.requestTimeout=20_000; server.headersTimeout=10_000;
   server.listen(Number(process.env.PORT ?? 17890),'127.0.0.1');
   for(const signal of ['SIGTERM','SIGINT']) process.on(signal,()=>server.close(()=>process.exit(0)));

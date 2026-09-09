@@ -24,6 +24,11 @@ function integerEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
+/** Only the domestic LDXP platform receives its own pacing override. */
+export function platformRequestIntervalMs(hostname: string, defaultIntervalMs: number): number {
+  return platformKey(hostname) === 'ldxp_shop_api'
+    ? integerEnv('LDXP_PLATFORM_INTERVAL_MS', defaultIntervalMs) : defaultIntervalMs;
+}
 export function platformPolicyConfig() {
   return {
     intervalMs: integerEnv('SHOP_API_PLATFORM_INTERVAL_MS', 5000),
@@ -48,6 +53,7 @@ export class PostgresRequestPolicy implements RequestPolicy {
   constructor(private readonly db: Database, private readonly config = platformPolicyConfig()) {}
   async run<T>(hostname: string, work: () => Promise<T>, signal: AbortSignal): Promise<T> {
     const key = platformKey(hostname);
+    const intervalMs = platformRequestIntervalMs(hostname, this.config.intervalMs);
     const token = randomUUID();
     while (true) {
       signal.throwIfAborted();
@@ -69,7 +75,7 @@ export class PostgresRequestPolicy implements RequestPolicy {
           +(row.next_request_at ? new Date(row.next_request_at) : 0) - now);
         if (wait > 0) return { wait, recovery: false };
         await tx.execute(sql`update collector_platform_state set lease_token=${token}::uuid,
-          lease_until=now()+interval '60 seconds', next_request_at=now()+${this.config.intervalMs}*interval '1 millisecond',
+          lease_until=now()+interval '60 seconds', next_request_at=now()+${intervalMs}*interval '1 millisecond',
           request_count=case when budget_day=(now() at time zone 'UTC')::date then request_count+1 else 1 end,
           budget_day=(now() at time zone 'UTC')::date, updated_at=now() where key=${key}`);
         return { wait: 0, recovery: row.blocked_until !== null };
