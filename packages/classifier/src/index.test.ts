@@ -28,3 +28,8 @@ test('resource categories do not replace a recognized subscription',()=>{
   assert.equal(classify('谷歌邮箱 美区').canonicalProductSlug,'resource-gmail');
   assert.equal(classify('SuperGrok Heavy 成品').canonicalProductSlug,'supergrok-heavy');
 });
+
+test('bundled mail and registration age are not standalone mailbox specifications',()=>{
+  assert.equal(classify('G-Free普号 codex未接phone 微软邮箱').canonicalProductSlug,'chatgpt-account');
+  assert.equal(classify('Gmail邮箱 注册满3个月 链接可用7天').attributes.durationDays,undefined);
+});

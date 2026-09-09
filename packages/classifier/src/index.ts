@@ -93,7 +93,7 @@ const productRules: ProductRule[] = [
 
 // Broad account/service categories never impersonate an exact paid plan.
 const additionalRules: ProductRule[] = [
-  { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i] },
+  { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i] },
   { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
   { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i] },
   { slug: 'supergrok-heavy', include: [/(?:super\s*)?grok.*heavy/i] },
@@ -153,7 +153,12 @@ function matchProduct(text: string): {
       !rule.exclude?.some((pattern) => pattern.test(text)),
   );
 
-  if (!matches.length) matches = additionalRules.filter(rule => rule.include.some(pattern => pattern.test(text)));
+  if (!matches.length) matches = additionalRules.filter(rule => {
+    // Mail bundled with an AI account is not a separate mailbox offer.
+    if (['resource-gmail','resource-outlook','resource-icloud','resource-education-email'].includes(rule.slug)
+      && /chat\s*gpt|codex|claude|gemini|grok/i.test(text)) return false;
+    return rule.include.some(pattern => pattern.test(text));
+  });
   if (matches.length === 0) {
     return { slug: null, matchedRules: [], conflicts: [] };
   }
@@ -290,6 +295,10 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];
   const attributes = extractAttributes(text, mode.mode);
+  if (product.slug && ['resource-gmail','resource-outlook','resource-icloud','resource-education-email','resource-apple-account'].includes(product.slug)) {
+    // Mailbox registration age and download-link validity are not subscription periods.
+    delete attributes.durationDays;
+  }
 
   // Product confidence is independent of delivery metadata. Mixed product
   // identities remain quarantined; unknown/mixed modes cannot win default ranking.
