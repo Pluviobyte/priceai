@@ -1,6 +1,9 @@
 /** Set to true when confirmed sponsors are ready, then rebuild/redeploy. */
 export const SPONSORS_ENABLED: boolean = false;
 
+/** Temporarily hide the official API sponsor slot without removing its markup. */
+export const OFFICIAL_API_SPONSOR_ENABLED: boolean = false;
+
 /** Temporarily hide the home purchase-path section without removing its content. */
 export const PURCHASE_PATHS_ENABLED: boolean = false;
 
