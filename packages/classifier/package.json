@@ -8,13 +8,15 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
     "@price-radar/schema": "*"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "tsx": "4.23.13",
+    "@types/node": "26.4.1"
   }
 }
-

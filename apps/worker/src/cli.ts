@@ -7,6 +7,8 @@ import {
   assertSafePublicUrl,
   checkAggregatorCoverage,
   crawlSource,
+  measureCatalogGrowth,
+  recoverGrowthCandidates,
   deliverNotificationOutbox,
   enumerate16688SourceMarketplace,
   evaluatePriceAlerts,
@@ -45,7 +47,7 @@ async function main(): Promise<void> {
     accessKeyId: config.objectStorageAccessKey,
     secretAccessKey: config.objectStorageSecretKey,
   });
-  const registry = createCollectorRegistry();
+  const registry = createCollectorRegistry(database.db);
   registry.register(
     new BrowserCollector({
       ...(config.browserExecutablePath
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
   );
 
   try {
+    if (command === 'growth-report') { console.log(JSON.stringify(await measureCatalogGrowth(database.db),null,2)); return; }
+    if (command === 'recover-growth') { console.log(JSON.stringify(await recoverGrowthCandidates(database.db, Number(argument) || 30))); return; }
     if (command === "refresh-channels") {
       await seedCanonicalProducts(database.db);
       const enabled = await database.db.select({id:sources.id}).from(sources).where(eq(sources.enabled,true));

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { hostThrottle, type CollectorAdapter, type CollectorContext, type HostThrottle } from "@price-radar/collector-sdk";
+import { hostThrottle, WafChallengeError, wafChallengeSignature, type CollectorAdapter, type CollectorContext, type HostThrottle } from "@price-radar/collector-sdk";
 import {
   rawOfferInputSchema,
   type CatalogPage,
@@ -173,7 +173,15 @@ export class Sixteen688ShopCollector implements CollectorAdapter {
       }
       if (!response.ok) throw new Error(`shop_api_16688_http_${response.status}`);
       const contentType = response.headers.get("content-type") ?? "";
-      if (!contentType.includes("json")) throw new Error("shop_api_16688_not_json");
+      if (!contentType.includes("json")) {
+        const text = (await response.text().catch(() => "")).slice(0, 32_768);
+        const signature = wafChallengeSignature(response.headers, text);
+        if (signature) {
+          this.#throttle.cooldown(url.hostname, 60_000);
+          throw new WafChallengeError(url.hostname, signature);
+        }
+        throw new Error("shop_api_16688_not_json");
+      }
       const envelope = (await response.json()) as ApiEnvelope;
       if (envelope.code !== 1) throw new Error(`shop_api_16688_rejected:${envelope.msg ?? "unknown"}`);
       return envelope.data;

@@ -15,3 +15,6 @@ export * from "./source-health.js";
 export * from "./submissions.js";
 export * from "./url-security.js";
 export * from "./vetting.js";
+export * from './platform-policy.js';
+
+export { measureCatalogGrowth, recoverGrowthCandidates } from './growth.js';

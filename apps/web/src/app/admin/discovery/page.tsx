@@ -13,6 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: "已拒绝",
   duplicate: "重复店铺",
   adapter_needed: "待适配器",
+  blocked_egress: "出口被拦",
   submitted_for_precheck: "已转预检",
 };
 

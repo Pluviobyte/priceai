@@ -75,3 +75,14 @@ export class InMemoryCollectorRegistry implements CollectorRegistry {
 }
 
 export { HostThrottle, hostThrottle, type HostThrottleOptions } from "./throttle.js";
+
+export {
+  WafChallengeError,
+  isWafChallengeError,
+  mentionsWafChallenge,
+  wafChallengeSignature,
+  throwIfWafChallenge,
+} from "./waf.js";
+export { PlatformDeferredError, platformRetryAt, type RequestPolicy } from './request-policy.js';
+
+export { createEgressFetch } from './egress.js';

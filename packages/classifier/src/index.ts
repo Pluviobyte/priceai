@@ -5,7 +5,7 @@ import type {
   RawOfferInput,
 } from "@price-radar/schema";
 
-const VERSION = "rules-2026-09-03.2";
+const VERSION = "rules-2026-09-09.1";
 
 interface ProductRule {
   slug: string;
@@ -30,8 +30,8 @@ const productRules: ProductRule[] = [
   {
     slug: "chatgpt-pro",
     include: [
-      /\bchat\s*gpt\b.*\bpro\b/i,
-      /\bgpt\s*(?:5\s*x|20\s*x)?\s*pro\b/i,
+      /\bchat\s*gpt\b.*\bpro(?:\b|(?=20x|5x))/i,
+      /\bgpt[-\s]*(?:5\s*x|20\s*x)?[-\s]*pro(?:\b|(?=20x|5x))/i,
     ],
     exclude: [/教程|免费|free/i],
   },
@@ -39,7 +39,8 @@ const productRules: ProductRule[] = [
     slug: "chatgpt-plus",
     include: [
       /\bchat\s*gpt\b.*\bplus\b/i,
-      /\bgpt\s*plus\b/i,
+      /\bgpt(?:[-\s]+|\s*)plus\b/i,
+      /\bgpt\s*(?:[一二三四五六七八九十0-9]+个月|月卡|年卡)\s*plus\b/i,
       /\bg[-\s]*plus\b/i,
       /\bplus\b.*\b(?:codex|成品|账号|充值|代充)\b/i,
     ],
@@ -47,11 +48,11 @@ const productRules: ProductRule[] = [
   },
   {
     slug: "claude-max-20x",
-    include: [/\bclaude\b.*\bmax\b.*\b20\s*x\b/i],
+    include: [/\bclaude\b.*(?:\bmax\s*)?\b20\s*x\b/i],
   },
   {
     slug: "claude-max-5x",
-    include: [/\bclaude\b.*\bmax\b.*\b5\s*x\b/i],
+    include: [/\bclaude\b.*(?:\bmax\s*)?\b5\s*x\b/i],
   },
   {
     slug: "claude-pro",
@@ -74,6 +75,7 @@ const productRules: ProductRule[] = [
   {
     slug: "supergrok",
     include: [/\bsuper\s*grok\b/i, /\bgrok\b.*\bsuper\b/i],
+    exclude: [/heavy/i],
   },
   {
     slug: "cursor-pro",
@@ -87,6 +89,27 @@ const productRules: ProductRule[] = [
     slug: "x-premium",
     include: [/(?:x[-\s]*twitter|twitter|推特).*\bpremium\b/i],
   },
+];
+
+// Broad account/service categories never impersonate an exact paid plan.
+const additionalRules: ProductRule[] = [
+  { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i] },
+  { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
+  { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i] },
+  { slug: 'supergrok-heavy', include: [/(?:super\s*)?grok.*heavy/i] },
+  { slug: 'cursor-account', include: [/cursor.*(?:账号|成品|账户)/i] },
+  { slug: 'kiro-pro', include: [/kiro.*(?:pro|额度)/i] },
+  { slug: 'kiro-account', include: [/kiro.*(?:普号|free|账号)/i] },
+  { slug: 'suno-account', include: [/suno.*(?:账号|会员|pro|成品)/i] },
+  { slug: 'dreamina-account', include: [/(?:即梦|dreamina).*(?:账号|会员|成品|积分)/i] },
+  { slug: 'resource-gmail', include: [/(?:gmail|谷歌邮箱|google\s*邮箱)/i] },
+  { slug: 'resource-outlook', include: [/(?:outlook|hotmail|微软邮箱)/i] },
+  { slug: 'resource-icloud', include: [/icloud.*(?:邮箱|邮件)/i] },
+  { slug: 'resource-education-email', include: [/(?:教育邮箱|edu\s*邮箱)/i] },
+  { slug: 'resource-apple-account', include: [/apple\s*id|苹果账号/i] },
+  { slug: 'resource-openai-verification', include: [/(?:openai|chat\s*gpt|codex|gpt).*(?:接码|验证码)/i] },
+  { slug: 'resource-google-verification', include: [/(?:google|gemini|谷歌).*(?:接码|验证码)/i] },
+  { slug: 'resource-telegram-premium', include: [/(?:telegram|电报|tg).*(?:premium|会员)/i] },
 ];
 
 const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
@@ -124,12 +147,13 @@ function matchProduct(text: string): {
   matchedRules: string[];
   conflicts: string[];
 } {
-  const matches = productRules.filter(
+  let matches = productRules.filter(
     (rule) =>
       rule.include.some((pattern) => pattern.test(text)) &&
       !rule.exclude?.some((pattern) => pattern.test(text)),
   );
 
+  if (!matches.length) matches = additionalRules.filter(rule => rule.include.some(pattern => pattern.test(text)));
   if (matches.length === 0) {
     return { slug: null, matchedRules: [], conflicts: [] };
   }
@@ -168,6 +192,10 @@ function matchOfferMode(text: string): {
 }
 
 function extractDurationDays(text: string): number | undefined {
+  text = text.replace(/质保\s*\d+\s*(?:小时|天|个月|月|年)/g, " ");
+  if (/年卡|年订阅|年付|一年|一整年/.test(text)) return 365;
+  if (/季卡|季付|三个月/.test(text)) return 90;
+  if (/月卡|月订阅|月付|一个月|一月/.test(text)) return 30;
   const monthMatch = text.match(/(\d{1,2})\s*(?:个)?月/);
   if (monthMatch?.[1]) {
     return Number(monthMatch[1]) * 30;
@@ -239,6 +267,8 @@ function extractAttributes(text: string, mode: OfferMode): OfferAttributes {
     riskFacts,
   };
 
+  const regions = [...new Set([...text.matchAll(/(美|美国|菲|菲律宾|印|印度|日|日本|港|香港|土|土耳其|台|台湾)区/g)].map(m => ({美:"US",美国:"US",菲:"PH",菲律宾:"PH",印:"IN",印度:"IN",日:"JP",日本:"JP",港:"HK",香港:"HK",土:"TR",土耳其:"TR",台:"TW",台湾:"TW"}[m[1]!])) )];
+  if (regions.length === 1 && regions[0]) attributes.region = regions[0];
   if (durationDays !== undefined) attributes.durationDays = durationDays;
   if (warrantyHours !== undefined) attributes.warrantyHours = warrantyHours;
   if (/未接码|未绑.*手机/i.test(text)) attributes.phoneBound = false;
@@ -261,12 +291,10 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];
   const attributes = extractAttributes(text, mode.mode);
 
-  let confidence = 0.2;
-  if (product.slug) confidence += 0.5;
-  if (mode.mode !== "unknown") confidence += 0.15;
-  if (conflictingSignals.length > 0) confidence -= 0.2;
-  if (attributes.riskFacts.length > 0) confidence += 0.05;
-  confidence = Math.max(0, Math.min(1, confidence));
+  // Product confidence is independent of delivery metadata. Mixed product
+  // identities remain quarantined; unknown/mixed modes cannot win default ranking.
+  const confidence = !product.slug ? 0.2 : product.conflicts.length ? 0.6 : 0.9;
+  if (mode.conflicts.length) attributes.offerMode = "unknown";
 
   return {
     canonicalProductSlug: product.slug,
@@ -275,6 +303,6 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
     matchedRules,
     conflictingSignals,
     classifierVersion: VERSION,
-    requiresReview: !product.slug || confidence < 0.75 || conflictingSignals.length > 0,
+    requiresReview: !product.slug || confidence < 0.75 || mode.conflicts.length > 0,
   };
 }

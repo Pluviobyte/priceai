@@ -28,3 +28,17 @@ export function nextFailedRun(
     nextRunAt: new Date(now.getTime() + minutes * 60_000),
   };
 }
+
+/**
+ * A WAF challenge means this egress cannot reach the host right now, not that the
+ * source is failing. Park it on a long, non-escalating retry so it stays dormant
+ * and self-heals if the egress starts getting JSON again; the failure counter is
+ * left untouched so the source never slides into `failing`.
+ */
+export function nextWafBlockedRun(now: Date, currentFailures: number, retryMs = 12 * 60 * 60_000): SourceHealthDecision {
+  return {
+    healthStatus: "blocked_egress",
+    consecutiveFailures: currentFailures,
+    nextRunAt: new Date(now.getTime() + retryMs),
+  };
+}

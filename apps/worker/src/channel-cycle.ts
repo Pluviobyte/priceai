@@ -5,6 +5,8 @@ import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import {
   crawlSource,
+  measureCatalogGrowth,
+  recoverGrowthCandidates,
   enumerate16688SourceMarketplace,
   evaluatePriceAlerts,
   findDueSources,
@@ -74,6 +76,10 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
   if (result.repair.repaired > 0) log({ event: "entry_urls_repaired", ...result.repair });
 
   if (config.sourceDiscoveryEnabled && !options.skipVetting) {
+    if (process.env.COLLECTOR_GROWTH_RECOVERY === 'true') {
+      const recovery = await recoverGrowthCandidates(db, 30);
+      if (recovery.requeued) log({event:'growth_candidates_requeued',...recovery});
+    }
     const batch = await vetNextCandidates(db, registry, { limit: config.candidateVettingBatch, signal, ...(options.rawObjectStore ? { rawObjectStore: options.rawObjectStore } : {}) });
     const { results, ...counts } = batch;
     result.vetting = counts;
@@ -114,6 +120,10 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
   }
 
   result.profiles = await refreshSourceQualityProfiles(db, { limit: published ? 20 : 10, maxAgeMs: config.qualityProfileMaxAgeMs });
+  const growth = await measureCatalogGrowth(db);
+  log({event:'catalog_growth',...growth});
+  await db.execute((await import('drizzle-orm')).sql`insert into system_metric_samples(service,metric,value,unit,labels)
+    values('channel-worker','catalog_valid_offers',${String(growth?.valid_offers ?? 0)},'offers',${JSON.stringify(growth)}::jsonb)`);
   return result;
 }
 
@@ -128,6 +138,8 @@ export async function runChannelCycle(registry: CollectorRegistry, config: Worke
     if (!locked) return { status: "skipped", reason: "already_running", durationMs: Date.now() - startedAt };
     const ready = (await client.query("select exists(select 1 from information_schema.columns where table_name='source_candidates' and column_name='vetting_result') as ready")).rows[0].ready as boolean;
     if (!ready) return { status: "skipped", reason: "migration_0018_pending", durationMs: Date.now() - startedAt };
+    const policyReady = (await client.query("select to_regclass('collector_platform_state') is not null as ready")).rows[0].ready as boolean;
+    if (!policyReady) return { status: "skipped", reason: "migration_0020_pending", durationMs: Date.now() - startedAt };
     const db = drizzle(client, { schema });
     const result = await runChannelCycleWith(db, registry, config, options);
     const durationMs = Date.now() - startedAt;

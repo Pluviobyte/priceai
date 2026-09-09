@@ -36,6 +36,9 @@ export const sourceHealthEnum = pgEnum("source_health", [
   "failing",
   "paused",
   "removed",
+  // Reachable-from-elsewhere but blocked by the source's WAF from this egress IP.
+  // Parked (dormant, self-healing), never counted as a crawl failure.
+  "blocked_egress",
 ]);
 
 export const submissionStatusEnum = pgEnum("submission_status", [
@@ -1283,3 +1286,17 @@ export const officialStorefronts = pgTable(
     index("official_storefronts_source_status_idx").on(table.source, table.status),
   ],
 );
+
+/** Shared by HTTP requests from all workers using this database/egress. */
+export const collectorPlatformState = pgTable("collector_platform_state", {
+  key: text("key").primaryKey(),
+  wafStreak: integer("waf_streak").notNull().default(0),
+  blockedUntil: timestamp("blocked_until", { withTimezone: true }),
+  nextRequestAt: timestamp("next_request_at", { withTimezone: true }),
+  leaseToken: uuid("lease_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  budgetDay: date("budget_day").notNull().default(sql`(now() at time zone 'UTC')::date`),
+  requestCount: integer("request_count").notNull().default(0),
+  lastServedAt: timestamp("last_served_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

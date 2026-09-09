@@ -175,7 +175,7 @@ export async function precheckSourceSubmission(
       allowDisabled: true,
       promoteSource: false,
       signal,
-      maxPages: 50,
+      maxPages: selected.collectorKind === "shop_api" ? 12 : 50,
       ...(rawObjectStore ? { rawObjectStore } : {}),
     });
     await db

@@ -45,7 +45,7 @@ const rawObjectStore = new S3JsonObjectStore({
   accessKeyId: config.objectStorageAccessKey,
   secretAccessKey: config.objectStorageSecretKey,
 });
-const registry = createCollectorRegistry();
+const registry = createCollectorRegistry(database.db);
 
 interface SourceJobData {
   sourceId?: unknown;

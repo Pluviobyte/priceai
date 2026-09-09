@@ -17,6 +17,26 @@ const PRODUCTS = [
   ["X", "x-premium", "X Premium", "X Premium"],
 ] as const;
 
+const ADDITIONAL_PRODUCTS = [
+  ['OpenAI','chatgpt-account','ChatGPT 普通账号'],
+  ['Anthropic','claude-account','Claude 普通账号 / 兑换号'],
+  ['xAI','grok-account','Grok 普通账号 / 体验号'],
+  ['xAI','supergrok-heavy','SuperGrok Heavy'],
+  ['Anysphere','cursor-account','Cursor 账号（套餐待确认）'],
+  ['Amazon','kiro-pro','Kiro Pro / 额度'],
+  ['Amazon','kiro-account','Kiro 普通账号'],
+  ['Suno','suno-account','Suno 账号（套餐待确认）'],
+  ['ByteDance','dreamina-account','即梦 / Dreamina 账号与积分'],
+  ['Google','resource-gmail','Gmail / Google 邮箱'],
+  ['Microsoft','resource-outlook','Outlook / Hotmail 邮箱'],
+  ['Apple','resource-icloud','iCloud 邮箱'],
+  ['Education','resource-education-email','教育邮箱'],
+  ['Apple','resource-apple-account','Apple ID / 苹果账号'],
+  ['OpenAI','resource-openai-verification','OpenAI / ChatGPT 验证服务'],
+  ['Google','resource-google-verification','Google / Gemini 验证服务'],
+  ['Telegram','resource-telegram-premium','Telegram Premium'],
+] as const;
+
 export async function seedCanonicalProducts(db: Database): Promise<number> {
   await db
     .insert(canonicalProducts)
@@ -31,5 +51,8 @@ export async function seedCanonicalProducts(db: Database): Promise<number> {
       })),
     )
     .onConflictDoNothing({ target: canonicalProducts.slug });
-  return PRODUCTS.length;
+  await db.insert(canonicalProducts).values(ADDITIONAL_PRODUCTS.map(([brand,slug,displayName]) => ({
+    brand,slug,displayName,planFamily:displayName,
+  }))).onConflictDoNothing({target:canonicalProducts.slug});
+  return PRODUCTS.length + ADDITIONAL_PRODUCTS.length;
 }

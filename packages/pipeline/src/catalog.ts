@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import type { CollectorRegistry } from "@price-radar/collector-sdk";
+import { platformRetryAt, isWafChallengeError, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   crawlRuns,
   rawOfferSnapshots,
@@ -8,7 +8,7 @@ import {
   type Database,
 } from "@price-radar/database";
 import { sourceIdentitySchema, type CatalogPage, type RawOfferInput } from "@price-radar/schema";
-import { nextFailedRun, nextHealthyRun } from "./source-health.js";
+import { nextFailedRun, nextHealthyRun, nextWafBlockedRun } from "./source-health.js";
 import { detectSemanticDuplicatesForRun } from "./quality.js";
 
 export interface CrawlSourceOptions {
@@ -164,6 +164,12 @@ async function crawlSourceUnlocked(
     const finishedAt = new Date();
     const primaryError = validation.issues.find((issue) => issue.severity === "error");
     let adaptiveIntervalMs = options.successIntervalMs;
+    if (adaptiveIntervalMs === undefined && source.platformKind === 'ldxp_shop_api') {
+      // A full catalog needs several requests. Refresh at most twice daily by
+      // default, and spend less on catalogs with no confirmed stock.
+      const stocked = [...normalizedById.values()].some(item => item.stockState === 'in_stock' || item.stockState === 'low_stock');
+      adaptiveIntervalMs = (stocked ? 12 : 24) * 60 * 60_000;
+    }
     if (adaptiveIntervalMs === undefined && source.latestCompleteRunId) {
       const previous = await db.select({ sourceItemId: rawOfferSnapshots.sourceItemId, rawPayloadHash: rawOfferSnapshots.rawPayloadHash }).from(rawOfferSnapshots).where(eq(rawOfferSnapshots.crawlRunId, source.latestCompleteRunId));
       const previousById = new Map(previous.map((item) => [item.sourceItemId, item.rawPayloadHash]));
@@ -247,11 +253,21 @@ async function crawlSourceUnlocked(
   } catch (error) {
     const finishedAt = new Date();
     const message = error instanceof Error ? error.message : "unknown_crawl_failure";
-    const health = nextFailedRun(finishedAt, source.consecutiveFailures);
+    // A WAF challenge is an egress-reachability problem, not a source failure:
+    // park the source on a long, non-escalating retry so it stays dormant and
+    // self-heals instead of climbing into `failing`.
+    const wafBlocked = isWafChallengeError(error) || mentionsWafChallenge(message);
+    const deferredUntil = platformRetryAt(message);
+    const health = deferredUntil
+      ? { healthStatus: "retrying" as const, consecutiveFailures: source.consecutiveFailures, nextRunAt: deferredUntil }
+      : wafBlocked
+      ? nextWafBlockedRun(finishedAt, source.consecutiveFailures)
+      : nextFailedRun(finishedAt, source.consecutiveFailures);
+    const errorCode = deferredUntil ? "platform_deferred" : wafBlocked ? "waf_challenge" : "crawl_failed";
     await db.transaction(async (tx) => {
       await tx
         .update(crawlRuns)
-        .set({ status: "failed", finishedAt, errorCode: "crawl_failed", errorMessage: message })
+        .set({ status: "failed", finishedAt, errorCode, errorMessage: message })
         .where(eq(crawlRuns.id, run.id));
       if (options.promoteSource !== false) {
         await tx
@@ -259,7 +275,7 @@ async function crawlSourceUnlocked(
           .set({
             ...health,
             lastCheckedAt: finishedAt,
-            lastErrorCode: "crawl_failed",
+            lastErrorCode: errorCode,
             updatedAt: finishedAt,
           })
           .where(eq(sources.id, sourceId));

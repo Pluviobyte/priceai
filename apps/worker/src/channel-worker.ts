@@ -1,3 +1,4 @@
+import { createDatabase } from "@price-radar/database";
 import { writeFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 import { S3JsonObjectStore } from "@price-radar/object-storage";
@@ -12,7 +13,8 @@ import { createCollectorRegistry } from "./registry.js";
  * that the container health check reads.
  */
 const config = readWorkerConfig();
-const registry = createCollectorRegistry();
+const database = createDatabase(config.databaseUrl);
+const registry = createCollectorRegistry(database.db);
 const rawObjectStore = config.objectStorageConfigured
   ? new S3JsonObjectStore({
       endpoint: config.objectStorageEndpoint,
@@ -51,4 +53,5 @@ try {
 } finally {
   clearInterval(timer);
   rawObjectStore?.destroy();
+  await database.close();
 }

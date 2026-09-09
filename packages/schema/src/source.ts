@@ -21,6 +21,7 @@ export const sourceHealthSchema = z.enum([
   "failing",
   "paused",
   "removed",
+  "blocked_egress",
 ]);
 
 export type SourceHealth = z.infer<typeof sourceHealthSchema>;

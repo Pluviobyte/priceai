@@ -1,6 +1,7 @@
+import { admissionAvailableSql } from './platform-policy.js';
 import { and, desc, eq, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
-import type { CollectorRegistry } from "@price-radar/collector-sdk";
+import { platformRetryAt, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   auditLogs,
   canonicalProducts,
@@ -17,6 +18,8 @@ import {
 import type { RawOfferInput, SourceIdentity } from "@price-radar/schema";
 import { familyForHost } from "@price-radar/source-signatures";
 import type { RawObjectStore } from "./catalog.js";
+import { findVettableCandidates } from "./scheduler.js";
+import { platformKey, platformKeySql, platformAvailableSql } from "./platform-policy.js";
 import { jaccard, tokens } from "./quality.js";
 import { precheckSourceSubmission } from "./submissions.js";
 import { assertSafePublicUrl } from "./url-security.js";
@@ -28,7 +31,9 @@ import { assertSafePublicUrl } from "./url-security.js";
  * actually sells AI products, and no sign of being a mirror of a shop we already
  * track. Every decision keeps its evidence on the candidate and in the audit log.
  */
-export const VETTING_VERSION = "vetting-2026-09-08.1";
+export const VETTING_VERSION = "vetting-2026-09-09.1";
+/** WAF-blocked candidates are re-probed after this long; they leave the human queue meanwhile. */
+export const EGRESS_BLOCK_RETRY_MS = 24 * 60 * 60_000;
 export const AUTOMATIC_ACTOR = "automatic_vetting";
 
 export interface SourceQualityProfile {
@@ -340,7 +345,7 @@ export interface VetCandidateOptions {
 
 export interface VetCandidateResult {
   candidateId: string;
-  status: "approved" | "review" | "rejected" | "duplicate" | "adapter_needed" | "deferred" | "skipped";
+  status: "approved" | "review" | "rejected" | "duplicate" | "adapter_needed" | "deferred" | "skipped" | "blocked_egress";
   reasons: string[];
   sourceId?: string;
   submissionId?: string;
@@ -378,6 +383,10 @@ function providersOf(candidate: CandidateRow): string[] {
   return [...new Set(candidate.discoveryEvidence.map((item) => item.provider))];
 }
 
+function wafBlocked(text: string | null | undefined): boolean {
+  return mentionsWafChallenge(text) || /shop_api(?:_16688)?_access_challenge/.test(text ?? "");
+}
+
 async function existingSourceFor(db: Database, identity: SourceIdentity): Promise<{ id: string; enabled: boolean } | undefined> {
   const [row] = await db.select({ id: sources.id, enabled: sources.enabled }).from(sources)
     .where(and(eq(sources.platformKind, identity.platformKind), eq(sources.platformMerchantId, identity.platformMerchantId)))
@@ -394,8 +403,10 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
   const signal = options.signal ?? new AbortController().signal;
   const thresholds = options.thresholds ?? DEFAULT_THRESHOLDS;
   const now = options.now ?? new Date();
-  const claimed = await db.update(sourceCandidates).set({ status: "vetting", vettedAt: now })
-    .where(and(eq(sourceCandidates.id, candidateId), eq(sourceCandidates.status, "pending")))
+  const claimed = await db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(7410320)`);
+    return tx.update(sourceCandidates).set({ status: "vetting", vettedAt: now })
+    .where(and(eq(sourceCandidates.id, candidateId), eq(sourceCandidates.status, "pending"), admissionAvailableSql(platformKeySql(sql`${sourceCandidates.candidateUrl}`)), or(sql`${sourceCandidates.nextVetAt} is null`, sql`${sourceCandidates.nextVetAt} <= ${now}`)))
     .returning({
       id: sourceCandidates.id,
       sourceId: sourceCandidates.sourceId,
@@ -406,11 +417,20 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
       platformKind: sourceCandidates.platformKind,
       platformMerchantId: sourceCandidates.platformMerchantId,
     });
+  });
   const candidate = claimed[0];
   if (!candidate) return { candidateId, status: "skipped", reasons: ["not_pending"] };
   const attempts = Number(candidate.vettingResult?.attempts ?? 0) + 1;
   const providers = providersOf(candidate);
   const base = { attempts, providers, version: VETTING_VERSION, vettedAt: now.toISOString() };
+
+  const park = async (reason: string, retryAt = new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS)): Promise<VetCandidateResult> => {
+    const status = platformRetryAt(reason) && !reason.includes("circuit_open") ? "pending" : "blocked_egress";
+    await finishCandidate(db, candidate, { status, nextVetAt: retryAt,
+      vettingResult: { ...candidate.vettingResult, ...base, attempts: attempts - 1, verdict: status, reasons: [reason] } },
+      status === "pending" ? "deferred" : "blocked_egress", [reason], { retryAt: retryAt.toISOString() });
+    return { candidateId, status: status === "pending" ? "deferred" : "blocked_egress", reasons: [reason] };
+  };
 
   const defer = async (reason: string): Promise<VetCandidateResult> => {
     if (attempts >= 3) {
@@ -437,11 +457,22 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
       return { candidateId, status: "rejected", reasons: [reason] };
     }
 
+    const key = platformKey(safeUrl.hostname);
+    const { rows: gates } = await db.execute<{ retry_at: Date | null }>(sql`
+      select greatest(blocked_until, lease_until) as retry_at from collector_platform_state where key=${key}`);
+    if (gates[0]?.retry_at && new Date(gates[0].retry_at) > now)
+      return park("platform_circuit_open", new Date(gates[0].retry_at));
+    await db.execute(sql`insert into collector_platform_state(key,last_served_at) values(${key},now())
+      on conflict(key) do update set last_served_at=now()`);
     const probes = await registry.probe(safeUrl, signal);
     const selected = probes.find((probe) => probe.supported && probe.identity);
     if (!selected?.identity) {
-      if (probes.some((probe) => /shop_api_access_challenge/.test(probe.reason ?? ""))) {
-        return defer("source_access_challenge:源站访问验证，稍后重试；持续受限需源站放行");
+      const deferredProbe = probes.find(probe => platformRetryAt(probe.reason));
+      if (deferredProbe) return park(deferredProbe.reason!, platformRetryAt(deferredProbe.reason)!);
+      if (probes.some((probe) => wafBlocked(probe.reason))) {
+        const reasons = ["waf_challenge:源站访问验证，此出口暂时无法采集"];
+        await finishCandidate(db, candidate, { status: "blocked_egress", nextVetAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), vettingResult: { ...base, attempts: attempts - 1, verdict: "blocked_egress", reasons, probes } }, "blocked_egress", reasons, {});
+        return { candidateId, status: "blocked_egress", reasons };
       }
       const transient = probes.some((probe) => /timeout|fetch failed|ECONN|EAI_AGAIN|http_5\d\d|http_429/i.test(probe.reason ?? ""));
       if (transient) return defer("probe_transient_failure");
@@ -480,6 +511,13 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     await db.update(sourceCandidates).set({ submissionId: submission.id }).where(eq(sourceCandidates.id, candidate.id));
     const precheck = await precheckSourceSubmission(db, registry, submission.id, signal, options.rawObjectStore);
     if (!precheck.supported || !precheck.sourceId) {
+      const [stored] = await db.select({ result: sourceSubmissions.precheckResult }).from(sourceSubmissions).where(eq(sourceSubmissions.id, submission.id));
+      const precheckProbes = (stored?.result as { probes?: Array<{ reason?: string }> } | null)?.probes ?? [];
+      const blocked = precheckProbes.find(probe => platformRetryAt(probe.reason) || wafBlocked(probe.reason));
+      if (blocked) {
+        await db.update(sourceSubmissions).set({ status: "rejected", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now }).where(eq(sourceSubmissions.id, submission.id));
+        return park(blocked.reason!, platformRetryAt(blocked.reason));
+      }
       const reasons = ["precheck_unsupported"];
       await finishCandidate(db, candidate, { status: "adapter_needed", submissionId: submission.id, vettingResult: { ...base, verdict: "adapter_needed", reasons, identity } }, "adapter_needed", reasons, { submissionId: submission.id });
       return { candidateId, status: "adapter_needed", reasons, submissionId: submission.id };
@@ -487,11 +525,19 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     const sourceId = precheck.sourceId;
     await db.update(sourceCandidates).set({ sourceId }).where(eq(sourceCandidates.id, candidate.id));
     const [trial] = precheck.trialRunId
-      ? await db.select({ id: crawlRuns.id, status: crawlRuns.status, complete: crawlRuns.completeSnapshot, errorMessage: crawlRuns.errorMessage }).from(crawlRuns).where(eq(crawlRuns.id, precheck.trialRunId)).limit(1)
+      ? await db.select({ id: crawlRuns.id, status: crawlRuns.status, complete: crawlRuns.completeSnapshot, errorCode: crawlRuns.errorCode, errorMessage: crawlRuns.errorMessage }).from(crawlRuns).where(eq(crawlRuns.id, precheck.trialRunId)).limit(1)
       : [];
     if (!trial) {
       const [stored] = await db.select({ result: sourceSubmissions.precheckResult }).from(sourceSubmissions).where(eq(sourceSubmissions.id, submission.id)).limit(1);
       const trialError = String((stored?.result as Record<string, unknown> | null)?.trialError ?? "trial_failed");
+      if (platformRetryAt(trialError)) return park(trialError, platformRetryAt(trialError));
+      if (wafBlocked(trialError)) {
+        await db.update(sourceSubmissions).set({ status: "rejected", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));
+        await db.update(sources).set({ healthStatus: "blocked_egress", lastErrorCode: "waf_challenge", nextRunAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), updatedAt: now }).where(eq(sources.id, sourceId));
+        const reasons = ["waf_challenge:源站访问验证，此出口暂时无法采集"];
+        await finishCandidate(db, candidate, { status: "blocked_egress", sourceId, submissionId: submission.id, nextVetAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), vettingResult: { ...base, attempts: attempts - 1, verdict: "blocked_egress", reasons, identity } }, "blocked_egress", reasons, { sourceId, submissionId: submission.id });
+        return { candidateId, status: "blocked_egress", reasons, sourceId, submissionId: submission.id };
+      }
       if (/crawl_already_running_or_host_busy|timeout|fetch failed|ECONN|EAI_AGAIN/i.test(trialError)) {
         await db.update(sourceSubmissions).set({ status: "rejected", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));
         return defer(`trial_transient:${trialError.slice(0, 80)}`);
@@ -501,6 +547,14 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
       return { candidateId, status: "review", reasons, sourceId, submissionId: submission.id };
     }
 
+    if (platformRetryAt(trial.errorMessage)) return park(trial.errorMessage!, platformRetryAt(trial.errorMessage));
+    if (trial.errorCode === "waf_challenge" || wafBlocked(trial.errorMessage)) {
+      await db.update(sourceSubmissions).set({ status: "rejected", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));
+      await db.update(sources).set({ healthStatus: "blocked_egress", lastErrorCode: "waf_challenge", nextRunAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), updatedAt: now }).where(eq(sources.id, sourceId));
+      const reasons = ["waf_challenge:源站访问验证，此出口暂时无法采集"];
+      await finishCandidate(db, candidate, { status: "blocked_egress", sourceId, submissionId: submission.id, nextVetAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), vettingResult: { ...base, attempts: attempts - 1, verdict: "blocked_egress", reasons, identity, trialRunId: trial.id } }, "blocked_egress", reasons, { sourceId, submissionId: submission.id, trialRunId: trial.id });
+      return { candidateId, status: "blocked_egress", reasons, sourceId, submissionId: submission.id, trialRunId: trial.id };
+    }
     const items = await loadRunItems(db, trial.id);
     const market = options.context ?? await loadProfileContext(db, { excludeSourceId: sourceId });
     const profile = buildSourceQualityProfile(items, {
@@ -552,6 +606,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
       throw error;
     }
     const message = error instanceof Error ? error.message : String(error);
+    if (platformRetryAt(message) || wafBlocked(message)) return park(message, platformRetryAt(message));
     return defer(`vetting_error:${message.slice(0, 120)}`);
   }
 }
@@ -564,6 +619,7 @@ export interface VetBatchResult {
   duplicate: number;
   adapterNeeded: number;
   deferred: number;
+  blockedEgress: number;
   results: VetCandidateResult[];
 }
 
@@ -572,13 +628,20 @@ export async function vetNextCandidates(db: Database, registry: CollectorRegistr
   // Recover interrupted processes and scheduled rechecks without requiring a new directory import.
   await db.update(sourceCandidates).set({ status: "pending" }).where(or(
     and(eq(sourceCandidates.status, "vetting"), lt(sourceCandidates.vettedAt, new Date(now.getTime() - 2 * 60 * 60_000))),
-    and(inArray(sourceCandidates.status, ["rejected", "adapter_needed"]), lt(sourceCandidates.nextVetAt, now)),
+    and(inArray(sourceCandidates.status, ["rejected", "adapter_needed", "blocked_egress"]), lt(sourceCandidates.nextVetAt, now)),
   ));
-  const queue = await db.select({ id: sourceCandidates.id }).from(sourceCandidates)
-    .where(and(eq(sourceCandidates.status, "pending"), or(sql`${sourceCandidates.nextVetAt} is null`, lt(sourceCandidates.nextVetAt, now))))
-    .orderBy(desc(sourceCandidates.priority), sourceCandidates.discoveredAt)
-    .limit(Math.max(1, options.limit ?? 5));
-  const summary: VetBatchResult = { attempted: 0, approved: 0, review: 0, rejected: 0, duplicate: 0, adapterNeeded: 0, deferred: 0, results: [] };
+  // Park siblings without probing them. Keep their existing evidence and retry at
+  // the platform deadline; selection below still excludes an open circuit.
+  await db.execute(sql`with parked as (
+    update source_candidates c set status='blocked_egress', next_vet_at=ps.blocked_until,
+      vetting_result=coalesce(c.vetting_result,'{}'::jsonb) || jsonb_build_object('platformDeferredReason','platform_circuit_open')
+      from collector_platform_state ps where ps.key=${platformKeySql(sql`c.candidate_url`)}
+        and ps.blocked_until > now() and c.status='pending' returning c.id
+    ) insert into audit_logs(actor_id,action,target_type,target_id,reason,before_value,after_value)
+      select ${AUTOMATIC_ACTOR},'source_candidate.blocked_egress','source_candidate',id::text,
+        'platform circuit open; no probe issued','{"status":"pending"}'::jsonb,'{"status":"blocked_egress"}'::jsonb from parked`);
+  const queue = await findVettableCandidates(db, Math.max(1, options.limit ?? 5), now);
+  const summary: VetBatchResult = { attempted: 0, approved: 0, review: 0, rejected: 0, duplicate: 0, adapterNeeded: 0, deferred: 0, blockedEgress: 0, results: [] };
   if (queue.length === 0) return summary;
   const context = options.context ?? await loadProfileContext(db);
   for (const row of queue) {
@@ -592,6 +655,7 @@ export async function vetNextCandidates(db: Database, registry: CollectorRegistr
     else if (result.status === "duplicate") summary.duplicate += 1;
     else if (result.status === "adapter_needed") summary.adapterNeeded += 1;
     else if (result.status === "deferred") summary.deferred += 1;
+    else if (result.status === "blocked_egress") summary.blockedEgress += 1;
   }
   return summary;
 }
@@ -630,7 +694,7 @@ export async function repairShopApiEntryUrls(db: Database, registry: CollectorRe
   if (!adapter) return { checked: 0, repaired: 0 };
   const rows = await db.select({ id: sources.id, canonicalEntryUrl: sources.canonicalEntryUrl, platformKind: sources.platformKind, consecutiveFailures: sources.consecutiveFailures, merchantId: sources.merchantId })
     .from(sources)
-    .where(and(eq(sources.collectorKind, "shop_api"), ne(sources.healthStatus, "removed")))
+    .where(and(eq(sources.collectorKind, "shop_api"), ne(sources.healthStatus, "removed"), platformAvailableSql(platformKeySql(sql`${sources.canonicalEntryUrl}`))))
     .limit(2_000);
   const stale = rows.filter((row) => {
     let hostname: string;

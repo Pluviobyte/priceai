@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { hostThrottle, type CollectorAdapter, type CollectorContext } from "@price-radar/collector-sdk";
+import { hostThrottle, WafChallengeError, wafChallengeSignature, type CollectorAdapter, type CollectorContext } from "@price-radar/collector-sdk";
 import {
   rawOfferInputSchema,
   type CatalogPage,
@@ -184,6 +184,15 @@ export class DujiaoCollector implements CollectorAdapter {
       hostThrottle.cooldown(url.hostname, retryAfter > 0 ? retryAfter * 1_000 : 30_000);
     }
     if (!response.ok) throw new Error(`dujiao_http_${response.status}`);
+    if (!(response.headers.get("content-type") ?? "").includes("json")) {
+      const text = (await response.text().catch(() => "")).slice(0, 32_768);
+      const signature = wafChallengeSignature(response.headers, text);
+      if (signature) {
+        hostThrottle.cooldown(url.hostname, 60_000);
+        throw new WafChallengeError(url.hostname, signature);
+      }
+      throw new Error("dujiao_not_json");
+    }
     const envelope = asEnvelope(await response.json());
     if (envelope.statusCode !== 0) {
       throw new Error(`dujiao_rejected:${envelope.msg ?? "unknown"}`);

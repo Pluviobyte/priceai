@@ -54,6 +54,7 @@ const BASE = `with published as (
   select current_generation_id from publication_channels where channel='card_prices'
 ), catalog as (
   select o.id::text, cp.slug product_slug, cp.display_name product_name, cp.brand platform,
+    (cp.slug like 'resource-%' or o.offer_mode='api_credit') is_resource,
     m.slug merchant_slug, m.name merchant_name, s.canonical_entry_url merchant_host, ros.raw_title, o.offer_mode,
     oa.duration_days, oa.region, coalesce(oa.account_ownership,'unknown') account_ownership,
     coalesce(oa.warranty_type,'unknown') warranty_type, oa.warranty_hours,
@@ -64,7 +65,7 @@ const BASE = `with published as (
     o.risk_facts,
     md5(jsonb_build_array(cp.slug,o.offer_mode,oa.duration_days,o.currency,oa.region,
       coalesce(oa.account_ownership,'unknown'),coalesce(oa.warranty_type,'unknown'),oa.warranty_hours,
-      case when oa.duration_days is null then o.id::text else null end)::text) spec_key
+      case when oa.duration_days is null or o.offer_mode='unknown' then o.id::text else null end)::text) spec_key
   from offers o
   join canonical_products cp on cp.id=o.canonical_product_id
   join sources s on s.id=o.source_id
@@ -87,6 +88,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
     const pattern = parameter(`%${filters.q.replace(/[\\%_]/g, "\\$&")}%`);
     conditions.push(`concat_ws(' ',product_name,platform,raw_title,merchant_name,merchant_host) ilike ${pattern} escape '\\'`);
   }
+  conditions.push(filters.catalog === 'resources' ? "is_resource=true" : "is_resource=false");
   if (filters.platform) conditions.push(`platform=${parameter(filters.platform)}`);
   if (filters.mode) conditions.push(`offer_mode=${parameter(filters.mode)}`);
   if (filters.duration) conditions.push(`duration_days=${parameter(Number(filters.duration))}`);
@@ -104,13 +106,13 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // not turn the selected merchant into its own sole competitor.
   const merchantRanking = view === "merchants" ? `, merchant_prices as (
     select merchant_slug,spec_key,min(price) price from catalog
-    where available and duration_days>0 and price is not null
+    where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') and price is not null
     group by merchant_slug,spec_key
   ), ranked_prices as (
     select *,rank() over (partition by spec_key order by price) price_rank,
       count(*) over (partition by spec_key) competitors from merchant_prices
   ), matched_specs as (
-    select distinct merchant_slug,spec_key from filtered where available and duration_days>0
+    select distinct merchant_slug,spec_key from filtered where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')
   ), merchant_scores as (
     select r.merchant_slug,count(*)::int comparable_count,
       count(*) filter (where price_rank=1)::int lowest_count,
@@ -121,7 +123,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   const selection = view === "products"
     ? `select min(id) id, spec_key,product_slug,product_name,platform,offer_mode,duration_days,currency,
         region,account_ownership,warranty_type,warranty_hours,min(merchant_host) merchant_host,
-        min(price) filter (where available and duration_days>0) price,
+        min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')) price,
         count(*)::int offer_count, count(distinct merchant_slug)::int merchant_count,
         count(*) filter (where available)::int available_count, max(verified_at) verified_at
        from filtered group by ${group}`

@@ -54,6 +54,16 @@ LDXP 采集器现在按平台族做域名故障转移：请求首选上次成功
 
 `source_quality_profiles` 是事实画像，不是信用评分：无质保占比、缺货占比、目录重合等只在后台与商家页展示，不参与最低价。已启用来源每 7 天用最新完整快照重算，AI 相关商品归零的来源标记 `degraded` 供人工处理，不自动停用。
 
+## WAF / 出口被拦(海外 VPS)
+
+生产 VPS 是海外机房 IP,部分卡网(阿里云 ESA、Cloudflare 等)会对这类 IP 返回 JS 校验页而不是 JSON——HTTP 常是 200,body 是校验页,没有商品数据。**这不是缺适配器、也不是店铺失效,而是这个出口暂时到不了这个主机。** 已决定:能采的优先,采不了的搁置,不追代理。
+
+- **识别**:`packages/collector-sdk/src/waf.ts` 统一判定(阿里云 `captchaType="esa"`/`acw_sc`、Cloudflare `cf-chl-`/`challenge-platform`/`just a moment`、`访问验证` 等),命中抛 `WafChallengeError`,与"解析失败""HTTP 5xx"区分。LDXP、16688、独角数卡采集器都接入。WAF 不做同族域名重试(入口已规范化到主域名,重试只会翻倍命中、更伤 IP 信誉),快速失败。
+- **来源搁置**:`crawlSource` 捕获 WAF → `nextWafBlockedRun`:健康置 `blocked_egress`、**失败计数不增长**(永不滑向 `failing`)、12 小时后重试。保持 enabled,所以是"休眠 + 自愈":哪天这个出口开始拿到 JSON 就自动恢复。
+- **候选搁置**:检测阶段 probe 或试采命中 WAF → 候选状态 `blocked_egress`、24 小时后重探,**不进人工 review、不进待适配队列**(这根治了之前 WAF 被误判成"待适配"堆积的问题)。
+- **可见**:`/admin/discovery` 顶部按状态计数显示"出口被拦 N";`/admin/sources` 的 `blocked_egress` 与其他健康态分开,不污染 `failing`。以后若换出口,这些来源和候选到期自动重试即可恢复,无需人工。
+- **不做**:代理/换出口(用户已决定放弃)、打码平台、滑块对抗。采不了的就让它休眠,预算给能采的。
+
 ## 限速与礼貌
 
 `packages/collector-sdk/src/throttle.ts` 提供进程级同源限速（默认 700ms ± 300ms 间隔、每主机 2 并发，429/503 触发 30 秒或 Retry-After 冷却），LDXP、16688、独角数卡、Kami 采集器和目录导入都经过它。数据库层的 `crawl_leases` 继续保证同一主机同一时间只有一个完整采集。
@@ -76,4 +86,22 @@ npm run typecheck && npm test
 npm run cli --workspace @price-radar/worker -- import-directories
 npm run cli --workspace @price-radar/worker -- vet-candidates 3
 npm run cli --workspace @price-radar/worker -- channel-cycle
+```
+
+### 平台熔断与公平队列（迁移 0020）
+
+Shop API Worker 的每一次 HTTP 请求都先在 PostgreSQL `collector_platform_state` 预留额度：同平台单并发、默认间隔 5 秒、UTC 自然日最多 3000 请求。身份解析、试采分页、正式采集和域名修复共用预算；LDXP 多域名共用 `ldxp_shop_api`，catfk 等独立部署按实际主机分开，不因使用同一采集器互相熔断。环境变量为 `SHOP_API_PLATFORM_INTERVAL_MS`、`SHOP_API_PLATFORM_DAILY_REQUESTS`、`SHOP_API_PLATFORM_WAF_THRESHOLD`、`SHOP_API_PLATFORM_COOLDOWN_MS`，默认 5000 / 3000 / 3 / 86400000。当前预算覆盖 Worker 的 Shop API 请求，不包含独立目录抓取和其他采集器。
+
+连续 3 次明确 WAF 响应后熔断 24 小时。到期只有一个请求持有恢复租约；成功清除熔断，失败继续冷却。每个请求租约 60 秒（默认 HTTP 超时 15 秒），带 token 防止过期请求释放新租约。平台状态跨进程与重启持久化；同一数据库目前视为同一采集出口，多出口部署需要拆分状态命名空间。普通网络错误不冒充 WAF。
+
+候选选择先按实际平台分组，组内按 priority 和发现时间排序，组间优先最近未服务的平台。窗口排序在全队列进行，不能先截取高优先级前 N 条。冷却或预算耗尽的平台不占批次名额。WAF 平台的 pending 候选自动搁置并写审计；到期 `blocked_egress` 候选恢复 pending，恢复探测失败时不会逐店重新发请求。预算延期不增长普通失败次数。
+
+迁移 0020 将带自动 vetting 版本、WAF 原因及 max_attempts_reached 的历史 review 转为 blocked_egress，保留原因和历史尝试数、写入审计；近期同平台至少 3 条证据用于初始化冷却。未标记自动 WAF 耗尽重试的 review 不改。试采依然要求完整快照后才能批准，不将第一页相关性当作全店采集成功。
+
+上线需先执行数据库迁移 0019、0020，再更新 Channel Worker、队列 Worker 与 CLI 镜像；Channel Worker 未发现 0020 表时返回 `migration_0020_pending`。迁移及 Worker 自动处理旧候选，无需先手动重排全部 LDXP。无需调整 VPS 规格或切换出口；熔断修复也不代表 wzyp 已恢复可达。
+
+独立 PostgreSQL 集成测试（自动创建并删除独立测试库，需要建库权限）：
+
+```sh
+POLICY_TEST_DATABASE_URL=postgresql://localhost/postgres node --import tsx --test packages/pipeline/src/platform-policy.integration.test.ts
 ```

@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
 import {
   hostThrottle,
+  createEgressFetch,
+  PlatformDeferredError,
+  WafChallengeError,
+  wafChallengeSignature,
   type CollectorAdapter,
   type CollectorContext,
   type HostThrottle,
+  type RequestPolicy,
 } from "@price-radar/collector-sdk";
 import {
   rawOfferInputSchema,
@@ -57,11 +62,15 @@ export interface ShopApiCollectorOptions {
   requestTimeoutMs?: number;
   userAgent?: string;
   throttle?: HostThrottle;
+  requestPolicy?: RequestPolicy;
 }
 
 /** Errors that justify retrying the same request on another family origin. */
 function failoverable(error: unknown): boolean {
   const message = error instanceof Error ? `${error.name}:${error.message}${error.cause instanceof Error ? `:${error.cause.message}` : ""}` : String(error);
+  // A WAF challenge is NOT failoverable: the canonical entry URL is already the
+  // family primary domain, and on a blocked egress every mirror challenges too,
+  // so retrying them only multiplies WAF hits. Let it propagate to be parked.
   return /redirect|fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET|EAI_AGAIN|UND_ERR|certificate|shop_api_http_(?:30\d|403|404|5\d\d)|shop_api_not_json/i.test(message);
 }
 
@@ -185,9 +194,11 @@ function asGoodsItem(value: unknown): GoodsItem {
 export class LdxpShopApiCollector implements CollectorAdapter {
   readonly kind = "shop_api";
   readonly #pageSize: number;
+  readonly #fetch = createEgressFetch();
   readonly #requestTimeoutMs: number;
   readonly #userAgent: string;
   readonly #throttle: HostThrottle;
+  readonly #requestPolicy: RequestPolicy | undefined;
   /** Origin that last answered for each platform family, so a rotated domain is learned once. */
   readonly #preferredOrigin = new Map<string, string>();
 
@@ -197,13 +208,14 @@ export class LdxpShopApiCollector implements CollectorAdapter {
     this.#userAgent =
       options.userAgent ?? "AIPriceRadar/0.1 (+https://localhost.invalid/source-policy)";
     this.#throttle = options.throttle ?? hostThrottle;
+    this.#requestPolicy = options.requestPolicy;
   }
 
   async #postOnce(origin: string, path: string, body: unknown, signal: AbortSignal): Promise<unknown> {
     const url = new URL(path, origin);
-    return this.#throttle.run(url.hostname, async () => {
+    return (this.#requestPolicy ?? this.#throttle).run(url.hostname, async () => {
       const timeoutSignal = AbortSignal.timeout(this.#requestTimeoutMs);
-      const response = await fetch(url, {
+      const response = await this.#fetch(url, {
         method: "POST",
         redirect: "error",
         headers: {
@@ -214,19 +226,27 @@ export class LdxpShopApiCollector implements CollectorAdapter {
         body: JSON.stringify(body),
         signal: AbortSignal.any([signal, timeoutSignal]),
       });
+      let retryAt: Date | undefined;
       if (response.status === 429 || response.status === 503) {
-        const retryAfter = Number(response.headers.get("retry-after") ?? 0);
-        this.#throttle.cooldown(url.hostname, retryAfter > 0 ? retryAfter * 1_000 : 30_000);
+        const header = response.headers.get("retry-after") ?? "";
+        const seconds = Number(header);
+        const delay = seconds > 0 ? seconds * 1000 : Math.max(30_000, Date.parse(header) - Date.now() || 0);
+        retryAt = new Date(Date.now() + delay);
+        this.#throttle.cooldown(url.hostname, delay);
       }
-      if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
       if (!(response.headers.get("content-type") ?? "").includes("json")) {
-        const text = (await response.text()).slice(0, 32_768);
-        if (/_waf_|captcha|cf-chl-|challenge-platform|访问验证|安全验证/i.test(text)) {
-          this.#throttle.cooldown(url.hostname, 30_000);
-          throw new Error("shop_api_access_challenge");
+        const text = (await response.text().catch(() => "")).slice(0, 32_768);
+        const signature = wafChallengeSignature(response.headers, text);
+        if (signature) {
+          this.#throttle.cooldown(url.hostname, 60_000);
+          throw new WafChallengeError(url.hostname, signature);
         }
+        if (retryAt) throw new PlatformDeferredError(retryAt, "server_retry_after");
+        if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
         throw new Error("shop_api_not_json");
       }
+      if (retryAt) throw new PlatformDeferredError(retryAt, "server_retry_after");
+      if (!response.ok) throw new Error(`shop_api_http_${response.status}`);
       const envelope = (await response.json()) as ApiEnvelope;
       if (envelope.code !== 1) {
         throw new Error(`shop_api_rejected:${envelope.msg ?? "unknown"}`);
@@ -242,7 +262,7 @@ export class LdxpShopApiCollector implements CollectorAdapter {
   async #post(origin: string, path: string, body: unknown, signal: AbortSignal): Promise<unknown> {
     const family = familyForHost(new URL(origin).hostname);
     const preferred = family ? this.#preferredOrigin.get(family.key) : undefined;
-    const origins = [...new Set([preferred ?? origin, origin, ...failoverOrigins(origin)])];
+    const origins = [...new Set([preferred ?? family?.primaryOrigin ?? origin, origin, ...failoverOrigins(origin)])];
     let lastError: unknown;
     for (const [index, candidate] of origins.entries()) {
       try {

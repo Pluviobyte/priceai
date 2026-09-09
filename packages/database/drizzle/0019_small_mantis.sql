@@ -1,0 +1,1 @@
+ALTER TYPE "public"."source_health" ADD VALUE 'blocked_egress';

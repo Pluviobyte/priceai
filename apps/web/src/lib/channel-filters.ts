@@ -5,7 +5,7 @@ export const CHANNEL_PLATFORMS = [
 ] as const;
 
 export const CHANNEL_MODES = {
-  recharge: "自己账号代充", finished_account: "成品账号", redeem_code: "兑换码 / 卡密",
+  api_credit: "API 额度", recharge: "自己账号代充", finished_account: "成品账号", redeem_code: "兑换码 / 卡密",
   team_seat: "团队席位", shared_account: "共享账号", web_mirror: "网页镜像",
   reverse_proxy: "反代服务", short_term: "短期体验", unknown: "交付待确认",
 } as const;
@@ -30,7 +30,7 @@ export type ChannelGroup = "merged" | "expanded";
 export type ChannelFilters = {
   q: string; platform: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
-  page: number; spec: string; layout: "cards" | "table";
+  catalog?: "subscriptions" | "resources"; page: number; spec: string; layout: "cards" | "table";
 };
 
 /** A specification is what makes two offers comparable; it is the unit `merged` groups by. */
@@ -82,6 +82,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     : first("group") === "expanded" || legacy === "offers" ? "expanded"
       : "merged";
   return {
+    catalog: choice("catalog", ["subscriptions", "resources"], "subscriptions") as "subscriptions" | "resources",
     q: first("q").slice(0, 160),
     spec: /^[a-f0-9]{32}$/.test(first("spec")) ? first("spec") : "",
     platform: choice("platform", CHANNEL_PLATFORMS.map(([value]) => value)),
@@ -104,7 +105,7 @@ export function channelHref(filters: ChannelFilters, changes: Partial<ChannelFil
   if (next.view === "merchants" && next.sort === "price") next.sort = "freshness";
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(next)) {
-    if (!value || (key === "page" && value === 1) || (key === "view" && value === "compare")
+    if (!value || (key === "catalog" && value === "subscriptions") || (key === "page" && value === 1) || (key === "view" && value === "compare")
       || (key === "group" && (value === "merged" || next.view === "merchants"))
       || (key === "layout" && (value === "cards" || next.view !== "merchants"))
       || (key === "sort" && value === "freshness") || (key === "stock" && value === "all")) continue;
@@ -125,6 +126,7 @@ export function activeChannelChips(filters: ChannelFilters): ChannelChip[] {
   const add = (key: keyof ChannelFilters, label: string, cleared: string) => {
     chips.push({ key, label, clearHref: channelHref(filters, { [key]: cleared } as Partial<ChannelFilters>) });
   };
+  if (filters.catalog === "resources") add("catalog", "周边与使用服务", "subscriptions");
   if (filters.q) add("q", `搜索“${filters.q}”`, "");
   if (filters.platform) add("platform", CHANNEL_PLATFORMS.find(([value]) => value === filters.platform)?.[1] ?? filters.platform, "");
   if (filters.mode) add("mode", channelMode(filters.mode), "");

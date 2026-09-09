@@ -14,7 +14,7 @@ test("filter URLs preserve constraints, reset pagination and reject unsupported 
   assert.equal(next.searchParams.has("page"), false);
   assert.equal(parseChannelFilters({ page: "-2", mode: "api_credit", view: "bad", spec: "bad" }).view, "compare");
   assert.equal(parseChannelFilters({ page: "-2" }).page, 1);
-  assert.equal(parseChannelFilters({ mode: "api_credit" }).mode, "");
+  assert.equal(parseChannelFilters({ mode: "api_credit" }).mode, "api_credit");
   assert.match(channelMoney("0", "CNY"), /0/);
   assert.equal(channelMoney(null, "CNY"), "暂无可比价");
 });
@@ -176,6 +176,15 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(data.rows.length, 18);
       const cheapest = await getChannelCatalog(parseChannelFilters({ view: "offers", stock: "available", currency: "CNY", sort: "price" }), read);
       assert.equal(Number(cheapest.rows[0]?.price), 0);
+    });
+    await t.test("resources stay separate and unknown delivery cannot set a minimum", async () => {
+      await db.query("insert into canonical_products values ('pr','resource-gmail','Gmail 邮箱','Google','active')");
+      await offer('mail',1,{product:'pr',mode:'unknown'});
+      const ordinary=await getChannelCatalog(parseChannelFilters({group:'expanded',q:'mail'}),read);
+      assert.equal(ordinary.total,0);
+      const resources=await getChannelCatalog(parseChannelFilters({catalog:'resources',q:'mail'}),read);
+      assert.equal(resources.total,1);assert.equal(resources.rows[0]?.price,null);
+      assert.equal(parseChannelFilters({catalog:'resources'}).catalog,'resources');
     });
   } finally { await db.end(); }
 });
