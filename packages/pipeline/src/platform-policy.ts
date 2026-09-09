@@ -8,6 +8,11 @@ import { familyForHost, LDXP_FAMILY, SIXTEEN688_FAMILY } from '@price-radar/sour
 export function platformKey(hostname: string): string {
   return familyForHost(hostname)?.platformKind ?? `host:${hostname.toLowerCase()}`;
 }
+/** Invalid candidate URLs still go through normal vetting rejection. */
+export function platformKeyForUrl(url: string): string {
+  try { return platformKey(new URL(url).hostname); }
+  catch { return 'invalid-url'; }
+}
 /** Match the request gate by actual host, never by generic collector kind. */
 export function platformKeySql(url: SQL): SQL {
   const host = sql`lower(split_part(split_part(split_part(${url}, '://', 2), '/', 1), ':', 1))`;

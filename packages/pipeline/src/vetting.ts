@@ -19,7 +19,7 @@ import type { RawOfferInput, SourceIdentity } from "@price-radar/schema";
 import { familyForHost } from "@price-radar/source-signatures";
 import type { RawObjectStore } from "./catalog.js";
 import { findVettableCandidates } from "./scheduler.js";
-import { platformKey, platformKeySql, platformAvailableSql } from "./platform-policy.js";
+import { platformKeyForUrl, platformKey, platformKeySql, platformAvailableSql } from "./platform-policy.js";
 import { jaccard, tokens } from "./quality.js";
 import { precheckSourceSubmission } from "./submissions.js";
 import { assertSafePublicUrl } from "./url-security.js";
@@ -630,7 +630,7 @@ export interface VetBatchResult {
   results: VetCandidateResult[];
 }
 
-export async function vetNextCandidates(db: Database, registry: CollectorRegistry, options: VetCandidateOptions & { limit?: number } = {}): Promise<VetBatchResult> {
+export async function vetNextCandidates(db: Database, registry: CollectorRegistry, options: VetCandidateOptions & { limit?: number; execute?: (key: string, work: () => Promise<void>) => Promise<void>; onResult?: (result: VetCandidateResult) => void } = {}): Promise<VetBatchResult> {
   const now = options.now ?? new Date();
   // Recover interrupted processes and scheduled rechecks without requiring a new directory import.
   await db.update(sourceCandidates).set({ status: "pending" }).where(or(
@@ -651,11 +651,12 @@ export async function vetNextCandidates(db: Database, registry: CollectorRegistr
   const summary: VetBatchResult = { attempted: 0, approved: 0, review: 0, rejected: 0, duplicate: 0, adapterNeeded: 0, deferred: 0, blockedEgress: 0, results: [] };
   if (queue.length === 0) return summary;
   const context = options.context ?? await loadProfileContext(db);
-  for (const row of queue) {
-    if (options.signal?.aborted) break;
+  const process = async (row: (typeof queue)[number]) => {
+    if (options.signal?.aborted) return;
     const result = await vetCandidate(db, registry, row.id, { ...options, context, now: new Date() });
     summary.attempted += 1;
     summary.results.push(result);
+    options.onResult?.(result);
     if (result.status === "approved") summary.approved += 1;
     else if (result.status === "review") summary.review += 1;
     else if (result.status === "rejected") summary.rejected += 1;
@@ -663,6 +664,13 @@ export async function vetNextCandidates(db: Database, registry: CollectorRegistr
     else if (result.status === "adapter_needed") summary.adapterNeeded += 1;
     else if (result.status === "deferred") summary.deferred += 1;
     else if (result.status === "blocked_egress") summary.blockedEgress += 1;
+  }
+  if (options.execute) {
+    const outcomes = await Promise.allSettled(queue.map(row => options.execute!(platformKeyForUrl(row.candidateUrl), () => process(row))));
+    const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+    if (failure) throw failure.reason;
+  } else {
+    for (const row of queue) await process(row);
   }
   return summary;
 }

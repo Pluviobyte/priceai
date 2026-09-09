@@ -1,10 +1,11 @@
 import pg from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import * as schema from "@price-radar/database/schema";
+import { createDatabase } from "@price-radar/database";
+import { PlatformTaskPool, IncrementalPublisher } from "./channel-execution.js";
 import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import {
   crawlSource,
+  platformKeyForUrl,
   measureCatalogGrowth,
   recoverGrowthCandidates,
   enumerate16688SourceMarketplace,
@@ -22,8 +23,8 @@ import {
 import type { WorkerConfig } from "./config.js";
 
 /**
- * One channel cycle = discovery (when due) → entry URL repair → candidate
- * vetting → due-source crawls → publish → quality profiles. It needs only
+ * One channel cycle = discovery (when due) → entry URL repair → parallel
+ * refresh/admission lanes with incremental publication → quality profiles. It needs only
  * PostgreSQL, so the same code runs from the long-lived channel worker, from
  * the CLI, and from a Dokploy schedule. A PostgreSQL advisory lock keeps the
  * cycle single-flight across containers.
@@ -76,51 +77,70 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
   if (result.repair.repaired > 0) log({ event: "entry_urls_repaired", ...result.repair });
 
   let published = false;
-  if (!options.skipCrawl) {
-    const due = (await findDueSources(db, new Date(), config.channelCrawlBatch)).filter((source) => source.collectorKind !== "browser");
-    const crawl = { attempted: 0, complete: 0, failed: 0 };
-    for (const source of due) {
-      if (signal.aborted) break;
-      crawl.attempted += 1;
-      try {
-        const outcome = await crawlSource(db, registry, source.id, { signal, ...(options.rawObjectStore ? { rawObjectStore: options.rawObjectStore } : {}) });
-        if (outcome.completeSnapshot && outcome.status === "success") crawl.complete += 1;
-        else crawl.failed += 1;
-        log({ event: "source_crawled", sourceId: source.id, ...outcome });
-      } catch (error) {
-        crawl.failed += 1;
-        log({ event: "source_crawl_failed", sourceId: source.id, error: error instanceof Error ? error.message : String(error) });
-      }
+  const pool = new PlatformTaskPool(config.channelPlatformConcurrency, signal);
+  const publisher = new IncrementalPublisher(async () => {
+    const started = Date.now();
+    await seedCanonicalProducts(db);
+    const publication = await publishLatestSnapshots(db);
+    let publicSnapshot: unknown = null;
+    if (options.rawObjectStore) {
+      try { publicSnapshot = await storePublicGenerationSnapshot(db, options.rawObjectStore, publication.generationId); }
+      catch (error) { publicSnapshot = { error: String(error) }; }
     }
-    result.crawl = crawl;
-  }
+    result.publication = { ...publication, publicSnapshot };
+    published = true;
+    log({ event: "channels_published", generationId: publication.generationId, durationMs: Date.now() - started });
+    // Alert delivery failure must not invalidate an already committed generation.
+    try { await evaluatePriceAlerts(db, publication.generationId); }
+    catch (error) { log({event: "price_alert_evaluation_failed", error: String(error)}); }
+  }, error => log({event: "incremental_publication_failed", error: String(error)}));
 
-  if (config.sourceDiscoveryEnabled && !options.skipVetting) {
+  const crawlWork = async () => {
+    if (options.skipCrawl) return;
+    const due = (await findDueSources(db, new Date(), config.channelCrawlBatch)).filter(source => source.collectorKind !== "browser");
+    const crawl = { attempted: 0, complete: 0, failed: 0 };
+    result.crawl = crawl;
+    const outcomes = await Promise.allSettled(due.map(source => pool.run(platformKeyForUrl(source.canonicalEntryUrl), async () => {
+      if (signal.aborted) return;
+      const started = Date.now();
+      crawl.attempted++;
+      try {
+        const outcome = await crawlSource(db, registry, source.id, {signal, ...(options.rawObjectStore ? {rawObjectStore: options.rawObjectStore} : {})});
+        if (outcome.completeSnapshot && outcome.status === "success") { crawl.complete++; publisher.changed(); }
+        else crawl.failed++;
+        log({event: "source_crawled", sourceId: source.id, durationMs: Date.now() - started, ...outcome});
+      } catch (error) {
+        crawl.failed++;
+        log({event: "source_crawl_failed", sourceId: source.id, durationMs: Date.now() - started, error: String(error)});
+      }
+    })));
+    const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+    if (failure) throw failure.reason;
+  };
+  const vetWork = async () => {
+    if (!config.sourceDiscoveryEnabled || options.skipVetting) return;
     if (process.env.COLLECTOR_GROWTH_RECOVERY === 'true') {
       const recovery = await recoverGrowthCandidates(db, 100);
       if (recovery.requeued) log({event:'growth_candidates_requeued',...recovery});
     }
-    const batch = await vetNextCandidates(db, registry, { limit: config.candidateVettingBatch, signal, ...(options.rawObjectStore ? { rawObjectStore: options.rawObjectStore } : {}) });
-    const { results, ...counts } = batch;
+    const batch = await vetNextCandidates(db, registry, {
+      limit: config.candidateVettingBatch, signal,
+      ...(options.rawObjectStore ? {rawObjectStore: options.rawObjectStore} : {}),
+      execute: (key, work) => pool.run(key, work),
+      onResult: item => {
+        log({event: "candidate_vetted", ...item, profile: undefined});
+        if (item.status === 'approved' && !options.skipCrawl) publisher.changed();
+      },
+    });
+    const {results, ...counts} = batch;
     result.vetting = counts;
-    for (const item of results) log({ event: "candidate_vetted", ...item, profile: undefined });
-  }
-
-  if (!options.skipCrawl) {
-    if ((result.crawl?.complete ?? 0) > 0 || (result.vetting?.approved ?? 0) > 0) {
-      await seedCanonicalProducts(db);
-      const publication = await publishLatestSnapshots(db);
-      let publicSnapshot: unknown = null;
-      if (options.rawObjectStore) {
-        try { publicSnapshot = await storePublicGenerationSnapshot(db, options.rawObjectStore, publication.generationId); }
-        catch (error) { publicSnapshot = { error: error instanceof Error ? error.message : String(error) }; }
-      }
-      const alerts = await evaluatePriceAlerts(db, publication.generationId);
-      result.publication = { ...publication, publicSnapshot, alerts };
-      published = true;
-      log({ event: "channels_published", generationId: publication.generationId });
-    }
-  }
+  };
+  // Both lanes share the same platform pool. Wait for every task before closing
+  // the publisher or releasing the cycle lock, including on errors/termination.
+  const outcomes = await Promise.allSettled([crawlWork(), vetWork()]);
+  await publisher.flush();
+  const failure = outcomes.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
+  if (failure) throw failure.reason;
 
   result.profiles = await refreshSourceQualityProfiles(db, { limit: published ? 20 : 10, maxAgeMs: config.qualityProfileMaxAgeMs });
   const growth = await measureCatalogGrowth(db);
@@ -136,6 +156,7 @@ export async function runChannelCycle(registry: CollectorRegistry, config: Worke
   const client = new pg.Client({ connectionString: config.databaseUrl });
   await client.connect();
   let locked = false;
+  let database: ReturnType<typeof createDatabase> | undefined;
   try {
     locked = (await client.query("select pg_try_advisory_lock($1) as acquired", [CHANNEL_CYCLE_LOCK])).rows[0].acquired as boolean;
     if (!locked) return { status: "skipped", reason: "already_running", durationMs: Date.now() - startedAt };
@@ -143,8 +164,10 @@ export async function runChannelCycle(registry: CollectorRegistry, config: Worke
     if (!ready) return { status: "skipped", reason: "migration_0018_pending", durationMs: Date.now() - startedAt };
     const policyReady = (await client.query("select to_regclass('collector_platform_state') is not null as ready")).rows[0].ready as boolean;
     if (!policyReady) return { status: "skipped", reason: "migration_0020_pending", durationMs: Date.now() - startedAt };
-    const db = drizzle(client, { schema });
-    const result = await runChannelCycleWith(db, registry, config, options);
+    // Parallel transactions require separate pool connections. The session-level
+    // cycle lock above stays on its dedicated client until every task settles.
+    database = createDatabase(config.databaseUrl);
+    const result = await runChannelCycleWith(database.db, registry, config, options);
     const durationMs = Date.now() - startedAt;
     const worked = (result.vetting?.attempted ?? 0) > 0 || (result.crawl?.attempted ?? 0) > 0 || Array.isArray(result.discovery) && result.discovery.some((item) => (item as { status?: string }).status === "success");
     await client.query(
@@ -153,6 +176,7 @@ export async function runChannelCycle(registry: CollectorRegistry, config: Worke
     ).catch(() => undefined);
     return { status: "success", ...result, durationMs };
   } finally {
+    await database?.close();
     if (locked) await client.query("select pg_advisory_unlock($1)", [CHANNEL_CYCLE_LOCK]).catch(() => undefined);
     await client.end();
   }

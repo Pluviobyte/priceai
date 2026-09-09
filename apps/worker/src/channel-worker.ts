@@ -33,7 +33,7 @@ const heartbeat = () => Promise.all([
 ]).catch(() => undefined);
 const timer = setInterval(() => { void heartbeat(); }, 30_000);
 await heartbeat();
-console.log(JSON.stringify({ event: "channel_worker_started", tickMs: config.channelWorkerTickMs, discovery: config.sourceDiscoveryEnabled, vettingBatch: config.candidateVettingBatch, crawlBatch: config.channelCrawlBatch }));
+console.log(JSON.stringify({ event: "channel_worker_started", tickMs: config.channelWorkerTickMs, discovery: config.sourceDiscoveryEnabled, vettingBatch: config.candidateVettingBatch, crawlBatch: config.channelCrawlBatch, platformConcurrency: config.channelPlatformConcurrency }));
 try {
   while (!stopping) {
     try {

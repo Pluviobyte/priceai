@@ -7,6 +7,7 @@ export interface DueSource {
   id: string;
   nextRunAt: Date | null;
   collectorKind: string;
+  canonicalEntryUrl: string;
 }
 
 export async function findDueSources(
@@ -15,7 +16,7 @@ export async function findDueSources(
   limit = 100,
 ): Promise<DueSource[]> {
   return db
-    .select({ id: sources.id, nextRunAt: sources.nextRunAt, collectorKind: sources.collectorKind })
+    .select({ id: sources.id, nextRunAt: sources.nextRunAt, collectorKind: sources.collectorKind, canonicalEntryUrl: sources.canonicalEntryUrl })
     .from(sources)
     .where(
       and(
