@@ -25,6 +25,7 @@ export const probeResultSchema = z.object({
 export type ProbeResult = z.infer<typeof probeResultSchema>;
 
 export const catalogPageSchema = z.object({
+  goodsType: z.enum(["card","article","resource","equity"]).optional(),
   items: z.array(z.unknown()),
   cursor: z.string().optional(),
   nextCursor: z.string().optional(),

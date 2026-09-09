@@ -1,3 +1,4 @@
+import { runContinuousChannelWork } from './continuous-channel.js';
 import pg from "pg";
 import { createDatabase } from "@price-radar/database";
 import { PlatformTaskPool, IncrementalPublisher } from "./channel-execution.js";
@@ -32,6 +33,7 @@ import type { WorkerConfig } from "./config.js";
 export const CHANNEL_CYCLE_LOCK = 7410319;
 
 export interface ChannelCycleOptions {
+  continuous?: boolean;
   signal?: AbortSignal;
   rawObjectStore?: RawObjectStore;
   /** Force the directory import even when the last one is recent. */
@@ -76,6 +78,8 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
   result.repair = await repairShopApiEntryUrls(db, registry, { limit: 10, signal });
   if (result.repair.repaired > 0) log({ event: "entry_urls_repaired", ...result.repair });
 
+  if(options.continuous && !options.skipCrawl) return runContinuousChannelWork(db,registry,config,options);
+
   let published = false;
   const pool = new PlatformTaskPool(config.channelPlatformConcurrency, signal);
   const publisher = new IncrementalPublisher(async () => {
@@ -106,7 +110,7 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
       crawl.attempted++;
       try {
         const outcome = await crawlSource(db, registry, source.id, {signal, ...(options.rawObjectStore ? {rawObjectStore: options.rawObjectStore} : {})});
-        if (outcome.completeSnapshot && outcome.status === "success") { crawl.complete++; publisher.changed(); }
+        if ((outcome.completeSnapshot||outcome.updatedSnapshot) && outcome.status === "success") { if(outcome.completeSnapshot)crawl.complete++; publisher.changed(); }
         else crawl.failed++;
         log({event: "source_crawled", sourceId: source.id, durationMs: Date.now() - started, ...outcome});
       } catch (error) {
@@ -164,6 +168,8 @@ export async function runChannelCycle(registry: CollectorRegistry, config: Worke
     if (!ready) return { status: "skipped", reason: "migration_0018_pending", durationMs: Date.now() - startedAt };
     const policyReady = (await client.query("select to_regclass('collector_platform_state') is not null as ready")).rows[0].ready as boolean;
     if (!policyReady) return { status: "skipped", reason: "migration_0020_pending", durationMs: Date.now() - startedAt };
+    const scopesReady = (await client.query("select to_regclass('source_catalog_type_snapshots') is not null and exists(select 1 from information_schema.columns where table_name='collector_platform_state' and column_name='cooldown_level') as ready")).rows[0].ready as boolean;
+    if (!scopesReady) return { status: "skipped", reason: "migration_0022_pending", durationMs: Date.now() - startedAt };
     // Parallel transactions require separate pool connections. The session-level
     // cycle lock above stays on its dedicated client until every task settles.
     database = createDatabase(config.databaseUrl);

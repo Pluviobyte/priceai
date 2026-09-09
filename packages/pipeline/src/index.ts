@@ -17,4 +17,4 @@ export * from "./url-security.js";
 export * from "./vetting.js";
 export * from './platform-policy.js';
 
-export { measureCatalogGrowth, recoverGrowthCandidates } from './growth.js';
+export { measureCatalogGrowth, recoverGrowthCandidates, recoverClearedPlatformCandidates } from './growth.js';

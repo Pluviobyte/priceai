@@ -51,3 +51,16 @@ test('failed publication retains changes and flush retries; clean cycles do not 
   pub.changed();await failed.promise;await pub.flush();assert.equal(calls,2);assert.equal(errors,1);
   const empty=new IncrementalPublisher(async()=>assert.fail('empty cycle'),error=>assert.fail(String(error)));await empty.flush();
 });
+
+test('continuous dispatch replenishes a fast platform before the slow platform finishes',async()=>{
+ const {dispatchContinuously}=await import('./channel-execution.js');
+ const abort=new AbortController(),slow=gate(),fastTwice=gate();let fast=0,slowStarted=false;const errors:unknown[]=[];
+ const run=dispatchContinuously({concurrency:2,signal:abort.signal,
+  pull:async busy=>{
+   if(!slowStarted&&!busy.includes('slow')){slowStarted=true;return {platform:'slow'};}
+   if(fast<2&&!busy.includes('fast'))return {platform:'fast'};
+  },
+  work:async job=>{if(job.platform==='slow')await slow.promise;else if(++fast===2)fastTwice.resolve();},
+  onError:error=>errors.push(error)});
+ await fastTwice.promise;assert.equal(fast,2);abort.abort();slow.resolve();await run;assert.deepEqual(errors,[]);
+});

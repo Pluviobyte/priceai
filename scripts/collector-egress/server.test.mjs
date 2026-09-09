@@ -23,3 +23,15 @@ test('relay pacing is configurable without exposing credentials',()=>{
  assert.equal(relayIntervalMs({}),5000);
  for(const value of ['0','-1','abc','2.5']) assert.throws(()=>relayIntervalMs({COLLECTOR_CN_INTERVAL_MS:value}));
 });
+
+test('gzip compresses the relay envelope and the client reads identical JSON',async()=>{
+ const token='g'.repeat(40),body=JSON.stringify({list:Array.from({length:100},()=>({title:'AI subscription',price:10}))});
+ const server=createEgressServer({token,intervalMs:1,fetchImpl:async()=>new Response(body,{headers:{'content-type':'application/json'}})});
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ try{
+  const response=await fetch(`http://127.0.0.1:${server.address().port}/fetch`,{method:'POST',headers:{authorization:`Bearer ${token}`,'accept-encoding':'gzip'},body:JSON.stringify({url:'https://wzyp.cn/shopApi/Shop/info',body:'{"token":"ABC"}'})});
+  assert.equal(response.headers.get('content-encoding'),'gzip');
+  assert.ok(Number(response.headers.get('content-length'))<body.length/2);
+  assert.equal((await response.json()).body,body);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});

@@ -1,3 +1,4 @@
+import { platformKeySql } from './platform-policy.js';
 import { sql } from 'drizzle-orm';
 import type { Database } from '@price-radar/database';
 
@@ -52,6 +53,32 @@ export async function recoverGrowthCandidates(db: Database, limit = 30) {
     select 'automatic_vetting','source_candidate.growth_recheck','source_candidate',id::text,
       'new classifier and Hangzhou egress; normal admission checks still required',
       '{"status":"pending","version":"2026-09-09.1"}'::jsonb from changed
+  ) select id from changed`);
+  return {requeued:rows.length};
+}
+
+/** Resume only automatically parked siblings after their platform has recovered.
+ * Null/old vetting evidence is expected: these shops were never individually probed.
+ */
+export async function recoverClearedPlatformCandidates(db: Database, limit = 100) {
+  const {rows}=await db.execute<{id:string}>(sql`with selected as (
+    select c.id from source_candidates c join collector_platform_state ps on ps.key=${platformKeySql(sql`c.candidate_url`)}
+    where c.status='blocked_egress' and ps.waf_streak=0 and (ps.blocked_until is null or ps.blocked_until<=now())
+      and exists(select 1 from audit_logs a where a.target_id=c.id::text and a.actor_id='automatic_vetting'
+        and a.action='source_candidate.blocked_egress' and a.reason='platform circuit open; no probe issued'
+        and ps.updated_at>a.created_at
+        and not exists(select 1 from audit_logs newer where newer.target_id=c.id::text
+          and newer.action like 'source_candidate.%' and newer.created_at>a.created_at))
+      and not exists(select 1 from audit_logs a where a.target_id=c.id::text and a.actor_id<>'automatic_vetting' and a.action like 'source_candidate.%')
+    order by c.priority desc,c.discovered_at limit ${Math.max(1,Math.min(limit,1000))} for update of c skip locked
+  ), changed as (
+    update source_candidates c set status='pending',next_vet_at=now(),
+      vetting_result=coalesce(c.vetting_result,'{}'::jsonb)||jsonb_build_object('platformRecoveryVersion','2026-09-09.2')
+    from selected where c.id=selected.id returning c.id
+  ), audited as (
+    insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value)
+    select 'automatic_vetting','source_candidate.platform_recovered','source_candidate',id::text,
+      'platform recovered; resume siblings previously parked without a probe','{"status":"pending"}'::jsonb from changed
   ) select id from changed`);
   return {requeued:rows.length};
 }

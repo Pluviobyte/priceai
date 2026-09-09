@@ -630,8 +630,7 @@ export interface VetBatchResult {
   results: VetCandidateResult[];
 }
 
-export async function vetNextCandidates(db: Database, registry: CollectorRegistry, options: VetCandidateOptions & { limit?: number; execute?: (key: string, work: () => Promise<void>) => Promise<void>; onResult?: (result: VetCandidateResult) => void } = {}): Promise<VetBatchResult> {
-  const now = options.now ?? new Date();
+export async function prepareVettingQueue(db: Database, now = new Date()) {
   // Recover interrupted processes and scheduled rechecks without requiring a new directory import.
   await db.update(sourceCandidates).set({ status: "pending" }).where(or(
     and(eq(sourceCandidates.status, "vetting"), lt(sourceCandidates.vettedAt, new Date(now.getTime() - 2 * 60 * 60_000))),
@@ -647,6 +646,12 @@ export async function vetNextCandidates(db: Database, registry: CollectorRegistr
     ) insert into audit_logs(actor_id,action,target_type,target_id,reason,before_value,after_value)
       select ${AUTOMATIC_ACTOR},'source_candidate.blocked_egress','source_candidate',id::text,
         'platform circuit open; no probe issued','{"status":"pending"}'::jsonb,'{"status":"blocked_egress"}'::jsonb from parked`);
+
+}
+
+export async function vetNextCandidates(db: Database, registry: CollectorRegistry, options: VetCandidateOptions & { limit?: number; execute?: (key: string, work: () => Promise<void>) => Promise<void>; onResult?: (result: VetCandidateResult) => void } = {}): Promise<VetBatchResult> {
+  const now = options.now ?? new Date();
+  await prepareVettingQueue(db, now);
   const queue = await findVettableCandidates(db, Math.max(1, options.limit ?? 5), now);
   const summary: VetBatchResult = { attempted: 0, approved: 0, review: 0, rejected: 0, duplicate: 0, adapterNeeded: 0, deferred: 0, blockedEgress: 0, results: [] };
   if (queue.length === 0) return summary;

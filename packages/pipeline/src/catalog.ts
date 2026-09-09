@@ -1,3 +1,4 @@
+import { catalogTypesForSource, promoteCatalogTypes, FULL_CATALOG_INTERVAL_MS, GOODS_TYPES } from './catalog-scope.js';
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { platformRetryAt, isWafChallengeError, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
@@ -29,6 +30,7 @@ export interface CrawlSourceResult {
   runId: string;
   status: "success" | "partial" | "failed";
   completeSnapshot: boolean;
+  updatedSnapshot?: boolean;
   fetchedTotal: number;
   parsedTotal: number;
 }
@@ -61,11 +63,13 @@ async function insertSnapshots(
   sourceId: string,
   offers: readonly RawOfferInput[],
   rawManifestUrl?: string,
+  typeByItem?: ReadonlyMap<string,string>,
 ): Promise<void> {
   const rows = offers.map((offer) => ({
     crawlRunId: runId,
     sourceId,
     sourceItemId: offer.sourceItemId,
+    ...(typeByItem?.get(offer.sourceItemId)?{goodsType:typeByItem.get(offer.sourceItemId)}:{}),
     rawTitle: offer.rawTitle,
     ...(offer.rawDescription ? { rawDescription: offer.rawDescription } : {}),
     ...(offer.rawCategory ? { rawCategory: offer.rawCategory } : {}),
@@ -128,7 +132,12 @@ async function crawlSourceUnlocked(
       canonicalEntryUrl: source.canonicalEntryUrl,
       ...(source.shopToken ? { shopToken: source.shopToken } : {}),
     });
-    const context = { sourceId, now: startedAt, signal };
+    const typed=source.platformKind==='ldxp_shop_api';
+    const requestedTypes=typed && source.enabled && options.promoteSource!==false && process.env.COLLECTOR_SCOPED_REFRESH==='true'
+      ? await catalogTypesForSource(db,sourceId,source.lastSuccessAt,startedAt) : undefined;
+    const fullCoverage=!requestedTypes||requestedTypes.length===GOODS_TYPES.length;
+    const context = { sourceId, now: startedAt, signal, ...(requestedTypes?{catalogTypes:requestedTypes}:{}) };
+    const typeByItem=new Map<string,string>();
     const pages: CatalogPage[] = [];
     const normalizedById = new Map<string, RawOfferInput>();
     let cursor: string | undefined;
@@ -140,11 +149,15 @@ async function crawlSourceUnlocked(
       for (const item of page.items) {
         const normalized = adapter.normalizeItem(item, context);
         normalizedById.set(normalized.sourceItemId, normalized);
+        if(typed&&page.goodsType)typeByItem.set(normalized.sourceItemId,page.goodsType);
       }
       cursor = page.nextCursor;
     } while (cursor);
 
-    const validation = adapter.validateSnapshot(pages);
+    const validation = adapter.validateSnapshot(pages,context);
+    const counts=new Map<string,number>();
+    if(typed)for(const page of pages)if(page.goodsType)counts.set(page.goodsType,(counts.get(page.goodsType)??0)+page.items.length);
+    const catalogScope=typed?{full:fullCoverage,types:[...counts].map(([type,count])=>({type,count}))}:undefined;
     const offers = [...normalizedById.values()];
     const storedManifest = options.rawObjectStore
       ? await options.rawObjectStore.putJson(
@@ -157,6 +170,7 @@ async function crawlSourceUnlocked(
             collectorVersion: "0.1.0",
             capturedAt: startedAt.toISOString(),
             pageCount: pages.length,
+            catalogScope,
             pages,
           },
         )
@@ -171,12 +185,13 @@ async function crawlSourceUnlocked(
       : nextFailedRun(finishedAt, source.consecutiveFailures);
 
     await db.transaction(async (tx) => {
-      await insertSnapshots(tx, run.id, sourceId, offers, storedManifest?.uri);
+      await insertSnapshots(tx, run.id, sourceId, offers, storedManifest?.uri,typeByItem);
       await tx
         .update(crawlRuns)
         .set({
           status: validation.status,
-          completeSnapshot: validation.completeSnapshot,
+          completeSnapshot: validation.completeSnapshot && fullCoverage,
+          ...(catalogScope?{catalogScope}:{}),
           expectedTotal: validation.expectedTotal,
           fetchedTotal: validation.fetchedTotal,
           parsedTotal: validation.parsedTotal,
@@ -200,16 +215,18 @@ async function crawlSourceUnlocked(
         })
         .where(and(eq(crawlRuns.id, run.id), eq(crawlRuns.sourceId, sourceId)));
       if (options.promoteSource !== false) {
+        if(validation.completeSnapshot&&catalogScope)await promoteCatalogTypes(tx,sourceId,run.id);
+        const nextRunAt=validation.completeSnapshot&&!fullCoverage&&source.lastSuccessAt
+          ? new Date(Math.min(health.nextRunAt.getTime(),source.lastSuccessAt.getTime()+FULL_CATALOG_INTERVAL_MS)) : health.nextRunAt;
         await tx
           .update(sources)
           .set({
             ...health,
+            nextRunAt,
             lastCheckedAt: finishedAt,
             ...(validation.completeSnapshot
               ? {
-                  lastSuccessAt: finishedAt,
-                  latestCompleteRunId: run.id,
-                  expectedProductCount: validation.expectedTotal,
+                  ...(fullCoverage?{lastSuccessAt: finishedAt,latestCompleteRunId:run.id,expectedProductCount:validation.expectedTotal}:{}),
                   lastErrorCode: null,
                 }
               : { lastErrorCode: primaryError?.code ?? "partial_snapshot" }),
@@ -219,7 +236,7 @@ async function crawlSourceUnlocked(
       }
     });
 
-    if (validation.completeSnapshot) {
+    if (validation.completeSnapshot && fullCoverage) {
       // Duplicate scoring is advisory. A quality-side failure must never turn a
       // fully persisted source snapshot into a failed crawl or trigger backoff.
       await detectSemanticDuplicatesForRun(db, sourceId, run.id).catch(() => 0);
@@ -232,7 +249,8 @@ async function crawlSourceUnlocked(
     return {
       runId: run.id,
       status: finalStatus,
-      completeSnapshot: validation.completeSnapshot,
+      completeSnapshot: validation.completeSnapshot && fullCoverage,
+      updatedSnapshot: validation.completeSnapshot,
       fetchedTotal: validation.fetchedTotal,
       parsedTotal: validation.parsedTotal,
     };

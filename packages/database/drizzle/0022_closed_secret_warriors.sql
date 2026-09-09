@@ -1,0 +1,1 @@
+ALTER TABLE "collector_platform_state" ADD COLUMN "cooldown_level" integer DEFAULT 0 NOT NULL;

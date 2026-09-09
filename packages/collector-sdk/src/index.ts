@@ -7,6 +7,7 @@ import type {
 } from "@price-radar/schema";
 
 export interface CollectorContext {
+  catalogTypes?: readonly string[];
   sourceId: string;
   now: Date;
   signal: AbortSignal;
@@ -29,7 +30,7 @@ export interface CollectorAdapter {
     cursor?: string,
   ): Promise<CatalogPage>;
 
-  validateSnapshot(pages: readonly CatalogPage[]): SnapshotValidation;
+  validateSnapshot(pages: readonly CatalogPage[], context?: CollectorContext): SnapshotValidation;
 
   normalizeItem(item: unknown, context: CollectorContext): RawOfferInput;
 }

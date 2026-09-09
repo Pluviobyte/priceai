@@ -148,6 +148,20 @@
       "when": 1788932921982,
       "tag": "0020_strong_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788945824068,
+      "tag": "0021_pink_dragon_lord",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788946181519,
+      "tag": "0022_closed_secret_warriors",
+      "breakpoints": true
     }
   ]
 }

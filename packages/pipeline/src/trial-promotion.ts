@@ -1,3 +1,4 @@
+import {promoteCatalogTypes} from './catalog-scope.js';
 import {sql} from 'drizzle-orm';
 import type {Database} from '@price-radar/database';
 
@@ -12,4 +13,5 @@ export async function promoteApprovedTrial(db: Pick<Database, "execute">, source
       and r.complete_snapshot=true and r.status='success' and r.finished_at is not null
     returning s.id`);
   if(!rows.length) throw new Error('approved_trial_not_complete_or_source_mismatch');
+  await promoteCatalogTypes(db,sourceId,runId);
 }

@@ -1,3 +1,6 @@
+import { gzip } from 'node:zlib';
+import { promisify } from 'node:util';
+const compress=promisify(gzip);
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -13,7 +16,7 @@ export function validateRequest(input) {
   if (!body || Array.isArray(body) || Object.keys(body).some(k => !allowed.includes(k))) throw new Error('body_not_allowed');
   const key = body.token ?? body.goods_key;
   if (typeof key !== 'string' || !key.length || key.length > 128 || /[\x00-\x1f]/.test(key)) throw new Error('shop_key_invalid');
-  if (url.pathname.endsWith('goodsList') && (!['card','article','resource','equity'].includes(body.goods_type) || !Number.isInteger(body.current) || body.current < 1 || body.current > 1000 || !Number.isInteger(body.pageSize) || body.pageSize < 1 || body.pageSize > 100)) throw new Error('pagination_invalid');
+  if (url.pathname.endsWith('goodsList') && (!['card','article','resource','equity'].includes(body.goods_type) || !Number.isInteger(body.current) || body.current < 1 || body.current > 1000 || !Number.isInteger(body.pageSize) || body.pageSize < 1 || body.pageSize > 200)) throw new Error('pagination_invalid');
   return { url, body: input.body };
 }
 export function relayIntervalMs(env = process.env) {
@@ -43,8 +46,11 @@ export function createEgressServer({ token, intervalMs = 5000, fetchImpl = fetch
       const parts=[]; let bytes=0;
       for await (const chunk of response.body ?? []) { bytes+=chunk.length; if(bytes>8*1024*1024) throw new Error('response_too_large'); parts.push(chunk); }
       const headers={}; for(const h of ['content-type','retry-after','server']) if(response.headers.has(h)) headers[h]=response.headers.get(h);
-      reply(200,{status:response.status,headers,body:Buffer.concat(parts).toString()});
-      console.log(JSON.stringify({event:'egress_request',path:target.url.pathname,status:response.status,bytes}));
+      const payload=Buffer.from(JSON.stringify({status:response.status,headers,body:Buffer.concat(parts).toString()}));
+      const zipped=payload.length>=1024 && /(?:^|[,\s])gzip(?:[,;\s]|$)/i.test(req.headers['accept-encoding']??'');
+      const encoded=zipped?await compress(payload):payload;
+      res.writeHead(200,{'content-type':'application/json','content-length':String(encoded.length),vary:'Accept-Encoding',...(zipped?{'content-encoding':'gzip'}:{})});res.end(encoded);
+      console.log(JSON.stringify({event:'egress_request',path:target.url.pathname,status:response.status,bytes,wireBytes:encoded.length,compressed:zipped}));
     } catch(error) { reply(502,{error:'egress_request_failed'}); console.error(JSON.stringify({event:'egress_failed',reason:error.message})); }
     finally { busy=false; }
   });

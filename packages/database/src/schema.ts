@@ -223,6 +223,7 @@ export const crawlRuns = pgTable(
     collectorVersion: text("collector_version").notNull(),
     status: crawlRunStatusEnum("status").notNull().default("queued"),
     completeSnapshot: boolean("complete_snapshot").notNull().default(false),
+    catalogScope: jsonb("catalog_scope").$type<{ full: boolean; types: Array<{ type: string; count: number }> }>(),
     expectedTotal: integer("expected_total"),
     fetchedTotal: integer("fetched_total").notNull().default(0),
     parsedTotal: integer("parsed_total").notNull().default(0),
@@ -253,6 +254,7 @@ export const rawOfferSnapshots = pgTable(
     sourceId: uuid("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
+    goodsType: text("goods_type"),
     sourceItemId: text("source_item_id").notNull(),
     rawTitle: text("raw_title").notNull(),
     rawDescription: text("raw_description"),
@@ -1291,6 +1293,7 @@ export const officialStorefronts = pgTable(
 export const collectorPlatformState = pgTable("collector_platform_state", {
   key: text("key").primaryKey(),
   wafStreak: integer("waf_streak").notNull().default(0),
+  cooldownLevel: integer("cooldown_level").notNull().default(0),
   blockedUntil: timestamp("blocked_until", { withTimezone: true }),
   nextRequestAt: timestamp("next_request_at", { withTimezone: true }),
   leaseToken: uuid("lease_token"),
@@ -1300,3 +1303,12 @@ export const collectorPlatformState = pgTable("collector_platform_state", {
   lastServedAt: timestamp("last_served_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Each goods type points to its own verified run, including verified empty lists. */
+export const sourceCatalogTypeSnapshots = pgTable('source_catalog_type_snapshots', {
+  sourceId: uuid('source_id').notNull().references(()=>sources.id,{onDelete:'cascade'}),
+  goodsType: text('goods_type').notNull(),
+  runId: uuid('run_id').notNull().references(()=>crawlRuns.id,{onDelete:'cascade'}),
+  checkedAt: timestamp('checked_at',{withTimezone:true}).notNull(),
+  itemCount: integer('item_count').notNull(),
+},table=>[uniqueIndex('source_catalog_type_uidx').on(table.sourceId,table.goodsType)]);

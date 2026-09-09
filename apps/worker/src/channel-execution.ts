@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 /** Run independent platforms concurrently, keeping all jobs for one platform FIFO. */
 export class PlatformTaskPool {
   private active = new Set<string>();
@@ -77,4 +78,28 @@ export class IncrementalPublisher {
       catch (error) { this.dirty += count; throw error; }
     }
   }
+}
+
+/** Continuously refill free slots; a slow platform never creates a batch barrier. */
+export async function dispatchContinuously<T extends {platform:string}>(options: {
+  concurrency:number;signal:AbortSignal;pull:(busy:readonly string[])=>Promise<T|undefined>;
+  work:(job:T)=>Promise<void>;onError:(error:unknown)=>void;
+}) {
+  const active=new Map<string,Promise<void>>();
+  try {
+    while(!options.signal.aborted) {
+      if(active.size<options.concurrency) {
+        const job=await options.pull([...active.keys()]);
+        if(job) {
+          if(active.has(job.platform)) throw new Error('dispatcher_duplicate_platform');
+          const work=Promise.resolve().then(()=>{options.signal.throwIfAborted();return options.work(job);})
+            .catch(options.onError).finally(()=>{active.delete(job.platform);});
+          active.set(job.platform,work);
+          continue;
+        }
+      }
+      // Abort-aware bounded wait; no per-task timer/listener accumulation.
+      await delay(250,undefined,{signal:options.signal}).catch(()=>undefined);
+    }
+  } finally { await Promise.allSettled(active.values()); }
 }

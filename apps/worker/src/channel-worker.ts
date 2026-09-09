@@ -39,6 +39,7 @@ try {
     try {
       const result = await runChannelCycle(registry, config, {
         signal: idle.signal,
+        continuous: true,
         ...(rawObjectStore ? { rawObjectStore } : {}),
         log: (event) => console.log(JSON.stringify(event)),
       });

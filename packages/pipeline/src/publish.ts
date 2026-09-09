@@ -1,3 +1,4 @@
+import {latestCatalogRowSql} from './catalog-scope.js';
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
@@ -58,7 +59,7 @@ export async function publishLatestSnapshots(
       sources,
       and(
         eq(rawOfferSnapshots.sourceId, sources.id),
-        eq(rawOfferSnapshots.crawlRunId, sources.latestCompleteRunId),
+        latestCatalogRowSql,
       ),
     )
     .where(eq(sources.enabled, true));

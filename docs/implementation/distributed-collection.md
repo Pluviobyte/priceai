@@ -51,3 +51,37 @@ node --import tsx apps/worker/src/cli.ts recover-growth 30
 GitHub Actions 包含全工作区类型检查/测试/构建，真实 PostgreSQL 平台预算、恢复与目录查询测试，以及杭州服务白名单、认证和请求间隔测试。按 main → CI → codex/production → Dokploy 的现有流程发布。
 
 回退时先关闭 COLLECTOR_GROWTH_RECOVERY，并将 COLLECTOR_CN_HOSTS 清空、暂停 LDXP 任务，避免将大量国内来源转回不可达出口。通过原发布流程回退代码；不要清空原始商品或回退数据库迁移。Dokploy 原配置备份保存在 DMIT `/etc/priceai-egress/`（含凭据，禁止公开）。
+
+## Continuous dispatch and scoped catalogs
+
+The channel service continuously replenishes up to `CHANNEL_PLATFORM_CONCURRENCY`
+independent platforms. A slow shop no longer blocks a new job on another platform.
+The bounded CLI still uses its configured batch sizes. Due refreshes precede new
+admissions; candidates retain priority within each platform. Maintenance runs
+independently every minute. Automatically parked candidates are recovered only
+when their platform has cleared, the exact parking audit is present, and no human
+or later candidate decision supersedes that audit.
+
+Apply migrations 0021 and 0022 before deploying this version. With
+`COLLECTOR_SCOPED_REFRESH=true`, LDXP stores a validated snapshot pointer for each
+of card/article/resource/equity. First collection and full scans due after 20 hours
+cover all four types; intermediate refreshes cover known nonempty types. Partial
+updates replace only their own types, including an explicitly verified empty type.
+They do not update `last_success_at` or `latest_complete_run_id`. Publication uses
+per-type pointers, with the legacy full snapshot as fallback for untyped rows.
+
+The LDXP default page size is 200 (other deployments remain 100). Omitting
+`goods_type` is not supported: live samples returned an empty result. The relay
+accepts pages up to 200 and gzip-compresses response envelopes above 1 KiB when
+requested. Pacing remains 3 seconds on Hangzhou until separately measured.
+
+The default `SHOP_API_PLATFORM_COOLDOWN_MS` is 900000: repeated failed recovery
+probes increase the cooldown fourfold (15 minutes, 1 hour, 4 hours, 16 hours,
+24-hour cap). A successful probe resets the level. Retry-After still separately
+extends the next permitted request time. No additional egress IP is required by
+this change.
+
+Measure candidate decisions by their completion audit timestamps, full catalog
+successes by `crawl_runs.finished_at` with `complete_snapshot=true`, and scoped
+updates separately. Neither an HTTP 200 nor a completed candidate decision is a
+new merchant. Short-window hourly extrapolations must include the window length.

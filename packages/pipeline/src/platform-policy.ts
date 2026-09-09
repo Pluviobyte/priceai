@@ -34,7 +34,7 @@ export function platformPolicyConfig() {
     intervalMs: integerEnv('SHOP_API_PLATFORM_INTERVAL_MS', 5000),
     dailyLimit: Math.max(0, Number.isSafeInteger(Number(process.env.SHOP_API_PLATFORM_DAILY_REQUESTS)) ? Number(process.env.SHOP_API_PLATFORM_DAILY_REQUESTS) : 0),
     wafThreshold: integerEnv('SHOP_API_PLATFORM_WAF_THRESHOLD', 3),
-    cooldownMs: integerEnv('SHOP_API_PLATFORM_COOLDOWN_MS', 24 * 60 * 60_000),
+    cooldownMs: integerEnv('SHOP_API_PLATFORM_COOLDOWN_MS', 15 * 60_000),
   };
 }
 /** Used before scheduling, so sleeping/budget-limited platforms consume no batch slots. */
@@ -97,7 +97,10 @@ export class PostgresRequestPolicy implements RequestPolicy {
           waf_streak=case when ${outcome}='success' then 0 when ${outcome}='waf' then waf_streak+1 else waf_streak end,
           blocked_until=case when ${outcome}='success' then null
             when (${outcome}='waf' and waf_streak+1 >= ${this.config.wafThreshold}) or ${slot.recovery}
-              then now()+${this.config.cooldownMs}*interval '1 millisecond' else blocked_until end,
+              then now()+least(86400000::numeric, ${this.config.cooldownMs}::numeric*power(4,least(cooldown_level,8)))*interval '1 millisecond' else blocked_until end,
+          cooldown_level=case when ${outcome}='success' then 0
+            when (${outcome}='waf' and waf_streak+1 >= ${this.config.wafThreshold}) or ${slot.recovery}
+              then least(cooldown_level+1,8) else cooldown_level end,
           next_request_at=greatest(next_request_at, ${retryAt ?? null}::timestamptz),
           updated_at=now() where key=${key} and lease_token=${token}::uuid`);
       }

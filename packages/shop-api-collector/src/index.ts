@@ -194,6 +194,7 @@ function asGoodsItem(value: unknown): GoodsItem {
 export class LdxpShopApiCollector implements CollectorAdapter {
   readonly kind = "shop_api";
   readonly #pageSize: number;
+  readonly #ldxpPageSize: number;
   readonly #fetch = createEgressFetch();
   readonly #requestTimeoutMs: number;
   readonly #userAgent: string;
@@ -204,6 +205,7 @@ export class LdxpShopApiCollector implements CollectorAdapter {
 
   constructor(options: ShopApiCollectorOptions = {}) {
     this.#pageSize = options.pageSize ?? 100;
+    this.#ldxpPageSize = options.pageSize ?? 200;
     this.#requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.#userAgent =
       options.userAgent ?? "AIPriceRadar/0.1 (+https://localhost.invalid/source-policy)";
@@ -370,7 +372,9 @@ export class LdxpShopApiCollector implements CollectorAdapter {
     cursor?: string,
   ): Promise<CatalogPage> {
     if (!source.shopToken) throw new Error("shop_token_required");
-    const state = decodeCursor(cursor);
+    const types=context.catalogTypes??GOODS_TYPES;
+    if(!types.length||types.some(type=>!GOODS_TYPES.includes(type as typeof GOODS_TYPES[number])))throw new Error('invalid_catalog_types');
+    const state = cursor ? decodeCursor(cursor) : {typeIndex:GOODS_TYPES.indexOf(types[0] as typeof GOODS_TYPES[number]),page:1};
     const goodsType = GOODS_TYPES[state.typeIndex];
     if (!goodsType) throw new Error("invalid_goods_type_index");
 
@@ -383,22 +387,25 @@ export class LdxpShopApiCollector implements CollectorAdapter {
           token: source.shopToken,
           goods_type: goodsType,
           current: state.page,
-          pageSize: this.#pageSize,
+          pageSize: source.platformKind==='ldxp_shop_api' ? this.#ldxpPageSize : this.#pageSize,
         },
         context.signal,
       ),
     );
 
-    const hasMorePages = state.page * this.#pageSize < data.total;
-    const hasMoreTypes = state.typeIndex + 1 < GOODS_TYPES.length;
+    const pageSize=source.platformKind==='ldxp_shop_api' ? this.#ldxpPageSize : this.#pageSize;
+    const hasMorePages = state.page * pageSize < data.total;
+    const selectedIndex=types.indexOf(goodsType);
+    const hasMoreTypes = selectedIndex + 1 < types.length;
     const nextCursor = hasMorePages
       ? encodeCursor({ typeIndex: state.typeIndex, page: state.page + 1 })
       : hasMoreTypes
-        ? encodeCursor({ typeIndex: state.typeIndex + 1, page: 1 })
+        ? encodeCursor({ typeIndex: GOODS_TYPES.indexOf(types[selectedIndex+1] as typeof GOODS_TYPES[number]), page: 1 })
         : undefined;
 
     return {
       items: data.list,
+      goodsType,
       cursor: encodeCursor(state),
       ...(nextCursor ? { nextCursor } : {}),
       expectedTotal: data.total,
@@ -406,7 +413,8 @@ export class LdxpShopApiCollector implements CollectorAdapter {
     };
   }
 
-  validateSnapshot(pages: readonly CatalogPage[]): SnapshotValidation {
+  validateSnapshot(pages: readonly CatalogPage[], context?: CollectorContext): SnapshotValidation {
+    const expectedTypes=context?.catalogTypes??GOODS_TYPES;
     const expectedByType = new Map<number, number>();
     const fetchedByType = new Map<number, number>();
     const ids = new Set<string>();
@@ -441,7 +449,7 @@ export class LdxpShopApiCollector implements CollectorAdapter {
 
     const expectedTotal = [...expectedByType.values()].reduce((sum, value) => sum + value, 0);
     const fetchedTotal = [...fetchedByType.values()].reduce((sum, value) => sum + value, 0);
-    if (expectedByType.size !== GOODS_TYPES.length) {
+    if (expectedByType.size !== expectedTypes.length || expectedTypes.some(type=>!expectedByType.has(GOODS_TYPES.indexOf(type as typeof GOODS_TYPES[number])))) {
       issues.push({
         code: "missing_goods_type",
         message: "Not every Shop API goods type completed.",
