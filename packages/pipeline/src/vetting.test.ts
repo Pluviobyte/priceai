@@ -45,7 +45,7 @@ test("profiles flag catalogs copied from an existing source and prices far below
   const titles = ["ChatGPT Plus 一个月 代充 首登质保", "ChatGPT Pro 5x 成品号 质保7天", "Claude Pro 月付 直充"];
   const items = titles.map((title) => item(title, "1"));
   const profile = buildSourceQualityProfile(items, {
-    comparables: new Map([["chatgpt-plus", [20, 22, 23, 25, 26]], ["chatgpt-pro", [400, 420, 450, 460, 480]], ["claude-pro", [60, 65, 67, 70, 72]]]),
+    comparables: new Map([["chatgpt-plus", [20, 22, 23, 25, 26]], ["chatgpt-pro-5x", [400, 420, 450, 460, 480]], ["claude-pro", [60, 65, 67, 70, 72]]]),
     otherCatalogs: [{ sourceId: "mirror", titleTokens: titles.map(tokens) }, { sourceId: "unrelated", titleTokens: [tokens("Gemini Pro 年卡")] }],
   });
   assert.equal(profile.catalogOverlapMax, 1);

@@ -1,3 +1,4 @@
+import { promoteApprovedTrial } from './trial-promotion.js';
 import { admissionAvailableSql } from './platform-policy.js';
 import { and, desc, eq, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
@@ -467,6 +468,13 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     const probes = await registry.probe(safeUrl, signal);
     const selected = probes.find((probe) => probe.supported && probe.identity);
     if (!selected?.identity) {
+      const missing = probes.find(probe => /shop_api_rejected:.*(?:不存在|已关闭|已删除|已停用)/.test(probe.reason ?? ''));
+      if (missing) {
+        const reasons = [missing.reason!];
+        await finishCandidate(db, candidate, {status:'rejected',nextVetAt:new Date(now.getTime()+30*86_400_000),
+          vettingResult:{...base,verdict:'rejected',reasons,probes}}, 'reject', reasons, {});
+        return {candidateId,status:'rejected',reasons};
+      }
       const deferredProbe = probes.find(probe => platformRetryAt(probe.reason));
       if (deferredProbe) return park(deferredProbe.reason!, platformRetryAt(deferredProbe.reason)!);
       if (probes.some((probe) => wafBlocked(probe.reason))) {
@@ -569,7 +577,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
 
     if (decision.verdict === "approved") {
       await db.transaction(async (tx) => {
-        await tx.update(sources).set({ enabled: true, healthStatus: "retrying", nextRunAt: now, consecutiveFailures: 0, updatedAt: now }).where(eq(sources.id, sourceId));
+        await promoteApprovedTrial(tx, sourceId, trial.id, new Date(Date.now() + (identity.platformKind === 'ldxp_shop_api' ? 12 * 60 : 15) * 60_000));
         await tx.update(sourceSubmissions).set({ status: "approved", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));
         if (identity.contact && Object.keys(identity.contact).length > 0) {
           await tx.execute(sql`update merchants set contact_public=coalesce(contact_public, ${JSON.stringify(identity.contact)}::jsonb), updated_at=now() where id=(select merchant_id from sources where id=${sourceId}::uuid) and contact_public is null`);

@@ -104,7 +104,7 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
       }
     }
     result.crawl = crawl;
-    if (crawl.complete > 0) {
+    if (crawl.complete > 0 || (result.vetting?.approved ?? 0) > 0) {
       await seedCanonicalProducts(db);
       const publication = await publishLatestSnapshots(db);
       let publicSnapshot: unknown = null;

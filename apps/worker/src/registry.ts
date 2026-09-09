@@ -1,3 +1,4 @@
+import { familyForHost } from '@price-radar/source-signatures';
 import type { Database } from "@price-radar/database";
 import { PostgresRequestPolicy } from "@price-radar/pipeline";
 import { InMemoryCollectorRegistry, mentionsWafChallenge, platformRetryAt } from "@price-radar/collector-sdk";
@@ -14,7 +15,7 @@ class WorkerCollectorRegistry extends InMemoryCollectorRegistry {
     // after that API has already returned an explicit challenge or cooldown.
     if (/^\/(shop|item)\//.test(url.pathname)) {
       const probe = await this.get("shop_api")!.probe(url, signal);
-      if (probe.supported || mentionsWafChallenge(probe.reason) || platformRetryAt(probe.reason)) return [probe];
+      if (familyForHost(url.hostname)?.platformKind === 'ldxp_shop_api' || probe.reason?.startsWith('shop_api_rejected:') || probe.supported || mentionsWafChallenge(probe.reason) || platformRetryAt(probe.reason)) return [probe];
     }
     return super.probe(url, signal);
   }

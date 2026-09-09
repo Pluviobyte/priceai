@@ -3,7 +3,7 @@ import test from 'node:test';
 import { classifyOffer } from './index.js';
 const classify = (rawTitle: string) => classifyOffer({sourceItemId:'test',rawTitle,price:'99',rawPriceText:'99',currency:'CNY',stockState:'in_stock',productUrl:'https://example.com/item/1',capturedAt:new Date().toISOString(),rawPayloadHash:'1234567890abcdef'});
 test('real merchant spelling variants retain explicit plan identity', () => {
-  for (const [title,slug] of [['GPT-Plus 年订阅','chatgpt-plus'],['GPT 一个月 Plus代充（卡付）','chatgpt-plus'],['Claude 5x（正价卡付 质保）','claude-max-5x'],['Claude 20x（正价卡付 质保）','claude-max-20x'],['ChatGPT Pro20X成品','chatgpt-pro']]) assert.equal(classify(title!).canonicalProductSlug,slug,title!);
+  for (const [title,slug] of [['GPT-Plus 年订阅','chatgpt-plus'],['GPT 一个月 Plus代充（卡付）','chatgpt-plus'],['Claude 5x（正价卡付 质保）','claude-max-5x'],['Claude 20x（正价卡付 质保）','claude-max-20x'],['ChatGPT Pro20X成品','chatgpt-pro-20x']]) assert.equal(classify(title!).canonicalProductSlug,slug,title!);
 });
 test('unknown delivery does not lower product confidence, mixed delivery stays unknown',()=>{
   assert.equal(classify('Claude 5x').confidence,0.9);
@@ -32,4 +32,11 @@ test('resource categories do not replace a recognized subscription',()=>{
 test('bundled mail and registration age are not standalone mailbox specifications',()=>{
   assert.equal(classify('G-Free普号 codex未接phone 微软邮箱').canonicalProductSlug,'chatgpt-account');
   assert.equal(classify('Gmail邮箱 注册满3个月 链接可用7天').attributes.durationDays,undefined);
+});
+
+test('explicit Pro tiers stay separate and unspecified accounts cannot set a plan minimum',()=>{
+ assert.equal(classify('GPT-PRO-5X CDK').canonicalProductSlug,'chatgpt-pro-5x');
+ assert.equal(classify('GPT Pro20x 拼车').canonicalProductSlug,'chatgpt-pro-20x');
+ assert.ok(classify('GPT Pro5x Pro20x 成品').confidence<0.75);
+ const r=classify('Gemini三个月成品号');assert.equal(r.canonicalProductSlug,'gemini-account');assert.equal(r.attributes.offerMode,'unknown');
 });

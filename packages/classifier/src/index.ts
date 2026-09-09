@@ -5,7 +5,7 @@ import type {
   RawOfferInput,
 } from "@price-radar/schema";
 
-const VERSION = "rules-2026-09-09.1";
+const VERSION = "rules-2026-09-09.2";
 
 interface ProductRule {
   slug: string;
@@ -28,12 +28,22 @@ const productRules: ProductRule[] = [
     include: [/(?:chat\s*gpt|gpt).*\bgo\b/i],
   },
   {
+    slug: "chatgpt-pro-5x",
+    include: [/(?:chat\s*gpt|gpt).*?(?:pro[-\s]*5\s*x|5\s*x[-\s]*pro)/i],
+    exclude: [/教程|免费|free/i],
+  },
+  {
+    slug: "chatgpt-pro-20x",
+    include: [/(?:chat\s*gpt|gpt).*?(?:pro[-\s]*20\s*x|20\s*x[-\s]*pro)/i],
+    exclude: [/教程|免费|free/i],
+  },
+  {
     slug: "chatgpt-pro",
     include: [
       /\bchat\s*gpt\b.*\bpro(?:\b|(?=20x|5x))/i,
       /\bgpt[-\s]*(?:5\s*x|20\s*x)?[-\s]*pro(?:\b|(?=20x|5x))/i,
     ],
-    exclude: [/教程|免费|free/i],
+    exclude: [/教程|免费|free|(?:5|20)\s*x/i],
   },
   {
     slug: "chatgpt-plus",
@@ -95,6 +105,7 @@ const productRules: ProductRule[] = [
 const additionalRules: ProductRule[] = [
   { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i] },
   { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
+  { slug: 'gemini-account', include: [/gemini.*(?:账号|成品|账户)/i] },
   { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i] },
   { slug: 'supergrok-heavy', include: [/(?:super\s*)?grok.*heavy/i] },
   { slug: 'cursor-account', include: [/cursor.*(?:账号|成品|账户)/i] },
@@ -303,7 +314,7 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   // Product confidence is independent of delivery metadata. Mixed product
   // identities remain quarantined; unknown/mixed modes cannot win default ranking.
   const confidence = !product.slug ? 0.2 : product.conflicts.length ? 0.6 : 0.9;
-  if (mode.conflicts.length) attributes.offerMode = "unknown";
+  if (mode.conflicts.length || product.slug?.endsWith('-account')) attributes.offerMode = "unknown";
 
   return {
     canonicalProductSlug: product.slug,

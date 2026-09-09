@@ -1,3 +1,4 @@
+import { promoteApprovedTrial } from './trial-promotion.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -127,6 +128,20 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       const queue = await findVettableCandidates(db,1000);
       assert.ok(queue.every(row=>!row.candidateUrl.includes('wzyp.cn')));
       assert.ok(queue.some(row=>row.candidateUrl.includes('recovery.example')));
+    });
+    await t.test('only complete source-owned approved trials can become live snapshots', async () => {
+      const sourceId=randomUUID(),otherId=randomUUID(),runId=randomUUID();
+      await db.execute(sql`insert into sources(id,platform_kind,platform_merchant_id,canonical_entry_url,collector_kind)
+        values(${sourceId}::uuid,'test','trial-owner','https://trial.example/','test'),
+          (${otherId}::uuid,'test','other-owner','https://other.example/','test')`);
+      await db.execute(sql`insert into crawl_runs(id,source_id,collector_kind,collector_version,status,complete_snapshot,finished_at,expected_total)
+        values(${runId}::uuid,${sourceId}::uuid,'test','1','partial',false,now(),1)`);
+      await assert.rejects(promoteApprovedTrial(db,sourceId,runId,new Date()),/not_complete/);
+      await db.execute(sql`update crawl_runs set status='success',complete_snapshot=true where id=${runId}::uuid`);
+      await assert.rejects(promoteApprovedTrial(db,otherId,runId,new Date()),/source_mismatch/);
+      await promoteApprovedTrial(db,sourceId,runId,new Date(Date.now()+43200000));
+      const live=await db.execute(sql`select latest_complete_run_id,enabled,health_status from sources where id=${sourceId}::uuid`);
+      assert.equal(live.rows[0]!.latest_complete_run_id,runId);assert.equal(live.rows[0]!.enabled,true);assert.equal(live.rows[0]!.health_status,'healthy');
     });
   } finally {
     await handle.close();

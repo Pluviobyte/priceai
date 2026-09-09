@@ -18,6 +18,9 @@ const PRODUCTS = [
 ] as const;
 
 const ADDITIONAL_PRODUCTS = [
+  ['OpenAI','chatgpt-pro-5x','ChatGPT Pro 5x'],
+  ['OpenAI','chatgpt-pro-20x','ChatGPT Pro 20x'],
+  ['Google','gemini-account','Gemini 账号（套餐待确认）'],
   ['OpenAI','chatgpt-account','ChatGPT 普通账号'],
   ['Anthropic','claude-account','Claude 普通账号 / 兑换号'],
   ['xAI','grok-account','Grok 普通账号 / 体验号'],
