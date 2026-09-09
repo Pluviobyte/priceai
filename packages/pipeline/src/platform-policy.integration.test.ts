@@ -11,7 +11,7 @@ import { createDatabase } from '@price-radar/database';
 import { InMemoryCollectorRegistry, PlatformDeferredError, WafChallengeError } from '@price-radar/collector-sdk';
 import { PostgresRequestPolicy, platformKey } from './platform-policy.js';
 import { recoverGrowthCandidates, measureCatalogGrowth } from './growth.js';
-import { findVettableCandidates } from './scheduler.js';
+import { findDueSources, findVettableCandidates } from './scheduler.js';
 import { vetNextCandidates } from './vetting.js';
 
 // Explicit opt-in. Creates and drops its OWN database, never truncates caller data.
@@ -68,6 +68,30 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       await db.execute(sql`update collector_platform_state set budget_day=(now() at time zone 'UTC')::date-1 where key='host:budget.example'`);
       await limited.run('budget.example', async () => 2, signal);
     });
+    await t.test('zero daily limit keeps requesting beyond the old quota and scheduling candidates', async () => {
+      const unlimited = new PostgresRequestPolicy(db, { ...config, dailyLimit: 0 });
+      await db.execute(sql`insert into collector_platform_state(key,budget_day,request_count)
+        values('host:unlimited.example',(now() at time zone 'UTC')::date,3000)`);
+      assert.equal(await unlimited.run('unlimited.example', async () => 'ok', signal), 'ok');
+      await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind)
+        values('https://unlimited.example/shop/a','directory')`);
+      await db.execute(sql`update collector_platform_state set next_request_at=null where key='host:unlimited.example'`);
+      const prior=process.env.SHOP_API_PLATFORM_DAILY_REQUESTS;
+      process.env.SHOP_API_PLATFORM_DAILY_REQUESTS='0';
+      try { assert.ok((await findVettableCandidates(db,1000)).some(r=>r.candidateUrl.includes('unlimited.example'))); }
+      finally { if(prior===undefined) delete process.env.SHOP_API_PLATFORM_DAILY_REQUESTS; else process.env.SHOP_API_PLATFORM_DAILY_REQUESTS=prior; }
+    });
+    await t.test('oldest successful source goes first; a future retry remains deferred', async () => {
+      const ids=[randomUUID(),randomUUID(),randomUUID()];
+      await db.execute(sql`insert into sources(id,platform_kind,platform_merchant_id,canonical_entry_url,collector_kind,enabled,last_success_at,next_run_at)
+        values(${ids[0]}::uuid,'test','fresh','https://fresh.example/','test',true,now()-interval '13 hours',now()-interval '4 hours'),
+        (${ids[1]}::uuid,'test','stale','https://stale.example/','test',true,now()-interval '25 hours',now()-interval '1 hour'),
+        (${ids[2]}::uuid,'test','retry','https://retry.example/','test',true,null,now()+interval '1 hour')`);
+      assert.deepEqual((await findDueSources(db,new Date(),10)).map(r=>r.id),[ids[1],ids[0]]);
+      const report=await measureCatalogGrowth(db);
+      assert.equal(report.sources_success_24h,1);
+      assert.equal(report.sources_missing_24h,2);
+    });
     await t.test('Retry-After cooldown is persisted without marking WAF or issuing another request', async () => {
       await assert.rejects(policy.run('busy.example', async () => {
         throw new PlatformDeferredError(new Date(Date.now() + 120000), 'server_retry_after');
@@ -116,7 +140,7 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       const recovered = await db.execute(sql`select status from source_candidates where candidate_url='https://legacy.example/shop/a'`);
       assert.equal(recovered.rows[0]!.status, 'pending');
     });
-    await t.test('growth recovery is one-time and admission cap preserves other hosts', async () => {
+    await t.test('growth recovery is one-time and more than 30 daily attempts do not stop admission', async () => {
       await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind,status,platform_kind,vetting_result)
         values('https://recovery.example/','directory','rejected','kami','{"version":"vetting-old","reasons":["no_ai_relevant_items"]}'::jsonb)`);
       assert.equal((await recoverGrowthCandidates(db)).requeued,1);
@@ -125,8 +149,9 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       await db.execute(sql`update collector_platform_state set blocked_until=null,lease_until=null,next_request_at=null,request_count=0 where key='ldxp_shop_api'`);
       await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind,status,platform_kind,vetted_at,vetting_result)
         select 'https://wzyp.cn/shop/daily-'||n,'directory','review','ldxp_shop_api',now(),'{"version":"vetting-2026-09-09.1"}'::jsonb from generate_series(1,30) n`);
+      await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind,status,platform_kind) values('https://wzyp.cn/shop/after-daily-cap','directory','pending','ldxp_shop_api')`);
       const queue = await findVettableCandidates(db,1000);
-      assert.ok(queue.every(row=>!row.candidateUrl.includes('wzyp.cn')));
+      assert.ok(queue.some(row=>row.candidateUrl.includes('wzyp.cn')));
       assert.ok(queue.some(row=>row.candidateUrl.includes('recovery.example')));
     });
     await t.test('only complete source-owned approved trials can become live snapshots', async () => {

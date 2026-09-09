@@ -163,23 +163,9 @@ async function crawlSourceUnlocked(
       : null;
     const finishedAt = new Date();
     const primaryError = validation.issues.find((issue) => issue.severity === "error");
-    let adaptiveIntervalMs = options.successIntervalMs;
-    if (adaptiveIntervalMs === undefined && source.platformKind === 'ldxp_shop_api') {
-      // A full catalog needs several requests. Refresh at most twice daily by
-      // default, and spend less on catalogs with no confirmed stock.
-      const stocked = [...normalizedById.values()].some(item => item.stockState === 'in_stock' || item.stockState === 'low_stock');
-      adaptiveIntervalMs = (stocked ? 12 : 24) * 60 * 60_000;
-    }
-    if (adaptiveIntervalMs === undefined && source.latestCompleteRunId) {
-      const previous = await db.select({ sourceItemId: rawOfferSnapshots.sourceItemId, rawPayloadHash: rawOfferSnapshots.rawPayloadHash }).from(rawOfferSnapshots).where(eq(rawOfferSnapshots.crawlRunId, source.latestCompleteRunId));
-      const previousById = new Map(previous.map((item) => [item.sourceItemId, item.rawPayloadHash]));
-      let changed = 0;
-      for (const offer of offers) if (previousById.get(offer.sourceItemId) !== offer.rawPayloadHash) changed += 1;
-      for (const item of previous) if (!normalizedById.has(item.sourceItemId)) changed += 1;
-      const denominator = Math.max(1, new Set([...previous.map((item) => item.sourceItemId), ...offers.map((item) => item.sourceItemId)]).size);
-      const changeRate = changed / denominator;
-      adaptiveIntervalMs = changeRate >= 0.2 ? 15 * 60_000 : changeRate >= 0.05 ? 30 * 60_000 : changeRate > 0 ? 60 * 60_000 : 4 * 60 * 60_000;
-    }
+    // Reserve time for the rest of the catalog: every source is due twice daily,
+    // rather than repeatedly refreshing volatile shops while others wait.
+    const adaptiveIntervalMs = options.successIntervalMs ?? 12 * 60 * 60_000;
     const health = validation.completeSnapshot
       ? nextHealthyRun(finishedAt, adaptiveIntervalMs)
       : nextFailedRun(finishedAt, source.consecutiveFailures);

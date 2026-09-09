@@ -75,17 +75,6 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
   result.repair = await repairShopApiEntryUrls(db, registry, { limit: 10, signal });
   if (result.repair.repaired > 0) log({ event: "entry_urls_repaired", ...result.repair });
 
-  if (config.sourceDiscoveryEnabled && !options.skipVetting) {
-    if (process.env.COLLECTOR_GROWTH_RECOVERY === 'true') {
-      const recovery = await recoverGrowthCandidates(db, 30);
-      if (recovery.requeued) log({event:'growth_candidates_requeued',...recovery});
-    }
-    const batch = await vetNextCandidates(db, registry, { limit: config.candidateVettingBatch, signal, ...(options.rawObjectStore ? { rawObjectStore: options.rawObjectStore } : {}) });
-    const { results, ...counts } = batch;
-    result.vetting = counts;
-    for (const item of results) log({ event: "candidate_vetted", ...item, profile: undefined });
-  }
-
   let published = false;
   if (!options.skipCrawl) {
     const due = (await findDueSources(db, new Date(), config.channelCrawlBatch)).filter((source) => source.collectorKind !== "browser");
@@ -104,7 +93,21 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
       }
     }
     result.crawl = crawl;
-    if (crawl.complete > 0 || (result.vetting?.approved ?? 0) > 0) {
+  }
+
+  if (config.sourceDiscoveryEnabled && !options.skipVetting) {
+    if (process.env.COLLECTOR_GROWTH_RECOVERY === 'true') {
+      const recovery = await recoverGrowthCandidates(db, 100);
+      if (recovery.requeued) log({event:'growth_candidates_requeued',...recovery});
+    }
+    const batch = await vetNextCandidates(db, registry, { limit: config.candidateVettingBatch, signal, ...(options.rawObjectStore ? { rawObjectStore: options.rawObjectStore } : {}) });
+    const { results, ...counts } = batch;
+    result.vetting = counts;
+    for (const item of results) log({ event: "candidate_vetted", ...item, profile: undefined });
+  }
+
+  if (!options.skipCrawl) {
+    if ((result.crawl?.complete ?? 0) > 0 || (result.vetting?.approved ?? 0) > 0) {
       await seedCanonicalProducts(db);
       const publication = await publishLatestSnapshots(db);
       let publicSnapshot: unknown = null;

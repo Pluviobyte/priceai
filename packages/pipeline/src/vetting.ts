@@ -1,5 +1,4 @@
 import { promoteApprovedTrial } from './trial-promotion.js';
-import { admissionAvailableSql } from './platform-policy.js';
 import { and, desc, eq, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { platformRetryAt, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
@@ -407,7 +406,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
   const claimed = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(7410320)`);
     return tx.update(sourceCandidates).set({ status: "vetting", vettedAt: now })
-    .where(and(eq(sourceCandidates.id, candidateId), eq(sourceCandidates.status, "pending"), admissionAvailableSql(platformKeySql(sql`${sourceCandidates.candidateUrl}`)), or(sql`${sourceCandidates.nextVetAt} is null`, sql`${sourceCandidates.nextVetAt} <= ${now}`)))
+    .where(and(eq(sourceCandidates.id, candidateId), eq(sourceCandidates.status, "pending"), or(sql`${sourceCandidates.nextVetAt} is null`, sql`${sourceCandidates.nextVetAt} <= ${now}`)))
     .returning({
       id: sourceCandidates.id,
       sourceId: sourceCandidates.sourceId,
@@ -577,7 +576,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
 
     if (decision.verdict === "approved") {
       await db.transaction(async (tx) => {
-        await promoteApprovedTrial(tx, sourceId, trial.id, new Date(Date.now() + (identity.platformKind === 'ldxp_shop_api' ? 12 * 60 : 15) * 60_000));
+        await promoteApprovedTrial(tx, sourceId, trial.id, new Date(Date.now() + 12 * 60 * 60_000));
         await tx.update(sourceSubmissions).set({ status: "approved", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));
         if (identity.contact && Object.keys(identity.contact).length > 0) {
           await tx.execute(sql`update merchants set contact_public=coalesce(contact_public, ${JSON.stringify(identity.contact)}::jsonb), updated_at=now() where id=(select merchant_id from sources where id=${sourceId}::uuid) and contact_public is null`);

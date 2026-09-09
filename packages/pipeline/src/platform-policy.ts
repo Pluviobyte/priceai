@@ -22,7 +22,7 @@ function integerEnv(name: string, fallback: number): number {
 export function platformPolicyConfig() {
   return {
     intervalMs: integerEnv('SHOP_API_PLATFORM_INTERVAL_MS', 5000),
-    dailyLimit: integerEnv('SHOP_API_PLATFORM_DAILY_REQUESTS', 3000),
+    dailyLimit: Math.max(0, Number.isSafeInteger(Number(process.env.SHOP_API_PLATFORM_DAILY_REQUESTS)) ? Number(process.env.SHOP_API_PLATFORM_DAILY_REQUESTS) : 0),
     wafThreshold: integerEnv('SHOP_API_PLATFORM_WAF_THRESHOLD', 3),
     cooldownMs: integerEnv('SHOP_API_PLATFORM_COOLDOWN_MS', 24 * 60 * 60_000),
   };
@@ -32,16 +32,7 @@ export function platformAvailableSql(key: SQL): SQL {
   const { dailyLimit } = platformPolicyConfig();
   return sql`not exists (select 1 from collector_platform_state ps where ps.key=${key} and
     (ps.blocked_until > now() or ps.lease_until > now() or ps.next_request_at > now() or
-      (ps.budget_day=(now() at time zone 'UTC')::date and ps.request_count >= ${dailyLimit})))`;
-}
-
-/** Cap candidate attempts separately from HTTP requests, leaving budget for refreshes. */
-export function admissionAvailableSql(key: SQL): SQL {
-  const limit = integerEnv('LDXP_DAILY_CANDIDATES', 30);
-  return sql`(${key}<>'ldxp_shop_api' or (select count(*) from source_candidates admission
-    where admission.platform_kind='ldxp_shop_api'
-      and (admission.vetting_result->>'version'='vetting-2026-09-09.1' or admission.status='vetting')
-      and admission.vetted_at >= ((date_trunc('day',now() at time zone 'UTC')) at time zone 'UTC')) < ${limit})`;
+      (${dailyLimit} > 0 and ps.budget_day=(now() at time zone 'UTC')::date and ps.request_count >= ${dailyLimit})))`;
 }
 
 /** Each HTTP attempt reserves one slot. A token fences completion after lease expiry.
@@ -67,7 +58,7 @@ export class PostgresRequestPolicy implements RequestPolicy {
         const now = new Date(row.now).getTime();
         if (row.blocked_until && +new Date(row.blocked_until) > now)
           throw new PlatformDeferredError(new Date(row.blocked_until), 'circuit_open');
-        if (row.today && row.request_count >= this.config.dailyLimit)
+        if (this.config.dailyLimit > 0 && row.today && row.request_count >= this.config.dailyLimit)
           throw new PlatformDeferredError(new Date(row.next_day), 'daily_budget');
         const wait = Math.max(0, +(row.lease_until ? new Date(row.lease_until) : 0) - now,
           +(row.next_request_at ? new Date(row.next_request_at) : 0) - now);

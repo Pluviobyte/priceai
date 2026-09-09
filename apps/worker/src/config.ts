@@ -46,10 +46,10 @@ export function readWorkerConfig(
     schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS ?? 30_000),
     priceRefreshIntervalMs: Number(env.PRICE_REFRESH_INTERVAL_MS ?? 60 * 60 * 1_000),
     officialSubscriptionRefreshIntervalMs: Number(env.OFFICIAL_SUBSCRIPTION_REFRESH_INTERVAL_MS ?? 24 * 60 * 60 * 1_000),
-    channelWorkerTickMs: positiveNumber(env.CHANNEL_WORKER_TICK_MS, 60_000),
+    channelWorkerTickMs: positiveNumber(env.CHANNEL_WORKER_TICK_MS, 5_000),
     sourceDirectoryImportIntervalMs: positiveNumber(env.SOURCE_DIRECTORY_IMPORT_INTERVAL_MS, 24 * 60 * 60 * 1_000),
-    candidateVettingBatch: positiveNumber(env.CANDIDATE_VETTING_BATCH, 5),
-    channelCrawlBatch: positiveNumber(env.CHANNEL_CRAWL_BATCH, 20),
+    candidateVettingBatch: positiveNumber(env.CANDIDATE_VETTING_BATCH, 20),
+    channelCrawlBatch: positiveNumber(env.CHANNEL_CRAWL_BATCH, 50),
     qualityProfileMaxAgeMs: positiveNumber(env.QUALITY_PROFILE_MAX_AGE_MS, 7 * 24 * 60 * 60 * 1_000),
     sourceDiscoveryEnabled: (env.SOURCE_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
     ...(env.BROWSER_EXECUTABLE_PATH

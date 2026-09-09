@@ -16,7 +16,14 @@ export async function measureCatalogGrowth(db: Database) {
     join sources s on s.id=o.source_id join merchants m on m.id=s.merchant_id
     join canonical_products cp on cp.id=o.canonical_product_id
     where s.enabled and m.status='active' and cp.status='active'`);
-  return rows[0];
+  const coverage = await db.execute(sql`select
+    count(*)::int as enabled_sources,
+    count(*) filter(where last_success_at > now()-interval '24 hours')::int as sources_success_24h,
+    count(*) filter(where last_success_at is null or last_success_at <= now()-interval '24 hours')::int as sources_missing_24h,
+    count(*) filter(where health_status='blocked_egress')::int as sources_blocked_egress,
+    count(*) filter(where health_status in ('failing','retrying'))::int as sources_retrying
+    from sources where enabled`);
+  return {...rows[0], ...coverage.rows[0]};
 }
 
 /** Re-evaluate only automatic decisions explained by the repaired classifier or

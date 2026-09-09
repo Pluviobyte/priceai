@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { sources, sourceSubmissions, type Database } from "@price-radar/database";
 
-import { admissionAvailableSql, platformAvailableSql, platformKeySql } from "./platform-policy.js";
+import { platformAvailableSql, platformKeySql } from "./platform-policy.js";
 
 export interface DueSource {
   id: string;
@@ -24,7 +24,7 @@ export async function findDueSources(
         or(isNull(sources.nextRunAt), lte(sources.nextRunAt, now)),
       ),
     )
-    .orderBy(asc(sources.nextRunAt))
+    .orderBy(sql`${sources.lastSuccessAt} asc nulls first`, sql`${sources.nextRunAt} asc nulls first`, asc(sources.id))
     .limit(limit);
 }
 
@@ -63,7 +63,7 @@ export async function findVettableCandidates(
         row_number() over (partition by ${key} order by c.priority desc, c.discovered_at, c.id) as platform_rank
       from source_candidates c left join collector_platform_state ps on ps.key=${key}
       where c.status='pending' and (c.next_vet_at is null or c.next_vet_at <= ${now})
-        and ${platformAvailableSql(key)} and ${admissionAvailableSql(key)}
+        and ${platformAvailableSql(key)}
     ) select id, "candidateUrl", priority from ranked
       order by platform_rank, last_served_at asc nulls first, priority desc, discovered_at, id
       limit ${Math.max(1, limit)}
