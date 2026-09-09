@@ -36,6 +36,22 @@ test("the two tabs and the display toggle are separate dimensions, and old view 
   assert.equal(parseChannelFilters({ view: "merchants", sort: "price" }).sort, "freshness");
 });
 
+test("merchant layouts and compatible links preserve filters and pagination", () => {
+  const filters = parseChannelFilters({ scope: "merchants", layout: "table", q: "shop.example", sort: "low_price", page: "2" });
+  assert.equal(filters.view, "merchants");
+  assert.equal(filters.layout, "table");
+  assert.equal(filters.sort, "low_price");
+  const next = new URL(channelHref(filters, { page: 3 }), "http://localhost");
+  assert.equal(next.searchParams.get("layout"), "table");
+  assert.equal(next.searchParams.get("q"), "shop.example");
+  assert.equal(next.searchParams.get("page"), "3");
+  const compare = new URL(channelHref(filters, { view: "compare" }), "http://localhost");
+  assert.equal(compare.searchParams.has("sort"), false);
+  assert.equal(compare.searchParams.has("layout"), false);
+  assert.equal(parseChannelFilters({ layout: "invalid" }).layout, "cards");
+  assert.equal(parseChannelFilters({ view: "compare", scope: "merchants" }).view, "compare");
+});
+
 test("every narrowing is offered back as a removable chip", () => {
   const filters = parseChannelFilters({ q: "plus", platform: "OpenAI", mode: "recharge", duration: "30", warranty: "none", currency: "CNY", stock: "available" });
   const chips = activeChannelChips(filters);
@@ -129,6 +145,28 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(data.rows.find(row => row.merchant_slug === "shop-b")?.offer_count, 1);
       // Same-named shops must stay distinguishable, so the entry host travels with the row.
       assert.equal(data.rows.find(row => row.merchant_slug === "shop-b")?.merchant_host, "https://shop-b.example/shop/B");
+    });
+    await t.test("merchant scores use fresh comparable specs and keep competitors during search", async () => {
+      const all = await getChannelCatalog(parseChannelFilters({ view: "merchants", sort: "low_price" }), read);
+      assert.equal(all.rows[0]?.merchant_slug, "shop-b");
+      const a = all.rows.find(row => row.merchant_slug === "shop-a")!;
+      assert.equal(a.comparable_count, 1, "unique currency, duration, region and warranty groups are not competitive");
+      assert.equal(a.lowest_count, 0, "stale, unknown and zero-stock cheap offers cannot win");
+      assert.equal(a.top_five_count, 1);
+      assert.deepEqual(a.merchant_platforms, ["Anthropic", "OpenAI"]);
+      assert.deepEqual(a.merchant_products, ["ChatGPT Plus", "Claude Pro"]);
+      const searched = await getChannelCatalog(parseChannelFilters({ view: "merchants", q: "shop-a.example" }), read);
+      assert.equal(searched.total, 1);
+      assert.equal(searched.rows[0]?.lowest_count, 0, "search must not remove competitors");
+      assert.equal(searched.rows[0]?.comparable_count, 1);
+      const unique = await getChannelCatalog(parseChannelFilters({ view: "merchants", duration: "365" }), read);
+      assert.equal(unique.rows[0]?.comparable_count, 0);
+      await offer("tied", 80);
+      await offer("duplicate", 80);
+      const tied = await getChannelCatalog(parseChannelFilters({ view: "merchants" }), read);
+      assert.equal(tied.rows.find(row => row.merchant_slug === "shop-a")?.lowest_count, 1, "duplicates count once and tied prices both win");
+      assert.equal(tied.rows.find(row => row.merchant_slug === "shop-b")?.lowest_count, 1);
+      await db.query("delete from offers where id in ('tied','duplicate')");
     });
     await t.test("pagination clamps out-of-range pages and preserves zero prices", async () => {
       for (let i = 0; i < 30; i++) await offer(`extra-${i}`, i);

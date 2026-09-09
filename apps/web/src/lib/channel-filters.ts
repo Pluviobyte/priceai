@@ -30,7 +30,7 @@ export type ChannelGroup = "merged" | "expanded";
 export type ChannelFilters = {
   q: string; platform: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
-  page: number; spec: string;
+  page: number; spec: string; layout: "cards" | "table";
 };
 
 /** A specification is what makes two offers comparable; it is the unit `merged` groups by. */
@@ -77,7 +77,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
   const page = Number(first("page"));
   // `view=products|offers` are the pre-split URLs and still resolve to the same tables.
   const legacy = first("view");
-  const view: ChannelView = legacy === "merchants" ? "merchants" : "compare";
+  const view: ChannelView = (legacy === "merchants" || (!legacy && first("scope") === "merchants")) ? "merchants" : "compare";
   const group: ChannelGroup = first("group") === "merged" ? "merged"
     : first("group") === "expanded" || legacy === "offers" ? "expanded"
       : "merged";
@@ -90,7 +90,8 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     warranty: choice("warranty", Object.keys(CHANNEL_WARRANTIES)),
     stock: choice("stock", ["all", "available"], "all"),
     currency: choice("currency", ["CNY", "USD", "HKD", "EUR", "JPY"]),
-    sort: choice("sort", view === "merchants" ? ["freshness", "offers"] : ["freshness", "price", "offers"], "freshness"),
+    sort: choice("sort", view === "merchants" ? ["freshness", "offers", "low_price"] : ["freshness", "price", "offers"], "freshness"),
+    layout: choice("layout", ["cards", "table"], "cards") as "cards" | "table",
     view,
     group,
     page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, 10000) : 1,
@@ -99,10 +100,13 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
 
 export function channelHref(filters: ChannelFilters, changes: Partial<ChannelFilters> = {}): string {
   const next = { ...filters, page: 1, ...changes };
+  if (next.view !== "merchants" && next.sort === "low_price") next.sort = "freshness";
+  if (next.view === "merchants" && next.sort === "price") next.sort = "freshness";
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(next)) {
     if (!value || (key === "page" && value === 1) || (key === "view" && value === "compare")
       || (key === "group" && (value === "merged" || next.view === "merchants"))
+      || (key === "layout" && (value === "cards" || next.view !== "merchants"))
       || (key === "sort" && value === "freshness") || (key === "stock" && value === "all")) continue;
     params.set(key, String(value));
   }

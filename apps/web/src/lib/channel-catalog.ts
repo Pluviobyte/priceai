@@ -11,6 +11,11 @@ export interface ChannelRow {
   merchant_name: string;
   /** Entry URL of the shop, so two merchants sharing a display name stay distinguishable. */
   merchant_host: string | null;
+  merchant_platforms?: string[];
+  merchant_products?: string[];
+  comparable_count?: number;
+  lowest_count?: number;
+  top_five_count?: number;
   raw_title: string;
   offer_mode: string;
   duration_days: number | null;
@@ -80,7 +85,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   const parameter = (value: unknown) => { values.push(value); return `$${values.length}`; };
   if (filters.q) {
     const pattern = parameter(`%${filters.q.replace(/[\\%_]/g, "\\$&")}%`);
-    conditions.push(`concat_ws(' ',product_name,platform,raw_title,merchant_name) ilike ${pattern} escape '\\'`);
+    conditions.push(`concat_ws(' ',product_name,platform,raw_title,merchant_name,merchant_host) ilike ${pattern} escape '\\'`);
   }
   if (filters.platform) conditions.push(`platform=${parameter(filters.platform)}`);
   if (filters.mode) conditions.push(`offer_mode=${parameter(filters.mode)}`);
@@ -95,6 +100,24 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   const group = `spec_key,product_slug,product_name,platform,offer_mode,duration_days,currency,
     region,account_ownership,warranty_type,warranty_hours,
     case when duration_days is null then id else null end`;
+  // Rank one fresh minimum per merchant/spec against the full catalog. Search must
+  // not turn the selected merchant into its own sole competitor.
+  const merchantRanking = view === "merchants" ? `, merchant_prices as (
+    select merchant_slug,spec_key,min(price) price from catalog
+    where available and duration_days>0 and price is not null
+    group by merchant_slug,spec_key
+  ), ranked_prices as (
+    select *,rank() over (partition by spec_key order by price) price_rank,
+      count(*) over (partition by spec_key) competitors from merchant_prices
+  ), matched_specs as (
+    select distinct merchant_slug,spec_key from filtered where available and duration_days>0
+  ), merchant_scores as (
+    select r.merchant_slug,count(*)::int comparable_count,
+      count(*) filter (where price_rank=1)::int lowest_count,
+      count(*) filter (where price_rank<=5)::int top_five_count
+    from ranked_prices r join matched_specs f using (merchant_slug,spec_key)
+    where competitors>=2 group by r.merchant_slug
+  )` : "";
   const selection = view === "products"
     ? `select min(id) id, spec_key,product_slug,product_name,platform,offer_mode,duration_days,currency,
         region,account_ownership,warranty_type,warranty_hours,min(merchant_host) merchant_host,
@@ -106,10 +129,16 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
       ? `select merchant_slug id, merchant_slug,merchant_name,min(merchant_host) merchant_host,count(*)::int offer_count,
           count(*) filter (where available)::int available_count,
           count(distinct product_slug)::int merchant_count,max(verified_at) verified_at,
+          array_agg(distinct platform order by platform) merchant_platforms,
+          array_agg(distinct product_name order by product_name) merchant_products,
+          coalesce(max(ms.comparable_count),0)::int comparable_count,
+          coalesce(max(ms.lowest_count),0)::int lowest_count,
+          coalesce(max(ms.top_five_count),0)::int top_five_count,
           null::numeric price, ''::text currency
-         from filtered group by merchant_slug,merchant_name`
+         from filtered left join merchant_scores ms using (merchant_slug)
+         group by merchant_slug,merchant_name`
       : `select *,1::int offer_count,available::int available_count,1::int merchant_count from filtered`;
-  const cte = `${filtered}, results as (${selection})`;
+  const cte = `${filtered}${merchantRanking}, results as (${selection})`;
   const [summary] = await read<{
     total: number; offer_count: number; merchant_count: number; available_count: number; latest: Date | null;
   }>(`${cte} select (select count(*)::int from results) total,
@@ -118,7 +147,9 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   const pageSize = 24;
   const total = summary?.total ?? 0;
   const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));
-  const order = filters.sort === "price" && view !== "merchants"
+  const order = filters.sort === "low_price" && view === "merchants"
+    ? "lowest_count desc,top_five_count desc,comparable_count desc,available_count desc,verified_at desc nulls last"
+    : filters.sort === "price" && view !== "merchants"
     ? "currency asc,price asc nulls last,verified_at desc nulls last"
     : filters.sort === "offers" ? "offer_count desc,verified_at desc nulls last"
       : "verified_at desc nulls last,available_count desc";
