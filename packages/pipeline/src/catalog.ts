@@ -265,7 +265,7 @@ async function crawlSourceUnlocked(
     const health = deferredUntil
       ? { healthStatus: "retrying" as const, consecutiveFailures: source.consecutiveFailures, nextRunAt: deferredUntil }
       : wafBlocked
-      ? nextWafBlockedRun(finishedAt, source.consecutiveFailures)
+      ? nextWafBlockedRun(finishedAt, source.consecutiveFailures, 15 * 60_000)
       : nextFailedRun(finishedAt, source.consecutiveFailures);
     const errorCode = deferredUntil ? "platform_deferred" : wafBlocked ? "waf_challenge" : "crawl_failed";
     await db.transaction(async (tx) => {

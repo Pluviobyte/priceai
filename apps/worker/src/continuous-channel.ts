@@ -5,7 +5,7 @@ import type { CollectorRegistry } from '@price-radar/collector-sdk';
 import { crawlSource, vetCandidate, prepareVettingQueue, findChannelWork, recoverClearedPlatformCandidates,
   recoverGrowthCandidates, measureCatalogGrowth, publishLatestSnapshots, seedCanonicalProducts,
   storePublicGenerationSnapshot, evaluatePriceAlerts, refreshSourceQualityProfiles,
-  importSourceDirectories, enumerate16688SourceMarketplace } from '@price-radar/pipeline';
+  repairShopApiEntryUrls, importSourceDirectories, enumerate16688SourceMarketplace } from '@price-radar/pipeline';
 import type { WorkerConfig } from './config.js';
 import type { ChannelCycleOptions } from './channel-cycle.js';
 import { dispatchContinuously, IncrementalPublisher } from './channel-execution.js';
@@ -32,6 +32,8 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
     await db.execute(sql`insert into system_metric_samples(service,metric,value,unit,labels)
       values('channel-worker','catalog_valid_offers',${String(growth.valid_offers??0)},'offers',${JSON.stringify(growth)}::jsonb)`);
     await refreshSourceQualityProfiles(db,{limit:10,maxAgeMs:config.qualityProfileMaxAgeMs});
+    const repair=await repairShopApiEntryUrls(db,registry,{limit:10,signal});
+    if(repair.repaired)log({event:"entry_urls_repaired",...repair});
     if(config.sourceDiscoveryEnabled&&!options.skipDiscovery){
       await importSourceDirectories(db,{signal,minIntervalMs:config.sourceDirectoryImportIntervalMs});
       await enumerate16688SourceMarketplace(db,{signal,minIntervalMs:config.sourceDirectoryImportIntervalMs});

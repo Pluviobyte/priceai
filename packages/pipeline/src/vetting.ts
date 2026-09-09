@@ -32,8 +32,8 @@ import { assertSafePublicUrl } from "./url-security.js";
  * track. Every decision keeps its evidence on the candidate and in the audit log.
  */
 export const VETTING_VERSION = "vetting-2026-09-09.1";
-/** WAF-blocked candidates are re-probed after this long; they leave the human queue meanwhile. */
-export const EGRESS_BLOCK_RETRY_MS = 24 * 60 * 60_000;
+/** Eligibility resumes after the base cooldown; the shared platform gate may defer it longer. */
+export const EGRESS_BLOCK_RETRY_MS = 15 * 60_000;
 export const AUTOMATIC_ACTOR = "automatic_vetting";
 
 export interface SourceQualityProfile {
