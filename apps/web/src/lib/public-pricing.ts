@@ -243,8 +243,8 @@ export interface TransitEvent {
   endedAt: Date | null;
 }
 
-export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscriptionPrice[]> {
-  const rows = await query<SubscriptionRow>(
+export async function getOfficialSubscriptionPrices(checksPromise = getOfficialSubscriptionChecks(), read: typeof query = query): Promise<OfficialSubscriptionPrice[]> {
+  const [rows, checks] = await Promise.all([read<SubscriptionRow>(
     `select p.id, pl.vendor, pl.plan_code, pl.display_name as plan_name,
             pl.billing_period, p.channel, p.country_code, p.currency,
             p.price_kind, p.amount, p.lower_amount, p.upper_amount,
@@ -261,8 +261,7 @@ export async function getOfficialSubscriptionPrices(): Promise<OfficialSubscript
       order by pl.vendor,pl.display_name,
                case p.price_kind when 'exact' then 0 when 'range' then 1 else 2 end,
                p.cny_estimate nulls last,p.channel,p.country_code`,
-  );
-  const checks = await getOfficialSubscriptionChecks();
+  ), checksPromise]);
   const statusIndex = new Map(checks.map(check => [`${check.vendor}:${check.planCode}:${check.channel}:${check.countryCode}`, check.status]));
   const prices = rows.map((row) => ({
     id: row.id, vendor: row.vendor, planCode: row.plan_code, planName: row.plan_name,
@@ -378,15 +377,28 @@ export interface OfficialSubscriptionCheck {
 
 type CheckRow = { vendor: string; plan_code: string; channel: string; country_code: string; status: string; reason: string; evidence_url: string; checked_at: Date; evidence?: Record<string, unknown> | null };
 
-export async function getOfficialSubscriptionChecks(): Promise<OfficialSubscriptionCheck[]> {
-  const rows = await query<CheckRow>(
+export async function getOfficialSubscriptionChecks(read: typeof query = query): Promise<OfficialSubscriptionCheck[]> {
+  const rows = await read<CheckRow>(
     "select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at,evidence from official_subscription_checks",
   ).catch(async (error: unknown) => {
     const code = error && typeof error === "object" && "code" in error ? error.code : null;
     // Rolling deployments may serve web code before migrations 0016/0017 complete.
     if (code === "42P01") return [] as CheckRow[];
-    if (code === "42703") return query<CheckRow>("select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at from official_subscription_checks");
+    if (code === "42703") return read<CheckRow>("select vendor,plan_code,channel,country_code,status,reason,evidence_url,checked_at from official_subscription_checks");
     throw error;
   });
   return rows.map(row => ({ vendor: row.vendor, planCode: row.plan_code, channel: row.channel, countryCode: row.country_code, status: row.status, reason: row.reason, evidenceUrl: row.evidence_url, checkedAt: row.checked_at, evidence: row.evidence ?? {} }));
+}
+
+/** Share one checks request with price classification and the page's evidence table. */
+export async function getOfficialSubscriptionSnapshot(read: typeof query = query) {
+  const checksPromise = getOfficialSubscriptionChecks(read);
+  const [prices, checks] = await Promise.allSettled([
+    getOfficialSubscriptionPrices(checksPromise, read), checksPromise,
+  ]);
+  return {
+    prices: prices.status === "fulfilled" ? prices.value : [],
+    checks: checks.status === "fulfilled" ? checks.value : null,
+    available: prices.status === "fulfilled",
+  };
 }

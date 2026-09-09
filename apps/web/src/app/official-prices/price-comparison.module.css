@@ -70,3 +70,10 @@
   .filters .checkbox { flex-basis: 100%; height: auto; }
   .coverage { gap: 8px; }
 }
+.pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 16px 0; color: var(--color-text-muted); font-size: 12px; }
+.pagination a { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: 7px; color: var(--accent-deep); background: var(--color-panel); }
+.pagination a:hover { background: var(--color-surface); }
+.pagination a:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.loading { display: grid; gap: 14px; margin: 28px 0; }
+.loading > span { display: block; height: 72px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+@media (max-width: 640px) { .pagination > span:not(:empty) { order: -1; flex-basis: 100%; text-align: center; } }

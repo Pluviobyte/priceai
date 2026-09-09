@@ -6,7 +6,7 @@ import {
   OFFICIAL_SUBSCRIPTION_REGION_CATALOG,
 } from "@price-radar/price-channels/subscription-catalog";
 import { findAppleStorefront, regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
-import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionCheck, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionSnapshot, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionCheck, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../../model-icons";
 import { SiteFooter } from "../../site-footer";
 
@@ -92,14 +92,8 @@ export default async function OfficialPriceRegionsPage({
     ?? OFFICIAL_SUBSCRIPTION_PLAN_CATALOG.find((plan) => plan.planCode === "chatgpt-plus-monthly")
     ?? OFFICIAL_SUBSCRIPTION_PLAN_CATALOG[0]!;
 
-  let databaseAvailable = true;
-  let allRows: OfficialSubscriptionPrice[] = [];
-  try {
-    allRows = await getOfficialSubscriptionPrices();
-  } catch {
-    databaseAvailable = false;
-  }
-  const checks = await getOfficialSubscriptionChecks().catch(() => []);
+  const { prices: allRows, checks: loadedChecks, available: databaseAvailable } = await getOfficialSubscriptionSnapshot();
+  const checks = loadedChecks ?? [];
   const planRows = allRows.filter((row) => row.vendor === selectedPlan.vendor && row.planCode === selectedPlan.planCode);
   const latest = newestPriceRecord(planRows)?.verifiedAt ?? null;
   const vendorOrder = ["openai", "anthropic", "google", "xai"];

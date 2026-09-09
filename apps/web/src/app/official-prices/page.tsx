@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
-import { getOfficialSubscriptionChecks, getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, selectCollectedSubscriptionMinimum, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getOfficialSubscriptionSnapshot, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, selectCollectedSubscriptionMinimum, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
 import { PriceComparison } from "./price-comparison";
@@ -119,15 +119,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
   const channel = first(raw.channel).trim().toLowerCase();
   const period = first(raw.period).trim().toLowerCase();
 
-  let databaseAvailable = true;
-  let allRows: OfficialSubscriptionPrice[] = [];
-  try {
-    allRows = await getOfficialSubscriptionPrices();
-  } catch {
-    databaseAvailable = false;
-  }
-
-  const checks = await getOfficialSubscriptionChecks().catch(() => null);
+  const { prices: allRows, checks, available: databaseAvailable } = await getOfficialSubscriptionSnapshot();
   const scopedRows = allRows.filter((row) => !channel || row.channel === channel);
   const allPlans = groupPlans(scopedRows);
   const query = q.toLocaleLowerCase("zh-CN");
