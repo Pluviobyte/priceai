@@ -13,7 +13,8 @@ while (Date.now() < deadline) {
         const page = await fetch(origin + path, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
         if (!page.ok) throw new Error(`${path}: HTTP ${page.status}`);
         const html = await page.text();
-        if (path.startsWith('/channels') && (!html.includes('选对交付方式，再比较价格') || html.includes('暂时无法读取渠道报价'))) {
+        const heading = path.includes('view=merchants') ? '卡网商家，一览再比较' : '选对交付方式，再比较价格';
+        if (path.startsWith('/channels') && (!html.includes(heading) || html.includes('暂时无法读取渠道报价'))) {
           throw new Error(`${path}: catalog did not load`);
         }
       }
