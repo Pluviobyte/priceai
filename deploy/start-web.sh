@@ -2,6 +2,8 @@
 set -eu
 
 : "${DATABASE_URL:?DATABASE_URL must be configured}"
+PRICEAI_RELEASE_ID=$(node scripts/release-fingerprint.mjs)
+export PRICEAI_RELEASE_ID
 npm run db:migrate
 
 # Enable for the initial rollout; subsequent refreshes use the scheduler.

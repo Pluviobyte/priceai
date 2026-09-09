@@ -1,0 +1,104 @@
+name: Check and deploy PriceAI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: priceai-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: priceai
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: priceai_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U priceai -d priceai_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    outputs:
+      fingerprint: ${{ steps.release.outputs.fingerprint }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Test database migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
+      - name: Test catalog queries against PostgreSQL
+        working-directory: apps/web
+        run: node --import tsx --test tests/channel-catalog.test.ts
+        env:
+          CHANNEL_TEST_DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
+      - run: npm run build
+      - name: Fingerprint checked source
+        id: release
+        run: echo "fingerprint=$(node scripts/release-fingerprint.mjs)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Promote checked commit and verify production
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    concurrency:
+      group: priceai-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Advance the Dokploy release branch
+        id: promote
+        env:
+          CHECKED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main codex/production
+          if [ "$(git rev-parse origin/main)" != "$CHECKED_SHA" ]; then
+            echo 'A newer main commit exists; its own checks must finish first.'
+            echo 'promoted=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git merge-base --is-ancestor origin/codex/production "$CHECKED_SHA"
+          git push origin "$CHECKED_SHA:refs/heads/codex/production"
+          echo 'promoted=true' >> "$GITHUB_OUTPUT"
+      - name: Verify the deployed source and public pages
+        if: steps.promote.outputs.promoted == 'true'
+        env:
+          EXPECTED_RELEASE: ${{ needs.check.outputs.fingerprint }}
+        run: node scripts/verify-release.mjs
+      - name: Record deployment result
+        if: always()
+        env:
+          CHECKED_SHA: ${{ github.sha }}
+          RELEASE: ${{ needs.check.outputs.fingerprint }}
+          RESULT: ${{ job.status }}
+          PROMOTED: ${{ steps.promote.outputs.promoted }}
+        run: |
+          printf '### PriceAI production\n\nCommit: `%s`\n\nSource fingerprint: `%s`\n\nPromoted: `%s`\n\nResult: `%s`\n\n[Open website](https://priceai.io/channels)\n' "$CHECKED_SHA" "$RELEASE" "$PROMOTED" "$RESULT" >> "$GITHUB_STEP_SUMMARY"
