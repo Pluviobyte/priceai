@@ -220,7 +220,7 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
         values(${candidateId}::uuid,${entry},'test','pending',${sourceId}::uuid)`);
       const registry=new InMemoryCollectorRegistry();
       registry.register(new LdxpShopApiCollector());
-      registry.probe=async()=>[{collectorKind:'shop_api',supported:true,confidence:1,identity:{platformKind:'ldxp_shop_api',platformMerchantId:'busy-owner',canonicalEntryUrl:entry,merchantName:'Busy'}}];
+      registry.probe=async()=>[{collectorKind:'shop_api',supported:true,confidence:1,evidence:[],identity:{platformKind:'ldxp_shop_api',platformMerchantId:'busy-owner',canonicalEntryUrl:entry,merchantName:'Busy'}}];
       try {
         const result=await vetCandidate(db,registry,candidateId);
         assert.equal(result.status,'deferred');assert.match(result.reasons[0]!,/crawl_busy/);
