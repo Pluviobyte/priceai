@@ -41,6 +41,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Test release page validation
+        run: node --test scripts/release-page-validation.test.mjs
       - name: Test egress relay boundaries
         run: node --test scripts/collector-egress/server.test.mjs
       - name: Test platform budgets and recovery

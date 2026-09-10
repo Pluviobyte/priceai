@@ -1,3 +1,5 @@
+import { validateReleasePage } from './release-page-validation.mjs';
+
 const expected = process.env.EXPECTED_RELEASE;
 if (!/^[a-f0-9]{64}$/.test(expected ?? '')) throw new Error('EXPECTED_RELEASE is required');
 const origin = 'https://priceai.io';
@@ -13,10 +15,7 @@ while (Date.now() < deadline) {
         const page = await fetch(origin + path, { cache: 'no-store', signal: AbortSignal.timeout(30_000) });
         if (!page.ok) throw new Error(`${path}: HTTP ${page.status}`);
         const html = await page.text();
-        const heading = path.includes('view=merchants') ? '卡网商家，一览再比较' : '选对交付方式，再比较价格';
-        if (path.startsWith('/channels') && (!html.includes(heading) || html.includes('暂时无法读取渠道报价'))) {
-          throw new Error(`${path}: catalog did not load`);
-        }
+        validateReleasePage(path, html);
       }
       console.log(`Verified release ${expected} on ${origin}`);
       process.exit(0);
