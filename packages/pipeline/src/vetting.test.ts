@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { RawOfferInput } from "@price-radar/schema";
-import { buildSourceQualityProfile, decideVetting, type SourceQualityProfile } from "./vetting.js";
+import { buildSourceQualityProfile, decideVetting, unavailableStorefront, transientProbeFailure, type SourceQualityProfile } from "./vetting.js";
 import { tokens } from "./quality.js";
 
 function item(title: string, price: string, extra: Partial<RawOfferInput> = {}): RawOfferInput {
@@ -68,8 +68,7 @@ test("verdicts: incomplete trial → review, empty or non-AI catalog → rejecte
   const good = decideVetting(baseProfile, { complete: true, status: "success" });
   assert.equal(good.verdict, "approved");
   const thin = decideVetting({ ...baseProfile, itemCount: 40, aiRelevantCount: 2, aiConfidentCount: 2, aiRelevantShare: 0.05 }, { complete: true, status: "success" });
-  assert.equal(thin.verdict, "review");
-  assert.ok(thin.reasons[0]?.startsWith("low_ai_relevance"));
+  assert.equal(thin.verdict, "approved");
 });
 
 
@@ -77,4 +76,20 @@ test("low confidence AI matches never enable a source automatically", () => {
   const decision = decideVetting({ ...baseProfile, aiConfidentCount: 0 }, { complete: true, status: "success" });
   assert.equal(decision.verdict, "review");
   assert.ok(decision.reasons.includes("no_confident_ai_matches"));
+});
+
+
+test("one confident product admits a mixed catalog without bypassing risk or completeness",()=>{
+ const mixed={...baseProfile,itemCount:100,aiRelevantCount:1,aiConfidentCount:1,aiRelevantShare:0.01};
+ assert.equal(decideVetting(mixed,{complete:true,status:'success'}).verdict,'approved');
+ assert.equal(decideVetting(mixed,{complete:false,status:'partial'}).verdict,'review');
+ assert.equal(decideVetting({...mixed,catalogOverlapMax:0.95},{complete:true,status:'success'}).verdict,'review');
+ assert.equal(decideVetting({...mixed,priceComparableCount:3,priceOutlierShare:1},{complete:true,status:'success'}).verdict,'review');
+});
+test("business unavailability and aborted probes are not missing adapters",()=>{
+ for(const message of ['商品未上架','商家已被关闭交易','商家已注销','该商家已被封禁','店铺已打烊'])assert.equal(unavailableStorefront('shop_api_rejected:'+message),true);
+ assert.equal(unavailableStorefront('shop_api_16688_rejected:店铺已打烊'),true);
+ assert.equal(unavailableStorefront('shop_api_not_json'),false);
+ for(const message of ['This operation was aborted','The operation was aborted','shop_api_http_503'])assert.equal(transientProbeFailure(message),true);
+ assert.equal(transientProbeFailure('shop_api_http_404'),false);
 });

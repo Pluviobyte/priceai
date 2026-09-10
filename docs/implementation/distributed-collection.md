@@ -85,3 +85,20 @@ Measure candidate decisions by their completion audit timestamps, full catalog
 successes by `crawl_runs.finished_at` with `complete_snapshot=true`, and scoped
 updates separately. Neither an HTTP 200 nor a completed candidate decision is a
 new merchant. Short-window hourly extrapolations must include the window length.
+
+## Product-level admission and candidate corrections (2026-09-10)
+
+Admission version `vetting-2026-09-10.1` accepts a complete mixed catalog with at
+least one confidently identified product. Mirror/price checks still precede
+approval; publication continues to classify and quarantine each offer separately.
+An unavailable product or closed/suspended shop is a business rejection with a
+scheduled recheck, while aborted probes follow transient retry handling.
+Unknown `/item/` URLs are checked for a bounded public JSON unavailability message
+before guessing Shop API endpoints; redirects are not followed by that check.
+
+With growth recovery enabled, older low-relevance reviews, failed/incomplete
+trials, transient reviews and adapter candidates are requeued once with an audit
+and previous evidence retained. Human-reviewed candidates and price/mirror-only
+reviews are excluded. This recheck does not approve or publish candidates directly.
+Verified domain migrations require a validated destination and an audited candidate
+transfer; a migration notice alone is not a reason to develop a new adapter.

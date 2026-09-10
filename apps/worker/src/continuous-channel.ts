@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { Database } from '@price-radar/database';
 import type { CollectorRegistry } from '@price-radar/collector-sdk';
 import { crawlSource, vetCandidate, prepareVettingQueue, findChannelWork, recoverClearedPlatformCandidates,
-  recoverGrowthCandidates, measureCatalogGrowth, publishLatestSnapshots, seedCanonicalProducts,
+  recoverAdmissionCandidates, recoverGrowthCandidates, measureCatalogGrowth, publishLatestSnapshots, seedCanonicalProducts,
   storePublicGenerationSnapshot, evaluatePriceAlerts, refreshSourceQualityProfiles,
   repairShopApiEntryUrls, importSourceDirectories, enumerate16688SourceMarketplace } from '@price-radar/pipeline';
 import type { WorkerConfig } from './config.js';
@@ -26,7 +26,11 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
     await prepareVettingQueue(db);
     const recovered=await recoverClearedPlatformCandidates(db,1000);
     if(recovered.requeued)log({event:'platform_candidates_recovered',...recovered});
-    if(process.env.COLLECTOR_GROWTH_RECOVERY==='true')await recoverGrowthCandidates(db,100);
+    if(process.env.COLLECTOR_GROWTH_RECOVERY==='true'){
+      await recoverGrowthCandidates(db,100);
+      const admission=await recoverAdmissionCandidates(db,100);
+      if(admission.requeued)log({event:'admission_candidates_requeued',...admission});
+    }
     const growth=await measureCatalogGrowth(db);log({event:'catalog_growth',...growth});
     log({event:'channel_progress',...totals});
     await db.execute(sql`insert into system_metric_samples(service,metric,value,unit,labels)

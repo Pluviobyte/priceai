@@ -31,10 +31,20 @@ import { assertSafePublicUrl } from "./url-security.js";
  * actually sells AI products, and no sign of being a mirror of a shop we already
  * track. Every decision keeps its evidence on the candidate and in the audit log.
  */
-export const VETTING_VERSION = "vetting-2026-09-09.1";
+export const VETTING_VERSION = "vetting-2026-09-10.1";
 /** Eligibility resumes after the base cooldown; the shared platform gate may defer it longer. */
 export const EGRESS_BLOCK_RETRY_MS = 15 * 60_000;
 export const AUTOMATIC_ACTOR = "automatic_vetting";
+
+/** Business rejection is not evidence that a new adapter is needed. */
+export function unavailableStorefront(reason?: string | null): boolean {
+  if(reason?.startsWith('storefront_item_unavailable:'))return true;
+  return /shop_api(?:_16688)?_rejected:.*(?:不存在|已关闭|已删除|已停用|未上架|关闭交易|已注销|封禁|已打烊)/.test(reason ?? '');
+}
+
+export function transientProbeFailure(reason?: string | null): boolean {
+  return /timeout|timed? ?out|aborted|aborterror|fetch failed|ECONN|EAI_AGAIN|http_5\d\d|http_429/i.test(reason ?? '');
+}
 
 export interface SourceQualityProfile {
   itemCount: number;
@@ -86,7 +96,9 @@ export interface VettingThresholds {
 }
 
 export const DEFAULT_THRESHOLDS: VettingThresholds = {
-  minRelevantItems: 3,
+  // Admit mixed catalogs when at least one product is confidently identified.
+  // Publication still classifies and quarantines each offer independently.
+  minRelevantItems: 1,
   minRelevantShare: 0.3,
   mirrorOverlap: 0.9,
   outlierPriceRatio: 0.4,
@@ -467,7 +479,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     const probes = await registry.probe(safeUrl, signal);
     const selected = probes.find((probe) => probe.supported && probe.identity);
     if (!selected?.identity) {
-      const missing = probes.find(probe => /shop_api_rejected:.*(?:不存在|已关闭|已删除|已停用)/.test(probe.reason ?? ''));
+      const missing = probes.find(probe => unavailableStorefront(probe.reason));
       if (missing) {
         const reasons = [missing.reason!];
         await finishCandidate(db, candidate, {status:'rejected',nextVetAt:new Date(now.getTime()+30*86_400_000),
@@ -481,7 +493,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
         await finishCandidate(db, candidate, { status: "blocked_egress", nextVetAt: new Date(now.getTime() + EGRESS_BLOCK_RETRY_MS), vettingResult: { ...base, attempts: attempts - 1, verdict: "blocked_egress", reasons, probes } }, "blocked_egress", reasons, {});
         return { candidateId, status: "blocked_egress", reasons };
       }
-      const transient = probes.some((probe) => /timeout|fetch failed|ECONN|EAI_AGAIN|http_5\d\d|http_429/i.test(probe.reason ?? ""));
+      const transient = probes.some((probe) => transientProbeFailure(probe.reason));
       if (transient) return defer("probe_transient_failure");
       const reasons = ["unsupported_storefront", ...probes.map((probe) => `${probe.collectorKind}:${probe.reason ?? "no"}`).slice(0, 8)];
       await finishCandidate(db, candidate, { status: "adapter_needed", nextVetAt: new Date(now.getTime() + thresholds.retryDays * 86_400_000), vettingResult: { ...base, verdict: "adapter_needed", reasons, probes } }, "adapter_needed", reasons, {});

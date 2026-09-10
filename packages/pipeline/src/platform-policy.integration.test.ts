@@ -14,7 +14,7 @@ import { sql } from 'drizzle-orm';
 import { createDatabase } from '@price-radar/database';
 import { InMemoryCollectorRegistry, PlatformDeferredError, WafChallengeError } from '@price-radar/collector-sdk';
 import { PostgresRequestPolicy, platformKey } from './platform-policy.js';
-import { recoverGrowthCandidates, measureCatalogGrowth, recoverClearedPlatformCandidates } from './growth.js';
+import { recoverGrowthCandidates, measureCatalogGrowth, recoverClearedPlatformCandidates, recoverAdmissionCandidates } from './growth.js';
 import { findDueSources, findVettableCandidates, findChannelWork } from './scheduler.js';
 import { vetNextCandidates } from './vetting.js';
 
@@ -193,6 +193,18 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
     await t.test('continuous queue excludes occupied platforms and returns eligible work',async()=>{
       const work=await findChannelWork(db,[]);assert.ok(work);
       const next=await findChannelWork(db,[work.platform]);assert.notEqual(next?.platform,work.platform);
+    });
+    await t.test('admission recovery is one-time and preserves risk and human decisions',async()=>{
+      const ids=Array.from({length:5},()=>randomUUID());
+      for(const [i,id]of ids.entries())await db.execute(sql`insert into source_candidates(id,candidate_url,discovery_kind,status,vetting_result)
+        values(${id}::uuid,${'https://admission.example/'+i},'test',${i===1?'adapter_needed':'review'},${JSON.stringify({version:'vetting-2026-09-09.1',reasons:[i===2?'prices_far_below_market':'low_ai_relevance:1/10'],...(i===4?{admissionRecoveryVersion:'2026-09-10.1'}:{})})}::jsonb)`);
+      await db.execute(sql`insert into audit_logs(actor_id,action,target_type,target_id) values('human','source_candidate.review','source_candidate',${ids[3]})`);
+      await recoverAdmissionCandidates(db,1000);
+      const result=await db.execute(sql`select id,status from source_candidates where id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`)})`);
+      const byId=new Map(result.rows.map(r=>[r.id,r.status]));
+      assert.equal(byId.get(ids[0]),'pending');assert.equal(byId.get(ids[1]),'pending');
+      for(const i of [2,3,4])assert.equal(byId.get(ids[i]),'review');
+      assert.equal((await recoverAdmissionCandidates(db,1000)).requeued,0);
     });
     await t.test('scoped catalogs preserve other types, keep full-success time, and discover new types on the daily sweep',async()=>{
       const sourceId=randomUUID();

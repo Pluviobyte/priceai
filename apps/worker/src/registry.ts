@@ -1,3 +1,4 @@
+import { publicItemUnavailable } from './public-item-status.js';
 import { familyForHost } from '@price-radar/source-signatures';
 import type { Database } from "@price-radar/database";
 import { PostgresRequestPolicy } from "@price-radar/pipeline";
@@ -11,6 +12,10 @@ import { Sixteen688ShopCollector } from "@price-radar/shop-api-16688-collector";
 
 class WorkerCollectorRegistry extends InMemoryCollectorRegistry {
   override async probe(url: URL, signal: AbortSignal) {
+    if(/^\/item\//.test(url.pathname)&&!familyForHost(url.hostname)){
+      const unavailable=await publicItemUnavailable(url,signal);
+      if(unavailable)return [{collectorKind:'generic_html' as const,supported:false,confidence:1,reason:unavailable,evidence:[]}];
+    }
     // Shop paths have a cheap public API. Do not fan out to every HTML adapter
     // after that API has already returned an explicit challenge or cooldown.
     if (/^\/(shop|item)\//.test(url.pathname)) {

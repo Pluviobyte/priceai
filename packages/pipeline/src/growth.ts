@@ -34,7 +34,7 @@ export async function recoverGrowthCandidates(db: Database, limit = 30) {
     select id from source_candidates
     where status in ('review','rejected','blocked_egress')
       and vetting_result->>'version' like 'vetting-%'
-      and vetting_result->>'version'<>'vetting-2026-09-09.1'
+      and vetting_result->>'version' not in ('vetting-2026-09-09.1','vetting-2026-09-10.1')
       and coalesce(vetting_result->>'growthRecoveryVersion','')<>'2026-09-09.1'
       and (vetting_result->'reasons' @> '["no_ai_relevant_items"]'::jsonb
         or (platform_kind='ldxp_shop_api' and exists (
@@ -79,6 +79,34 @@ export async function recoverClearedPlatformCandidates(db: Database, limit = 100
     insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value)
     select 'automatic_vetting','source_candidate.platform_recovered','source_candidate',id::text,
       'platform recovered; resume siblings previously parked without a probe','{"status":"pending"}'::jsonb from changed
+  ) select id from changed`);
+  return {requeued:rows.length};
+}
+
+/** One-time rechecks for corrected admission rules; never bypass a human decision. */
+export async function recoverAdmissionCandidates(db: Database, limit = 100) {
+  const {rows}=await db.execute<{id:string}>(sql`with selected as (
+    select c.id from source_candidates c
+    where c.status in ('review','adapter_needed')
+      and coalesce(c.vetting_result->>'version','')<>'vetting-2026-09-10.1'
+      and coalesce(c.vetting_result->>'admissionRecoveryVersion','')<>'2026-09-10.1'
+      and (c.status='adapter_needed' or exists (
+        select 1 from jsonb_array_elements_text(case when jsonb_typeof(c.vetting_result->'reasons')='array'
+          then c.vetting_result->'reasons' else '[]'::jsonb end) reason
+        where reason like 'low_ai_relevance:%' or reason like 'trial_incomplete:%' or reason='probe_transient_failure'))
+      and not exists(select 1 from audit_logs a where a.target_id=c.id::text
+        and a.actor_id<>'automatic_vetting' and a.action like 'source_candidate.%')
+    order by c.priority desc,c.discovered_at limit ${Math.max(1,Math.min(limit,1000))} for update of c skip locked
+  ), changed as (
+    update source_candidates c set status='pending',next_vet_at=now(),
+      vetting_result=coalesce(c.vetting_result,'{}'::jsonb)||jsonb_build_object(
+        'previousAdmissionDecision',c.vetting_result,'attempts',0,'admissionRecoveryVersion','2026-09-10.1')
+    from selected where c.id=selected.id returning c.id
+  ), audited as (
+    insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value)
+    select 'automatic_vetting','source_candidate.admission_recheck','source_candidate',id::text,
+      'product-level admission and corrected probe classification; full checks required',
+      '{"status":"pending","version":"2026-09-10.1"}'::jsonb from changed
   ) select id from changed`);
   return {requeued:rows.length};
 }
