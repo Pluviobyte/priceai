@@ -1,7 +1,7 @@
 import { promoteApprovedTrial } from './trial-promotion.js';
 import { and, desc, eq, inArray, isNotNull, lt, ne, or, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
-import { platformRetryAt, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
+import { PlatformDeferredError, platformRetryAt, mentionsWafChallenge, type CollectorRegistry } from "@price-radar/collector-sdk";
 import {
   auditLogs,
   canonicalProducts,
@@ -471,7 +471,7 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
 
     const key = platformKey(safeUrl.hostname);
     const { rows: gates } = await db.execute<{ retry_at: Date | null }>(sql`
-      select greatest(blocked_until, lease_until) as retry_at from collector_platform_state where key=${key}`);
+      select blocked_until as retry_at from collector_platform_state where key=${key}`);
     if (gates[0]?.retry_at && new Date(gates[0].retry_at) > now)
       return park("platform_circuit_open", new Date(gates[0].retry_at));
     await db.execute(sql`insert into collector_platform_state(key,last_served_at) values(${key},now())
@@ -549,6 +549,10 @@ export async function vetCandidate(db: Database, registry: CollectorRegistry, ca
     if (!trial) {
       const [stored] = await db.select({ result: sourceSubmissions.precheckResult }).from(sourceSubmissions).where(eq(sourceSubmissions.id, submission.id)).limit(1);
       const trialError = String((stored?.result as Record<string, unknown> | null)?.trialError ?? "trial_failed");
+      if (trialError === "crawl_already_running_or_host_busy") {
+        const retryAt = new Date(Date.now() + 60_000);
+        return park(new PlatformDeferredError(retryAt, "crawl_busy").message, retryAt);
+      }
       if (platformRetryAt(trialError)) return park(trialError, platformRetryAt(trialError));
       if (wafBlocked(trialError)) {
         await db.update(sourceSubmissions).set({ status: "rejected", reviewedBy: AUTOMATIC_ACTOR, reviewedAt: now, updatedAt: now }).where(eq(sourceSubmissions.id, submission.id));

@@ -16,7 +16,7 @@ import { InMemoryCollectorRegistry, PlatformDeferredError, WafChallengeError } f
 import { PostgresRequestPolicy, platformKey } from './platform-policy.js';
 import { recoverGrowthCandidates, measureCatalogGrowth, recoverClearedPlatformCandidates, recoverAdmissionCandidates } from './growth.js';
 import { findDueSources, findVettableCandidates, findChannelWork } from './scheduler.js';
-import { vetNextCandidates } from './vetting.js';
+import { vetCandidate, vetNextCandidates } from './vetting.js';
 
 // Explicit opt-in. Creates and drops its OWN database, never truncates caller data.
 const adminUrl = process.env.POLICY_TEST_DATABASE_URL;
@@ -205,6 +205,32 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       assert.equal(byId.get(ids[0]),'pending');assert.equal(byId.get(ids[1]),'pending');
       for(const i of [2,3,4])assert.equal(byId.get(ids[i]),'review');
       assert.equal((await recoverAdmissionCandidates(db,1000)).requeued,0);
+    });
+    await t.test('busy trials defer without linking historical failures or treating HTTP leases as WAF',async()=>{
+      const sourceId=randomUUID(),candidateId=randomUUID(),oldRun=randomUUID();
+      const entry='https://93.184.215.14/shop/busy';
+      await db.execute(sql`insert into sources(id,platform_kind,platform_merchant_id,canonical_entry_url,collector_kind,enabled)
+        values(${sourceId}::uuid,'ldxp_shop_api','busy-owner',${entry},'shop_api',false)`);
+      await db.execute(sql`insert into crawl_runs(id,source_id,collector_kind,collector_version,status,started_at,finished_at)
+        values(${oldRun}::uuid,${sourceId}::uuid,'shop_api','old','failed',now()-interval '1 day',now()-interval '23 hours')`);
+      await db.execute(sql`insert into crawl_leases(source_id,hostname,platform_kind,lease_token,expires_at)
+        values(${sourceId}::uuid,'93.184.215.14','ldxp_shop_api',${randomUUID()}::uuid,now()+interval '30 minutes')`);
+      await db.execute(sql`insert into collector_platform_state(key,lease_until) values('host:93.184.215.14',now()+interval '1 minute')`);
+      await db.execute(sql`insert into source_candidates(id,candidate_url,discovery_kind,status,source_id)
+        values(${candidateId}::uuid,${entry},'test','pending',${sourceId}::uuid)`);
+      const registry=new InMemoryCollectorRegistry();
+      registry.register(new LdxpShopApiCollector());
+      registry.probe=async()=>[{collectorKind:'shop_api',supported:true,confidence:1,identity:{platformKind:'ldxp_shop_api',platformMerchantId:'busy-owner',canonicalEntryUrl:entry,merchantName:'Busy'}}];
+      try {
+        const result=await vetCandidate(db,registry,candidateId);
+        assert.equal(result.status,'deferred');assert.match(result.reasons[0]!,/crawl_busy/);
+        const row=(await db.execute(sql`select c.status,c.vetting_result,s.trial_run_id,s.precheck_result from source_candidates c join source_submissions s on s.id=c.submission_id where c.id=${candidateId}::uuid`)).rows[0]!;
+        assert.equal(row.status,'pending');assert.equal(row.trial_run_id,null);
+        assert.equal((row.precheck_result as any).trialError,'crawl_already_running_or_host_busy');
+        assert.equal((row.vetting_result as any).attempts,0);
+      } finally {
+        await db.execute(sql`delete from crawl_leases where source_id=${sourceId}::uuid`);
+      }
     });
     await t.test('scoped catalogs preserve other types, keep full-success time, and discover new types on the daily sweep',async()=>{
       const sourceId=randomUUID();

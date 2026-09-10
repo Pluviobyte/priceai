@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import type { ProbeResult } from "@price-radar/schema";
 import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import {
@@ -183,6 +183,7 @@ export async function precheckSourceSubmission(
     return storedSource;
   });
 
+  const trialStartedAt = new Date();
   try {
     const trial = await crawlSource(db, registry, source.id, {
       allowDisabled: true,
@@ -216,18 +217,18 @@ export async function precheckSourceSubmission(
       supported: true,
     };
   } catch (error) {
-    const [failedRun] = await db
+    const message = error instanceof Error ? error.message : "trial_crawl_failed";
+    const [failedRun] = message === 'crawl_already_running_or_host_busy' ? [] : await db
       .select({ id: crawlRuns.id })
       .from(crawlRuns)
-      .where(eq(crawlRuns.sourceId, source.id))
+      .where(and(eq(crawlRuns.sourceId, source.id), gte(crawlRuns.startedAt, trialStartedAt)))
       .orderBy(desc(crawlRuns.createdAt))
       .limit(1);
-    const message = error instanceof Error ? error.message : "trial_crawl_failed";
     await db
       .update(sourceSubmissions)
       .set({
         status: "review",
-        ...(failedRun ? { trialRunId: failedRun.id } : {}),
+        trialRunId: failedRun?.id ?? null,
         precheckResult: {
           safe: true,
           supported: true,
