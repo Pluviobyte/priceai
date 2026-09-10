@@ -40,6 +40,19 @@ DMIT Channel Worker 领取候选/来源 → PostgreSQL 平台预算 → 按域�
 | GitHub 主题 README | `github_topic_readmes` | 主题页列出的仓库 README（默认 chatgpt-daichong、chatgpt-plus-pay、chatgpt-china 等） | 仓库地址本身不作为候选 |
 | 16688 货源广场全类目 | `16688_source_marketplace` | 全部类目；AI 类目外只对名称像 AI 商品的货源查询店铺 | 名称关键词见 `isAiRelatedGoodsName` |
 
+发现阶段的两道过滤：一是工具站域名（接码、2FA、邮箱、文档、代码托管、短链、网盘、动态域名、大厂域名），二是“像店铺”的判断：平台域名必须带店铺或商品路径，其他域名要有购买类路径（shop、buy、product、goods、order、cdk、pay）或链接附近出现购买、发卡、卡密、备用、分店等词。不满足的链接不发起任何请求。
+
+### 首轮结果（2026-09-10 14:49 北京时间，提交 371e7bc / c6b6399）
+
+| 渠道 | 读取 | 线索 | 新候选 |
+|---|---:|---:|---:|
+| 自有采集链接图 | 540 家来源的最新完整快照 | 654 | 545 |
+| Telegram 公开频道 | 15 个频道、235 条帖子 | 15 | 6 |
+| GitHub 主题 README | 33 个仓库 | 82 | 39 |
+| 16688 全类目 | AI 类目外 13 件 AI 商品 | 13 | 1（12 家已是来源） |
+
+首轮约 50 分钟内全部 592 条候选完成一次准入判定：通过 12 家（独角 4、LDXP 2、Kami 2、catfk 1、单页代充站 3），待适配 392，拒绝 41，待人工 21，出口受阻 13（网盘与云手机站），重复 4，113 条因探测暂时失败延后到 1 小时后自动重试。通过的商家全部在售 AI 权益商品（ChatGPT Go/Plus/Pro 卡充、Claude、Codex 额度、Gemini），全部经完整试采与相关性判定，没有人工审核记录被自动覆盖，平台限速状态 waf_streak=0、无熔断。待适配里 353 条是页面没有机器可读商品（非店铺或自定义站点），说明链接图的精度约为“每 8 条线索 1 家可采店铺”；第二次提交加入了邮箱、接码、网盘域名过滤与主机名校验，第三次提交加入购买语境判断以减少无效探测。
+
 命令：`discover-links`、`discover-telegram [频道,...]`、`discover-github [主题,...]`、`enumerate-16688 all`。开关：`LINK_DISCOVERY_ENABLED`、`TELEGRAM_DISCOVERY_ENABLED`、`GITHUB_DISCOVERY_ENABLED`、`SIXTEEN688_ALL_CATEGORIES`。每次运行记录在 `discovery_runs`，候选的 `discovery_evidence` 保留提到它的商品或帖子地址。渠道效果用 `discovery_runs.candidate_count` 与候选后续状态衡量。
 
 ## 识别与展示

@@ -27,9 +27,12 @@ const UTILITY_HOST_SUFFIXES = [
   "example.com", "xxxxxx.com", "localhost", "ping0.cc", "ipinfo.io", "ip.sb", "ip138.com", "whoer.net", "browserleaks.com",
   "cloudflare.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "aliyun.com", "alicdn.com", "aliyuncs.com",
   "oss-cn-hangzhou.aliyuncs.com", "qiniu.com", "ldxp.cn", "hotmail.com", "adobe.com", "duckdns.org", "dpdns.org", "ccwu.cc",
-  "eu.cc", "lanzou.com", "lanzoub.com", "lanzouw.com", "lanzoui.com", "lanzoux.com", "lanzouy.com", "lanzouv.com", "lanzn.com",
-  "123pan.com", "pan.baidu.com", "quark.cn", "rambler.ru", "yandex.ru", "mail.ru",
+  "eu.cc", "lanzn.com", "123pan.com", "pan.baidu.com", "quark.cn", "rambler.ru", "yandex.ru", "mail.ru", "vmos.cn",
+  "trycloudflare.com",
 ];
+
+// File-sharing hosts registered under many spellings (lanzou[a-z].com).
+const UTILITY_HOST_PATTERNS = [/(?:^|\.)lanzou[a-z]?\.com$/i, /(?:^|\.)lanzo[a-z]{1,2}\.com$/i];
 
 // Mail, SMS and code-receiving services name themselves that way anywhere in the host.
 const UTILITY_HOST_FRAGMENT = /(?:^|[.-])(?:[a-z0-9-]*(?:mail|sms|2fa|mfa|otp|jiema|tmail|gmail)[a-z0-9-]*)(?:$|[.-])/i;
@@ -40,6 +43,7 @@ const UTILITY_LABEL_PATTERN = /^(?:2fa|mfa|otp|totp|sms|otpsms|jiema|mail|email|
 export function isUtilityHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (UTILITY_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return true;
+  if (UTILITY_HOST_PATTERNS.some((pattern) => pattern.test(host))) return true;
   if (UTILITY_HOST_FRAGMENT.test(host)) return true;
   const labels = host.split(".");
   // Only the leading labels describe the service (e.g. sms.example.com); the
@@ -70,19 +74,47 @@ function cleanUrl(raw: string): string | null {
   }
 }
 
-/** URLs and bare domains mentioned in free text, cleaned and deduplicated. */
-export function extractMentionedUrls(text: string): string[] {
-  const found = new Set<string>();
+export interface MentionedUrl {
+  url: string;
+  /** Text around the mention, used to tell shop addresses from tutorials and tools. */
+  context: string;
+}
+
+/** URLs and bare domains mentioned in free text with their surrounding text, cleaned and deduplicated. */
+export function extractMentionedUrlsWithContext(text: string, radius = 60): MentionedUrl[] {
+  const found = new Map<string, string>();
+  const around = (index: number, length: number) => text.slice(Math.max(0, index - radius), Math.min(text.length, index + length + radius));
   for (const match of text.matchAll(URL_PATTERN)) {
     const url = cleanUrl(match[0]);
-    if (url) found.add(url);
+    if (url && !found.has(url)) found.set(url, around(match.index ?? 0, match[0].length));
   }
   for (const match of text.matchAll(BARE_DOMAIN_PATTERN)) {
     const host = match[1]?.toLowerCase();
-    if (!host || [...found].some((url) => new URL(url).hostname === host)) continue;
-    found.add(`https://${host}/`);
+    if (!host || [...found.keys()].some((url) => new URL(url).hostname === host)) continue;
+    const url = cleanUrl(`https://${host}/`);
+    if (url && !found.has(url)) found.set(url, around(match.index ?? 0, match[0].length));
   }
-  return [...found];
+  return [...found].map(([url, context]) => ({ url, context }));
+}
+
+export function extractMentionedUrls(text: string): string[] {
+  return extractMentionedUrlsWithContext(text).map((item) => item.url);
+}
+
+// Words merchants use when pointing at a shop, as opposed to tutorials, tools or downloads.
+const SHOP_CONTEXT = /店|铺|官网|购买|下单|发卡|自动发货|卡密|会员|充值|代充|升级|订阅|备用|镜像|分店|新店|地址|网址|入口|商城|商店|直营|自营|shop|store|buy|order|purchase|subscribe|topup|top-up|recharge/i;
+const SHOP_PATH = /\/(?:shop|item|buy|product|products|goods|order|store|cdk|pay)s?(?:\/|$)/i;
+
+/**
+ * A mentioned address is worth probing when it already looks like a shop page
+ * (platform shop/item path, product or order path) or the surrounding text talks
+ * about buying. Bare tool or tutorial links are dropped before any request is made.
+ */
+export function mentionLooksLikeShop(mention: MentionedUrl): boolean {
+  const url = new URL(mention.url);
+  if (familyHost(url.hostname)) return /\/(?:shop|item)\/[^/]+/.test(url.pathname);
+  if (SHOP_PATH.test(url.pathname)) return true;
+  return SHOP_CONTEXT.test(mention.context);
 }
 
 export interface CrawledCatalogRow {
@@ -109,9 +141,10 @@ export function leadsFromCrawledRows(rows: readonly CrawledCatalogRow[]): Crawle
     if (!row.rawDescription) continue;
     const selfHost = row.sourceHost.toLowerCase();
     const selfEntry = row.sourceEntryUrl ? cleanUrl(row.sourceEntryUrl) : null;
-    for (const url of extractMentionedUrls(row.rawDescription)) {
+    for (const mention of extractMentionedUrlsWithContext(row.rawDescription)) {
+      const url = mention.url;
       const host = new URL(url).hostname;
-      if (isUtilityHost(host) || url === selfEntry) continue;
+      if (isUtilityHost(host) || url === selfEntry || !mentionLooksLikeShop(mention)) continue;
       const pathname = new URL(url).pathname;
       if (familyHost(host)) {
         // On a multi-tenant platform only a shop path identifies another merchant; item links

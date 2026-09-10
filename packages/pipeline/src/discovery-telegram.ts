@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
-import { isUtilityHost } from "./discovery-links.js";
+import { isUtilityHost, mentionLooksLikeShop } from "./discovery-links.js";
 
 /**
  * Public Telegram channels render at https://t.me/s/<handle> without an
@@ -152,6 +152,7 @@ export async function discoverTelegramChannels(db: Database, options: TelegramDi
             url.hash = "";
             url.search = "";
             const key = url.toString();
+            if (!mentionLooksLikeShop({ url: key, context: message.text })) continue;
             if (!leads.has(key)) leads.set(key, { url: key, provider: TELEGRAM_CHANNEL_PROVIDER, discoveryKind: "community", discoveryUrl: `https://t.me/s/${message.post}` });
           }
         }

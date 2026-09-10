@@ -1,7 +1,7 @@
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
-import { extractMentionedUrls, isUtilityHost } from "./discovery-links.js";
+import { extractMentionedUrlsWithContext, isUtilityHost, mentionLooksLikeShop } from "./discovery-links.js";
 
 /**
  * GitHub topic pages list repositories whose READMEs advertise AI account and
@@ -67,9 +67,10 @@ export async function discoverGithubTopicReadmes(db: Database, options: GithubDi
         const readme = await fetchText(`https://raw.githubusercontent.com/${repo}/HEAD/README.md`, signal).catch((error: unknown) => { if (signal.aborted) throw error; return null; });
         if (!readme) continue;
         repositoriesRead += 1;
-        for (const url of extractMentionedUrls(readme)) {
+        for (const mention of extractMentionedUrlsWithContext(readme, 120)) {
+          const url = mention.url;
           const host = new URL(url).hostname;
-          if (isUtilityHost(host) || /\.github\.io$/i.test(host)) continue;
+          if (isUtilityHost(host) || /\.github\.io$/i.test(host) || !mentionLooksLikeShop(mention)) continue;
           if (!leads.has(url)) leads.set(url, { url, provider: GITHUB_TOPICS_PROVIDER, discoveryKind: "community", discoveryUrl: `https://github.com/${repo}` });
         }
       }
