@@ -11,10 +11,12 @@ test("extracts full URLs and bare domains from Chinese product descriptions", ()
     "https://sms.nloop.cc/",
   ]);
   assert.deepEqual(extractMentionedUrls("联系 QQ 123456，无链接"), []);
+  // Malformed hosts never become leads.
+  assert.deepEqual(extractMentionedUrls("看 https://www.&/ 和 https://fyui.xn--top-jx3ep93c4x6a8hc/ 以及 https://ok.example/"), ["https://fyui.xn--top-jx3ep93c4x6a8hc/", "https://ok.example/"]);
 });
 
 test("supporting-tool hosts are recognised by name, label and suffix", () => {
-  for (const host of ["2fa.fun", "2fa.run", "sms.linlinflow.ccwu.cc", "mail.chatai.codes", "convert.13916454.xyz", "session.ameng2027.xyz", "www.gmailcheck.com", "ping0.cc", "github.com", "aistore.notion.site", "docs.qq.com", "tinyurl.com", "t.me", "chatgpt.com"]) {
+  for (const host of ["2fa.fun", "2fa.run", "sms.linlinflow.ccwu.cc", "mail.chatai.codes", "convert.13916454.xyz", "session.ameng2027.xyz", "www.gmailcheck.com", "ping0.cc", "github.com", "aistore.notion.site", "docs.qq.com", "tinyurl.com", "t.me", "chatgpt.com", "hero-sms.com", "tmail.xuanlich.com", "getsms.website", "boardermail.com", "www.yunmasms.asia", "gpt.hjwl.email", "wwbch.lanzouw.com", "kw-stillhappy.duckdns.org", "u38731018b1.ccwu.cc"]) {
     assert.equal(isUtilityHost(host), true, host);
   }
   for (const host of ["chaai.cc", "8t92.cc", "vip666ai.com", "wzyp.cn", "shop.gpt.ge", "xingbao-ai.shop", "plus.eidolon-ai.com"]) {

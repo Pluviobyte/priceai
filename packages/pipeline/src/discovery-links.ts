@@ -26,8 +26,13 @@ const UTILITY_HOST_SUFFIXES = [
   "pinduoduo.com", "alipay.com", "wikihow.com", "mozilla.org", "gmail.com", "outlook.com", "proton.me", "protonmail.com",
   "example.com", "xxxxxx.com", "localhost", "ping0.cc", "ipinfo.io", "ip.sb", "ip138.com", "whoer.net", "browserleaks.com",
   "cloudflare.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "aliyun.com", "alicdn.com", "aliyuncs.com",
-  "oss-cn-hangzhou.aliyuncs.com", "qiniu.com", "ldxp.cn",
+  "oss-cn-hangzhou.aliyuncs.com", "qiniu.com", "ldxp.cn", "hotmail.com", "adobe.com", "duckdns.org", "dpdns.org", "ccwu.cc",
+  "eu.cc", "lanzou.com", "lanzoub.com", "lanzouw.com", "lanzoui.com", "lanzoux.com", "lanzouy.com", "lanzouv.com", "lanzn.com",
+  "123pan.com", "pan.baidu.com", "quark.cn", "rambler.ru", "yandex.ru", "mail.ru",
 ];
+
+// Mail, SMS and code-receiving services name themselves that way anywhere in the host.
+const UTILITY_HOST_FRAGMENT = /(?:^|[.-])(?:[a-z0-9-]*(?:mail|sms|2fa|mfa|otp|jiema|tmail|gmail)[a-z0-9-]*)(?:$|[.-])/i;
 
 // Subdomain or registrable-domain labels that identify supporting tools rather than shops.
 const UTILITY_LABEL_PATTERN = /^(?:2fa|mfa|otp|totp|sms|otpsms|jiema|mail|email|imap|smtp|webmail|gmailcheck|fastmail|fastmailapp|ip|ping|proxy|vpn|dns|convert|conversion|session|token|cookie|check|checker|status|api|cdn|static|img|images|oss|s3|docs|wiki|blog|help|support)$/i;
@@ -35,12 +40,15 @@ const UTILITY_LABEL_PATTERN = /^(?:2fa|mfa|otp|totp|sms|otpsms|jiema|mail|email|
 export function isUtilityHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (UTILITY_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return true;
+  if (UTILITY_HOST_FRAGMENT.test(host)) return true;
   const labels = host.split(".");
   // Only the leading labels describe the service (e.g. sms.example.com); the
   // registrable name is inspected too so 2fa.fun and 2fa.run are excluded.
   const inspect = labels.length > 2 ? [labels[0]!, labels[labels.length - 2]!] : [labels[0]!];
-  return inspect.some((label) => UTILITY_LABEL_PATTERN.test(label) || /^(?:2fa|mfa|sms|otp|mail)[a-z0-9-]*$/i.test(label));
+  return inspect.some((label) => UTILITY_LABEL_PATTERN.test(label));
 }
+
+const HOSTNAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i;
 
 function familyHost(hostname: string): boolean {
   return PLATFORM_FAMILIES.some((family) => family.hosts.includes(hostname.toLowerCase()));
@@ -55,7 +63,7 @@ function cleanUrl(raw: string): string | null {
     url.hash = "";
     url.search = "";
     url.hostname = url.hostname.toLowerCase();
-    if (!url.hostname.includes(".")) return null;
+    if (!HOSTNAME.test(url.hostname)) return null;
     return url.toString();
   } catch {
     return null;
