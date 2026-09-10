@@ -6,6 +6,9 @@ import type { CollectorRegistry } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import {
   crawlSource,
+  discoverGithubTopicReadmes,
+  discoverTelegramChannels,
+  mineCrawledCatalogLinks,
   platformKeyForUrl,
   measureCatalogGrowth,
   recoverGrowthCandidates,
@@ -49,6 +52,9 @@ export interface ChannelCycleResult {
   reason?: string;
   discovery?: unknown;
   marketplace?: unknown;
+  crawledLinks?: unknown;
+  telegram?: unknown;
+  github?: unknown;
   repair?: { checked: number; repaired: number };
   vetting?: { attempted: number; approved: number; review: number; rejected: number; duplicate: number; adapterNeeded: number; deferred: number };
   crawl?: { attempted: number; complete: number; failed: number };
@@ -67,11 +73,28 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
     result.discovery = await importSourceDirectories(db, { signal, ...(minIntervalMs ? { minIntervalMs } : {}) });
     log({ event: "directory_import", result: result.discovery });
     try {
-      result.marketplace = await enumerate16688SourceMarketplace(db, { signal, ...(minIntervalMs ? { minIntervalMs } : {}) });
+      result.marketplace = await enumerate16688SourceMarketplace(db, { signal, allCategories: config.sixteen688AllCategories, ...(minIntervalMs ? { minIntervalMs } : {}) });
       log({ event: "marketplace_enumeration", result: result.marketplace });
     } catch (error) {
       result.marketplace = { status: "failed", error: error instanceof Error ? error.message : String(error) };
       log({ event: "marketplace_enumeration_failed", error: String(error) });
+    }
+    // Autonomous channels: our own crawled catalogs, public Telegram channels and GitHub topic READMEs.
+    const autonomousInterval = options.forceDiscovery ? undefined : config.autonomousDiscoveryIntervalMs;
+    const autonomous: Array<[keyof ChannelCycleResult & ("crawledLinks" | "telegram" | "github"), boolean, () => Promise<unknown>]> = [
+      ["crawledLinks", config.linkDiscoveryEnabled, () => mineCrawledCatalogLinks(db, { signal, ...(autonomousInterval ? { minIntervalMs: autonomousInterval } : {}) })],
+      ["telegram", config.telegramDiscoveryEnabled, () => discoverTelegramChannels(db, { signal, ...(autonomousInterval ? { minIntervalMs: autonomousInterval } : {}) })],
+      ["github", config.githubDiscoveryEnabled, () => discoverGithubTopicReadmes(db, { signal, ...(config.githubDiscoveryTopics.length ? { topics: config.githubDiscoveryTopics } : {}), ...(autonomousInterval ? { minIntervalMs: autonomousInterval * 7 } : {}) })],
+    ];
+    for (const [key, enabled, work] of autonomous) {
+      if (!enabled) continue;
+      try {
+        result[key] = await work();
+        log({ event: `${key}_discovery`, result: result[key] });
+      } catch (error) {
+        result[key] = { status: "failed", error: error instanceof Error ? error.message : String(error) };
+        log({ event: `${key}_discovery_failed`, error: String(error) });
+      }
     }
   }
 

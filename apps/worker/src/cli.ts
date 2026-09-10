@@ -10,7 +10,10 @@ import {
   measureCatalogGrowth,
   recoverGrowthCandidates,
   deliverNotificationOutbox,
+  discoverGithubTopicReadmes,
+  discoverTelegramChannels,
   enumerate16688SourceMarketplace,
+  mineCrawledCatalogLinks,
   evaluatePriceAlerts,
   generateLlmExtractionCandidates,
   discoverSourcesWithBrave,
@@ -196,6 +199,22 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
+    if (command === "discover-links") {
+      // Shops mentioned inside our own crawled catalogs; no network access to third parties.
+      const result = await mineCrawledCatalogLinks(database.db);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "discover-telegram") {
+      const result = await discoverTelegramChannels(database.db, argument ? { seedHandles: argument.split(",") } : {});
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (command === "discover-github") {
+      const result = await discoverGithubTopicReadmes(database.db, argument ? { topics: argument.split(",") } : {});
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     if (command === "vet-candidates") {
       const limit = argument ? Number(argument) : config.candidateVettingBatch;
       const result = await vetNextCandidates(database.db, registry, { limit, ...(config.objectStorageConfigured ? { rawObjectStore } : {}) });
@@ -249,7 +268,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, publicSnapshot, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|coverage-check|llm-extract-candidates|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|discover-links|discover-telegram|discover-github|coverage-check|llm-extract-candidates|bootstrap> [argument]");
   } finally {
     await database.close();
     rawObjectStore.destroy();

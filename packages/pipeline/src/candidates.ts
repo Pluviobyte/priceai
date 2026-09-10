@@ -10,7 +10,7 @@ import { resolveCandidateIdentity, type CandidateIdentity } from "@price-radar/s
  * mirror domains or several directories becomes one candidate with the list of
  * places that mentioned it.
  */
-export type LeadDiscoveryKind = "submission" | "manual" | "grok_x" | "search" | "community" | "aggregator" | "directory" | "platform";
+export type LeadDiscoveryKind = "submission" | "manual" | "grok_x" | "search" | "community" | "aggregator" | "directory" | "platform" | "crawl";
 
 export interface CandidateLead {
   url: string;

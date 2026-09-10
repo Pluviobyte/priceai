@@ -29,6 +29,19 @@ DMIT Channel Worker 领取候选/来源 → PostgreSQL 平台预算 → 按域�
 - 发布失败保留待发布计数并重试；没有变更时不发布。仍使用原有完整快照与原子代际切换，页面不会展示半份商品目录。
 - `candidate_vetted` 每店完成立即记录，`source_crawled` 和 `channels_published` 增加耗时，用于区分采集与发布瓶颈。
 
+## 自主发现（2026-09-10）
+
+聚合站目录只是发现渠道之一。以下渠道不依赖任何第三方 API，部署后由 Channel Worker 在发现阶段按间隔自动运行（`AUTONOMOUS_DISCOVERY_INTERVAL_MS`，默认 24 小时，GitHub 为 7 倍间隔），产出的只是候选地址与证据，准入、去重、安全检查、试采与发布全部沿用现有流程。
+
+| 渠道 | provider | 数据来源 | 过滤 |
+|---|---|---|---|
+| 自有采集链接图 | `crawled_catalog_links` | 各启用来源最新完整快照的商品描述里的链接与裸域名 | 剔除本店链接、工具站（接码、2FA、邮箱、文档、代码托管、短链、大厂域名）、无店铺路径的平台首页 |
+| Telegram 公开频道 | `telegram_public_channels` | 商品描述与商家公开联系方式里出现的 `t.me` 频道，读取 `t.me/s/<频道>` 公开页，最多 3 页，并沿帖子里的频道链接扩展一层 | 邀请链接不读；同样的工具站过滤 |
+| GitHub 主题 README | `github_topic_readmes` | 主题页列出的仓库 README（默认 chatgpt-daichong、chatgpt-plus-pay、chatgpt-china 等） | 仓库地址本身不作为候选 |
+| 16688 货源广场全类目 | `16688_source_marketplace` | 全部类目；AI 类目外只对名称像 AI 商品的货源查询店铺 | 名称关键词见 `isAiRelatedGoodsName` |
+
+命令：`discover-links`、`discover-telegram [频道,...]`、`discover-github [主题,...]`、`enumerate-16688 all`。开关：`LINK_DISCOVERY_ENABLED`、`TELEGRAM_DISCOVERY_ENABLED`、`GITHUB_DISCOVERY_ENABLED`、`SIXTEEN688_ALL_CATEGORIES`。每次运行记录在 `discovery_runs`，候选的 `discovery_evidence` 保留提到它的商品或帖子地址。渠道效果用 `discovery_runs.candidate_count` 与候选后续状态衡量。
+
 ## 识别与展示
 
 产品置信度与交付模式分开：明确产品可收录；产品身份冲突继续隔离，交付冲突显示待确认，不参加参考最低价和商家低价排名。补充已观察到的 GPT-Plus、Claude 5x/20x 等写法。普通账号与明确付费套餐分开，周边商品使用独立分类。

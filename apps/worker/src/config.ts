@@ -18,6 +18,14 @@ export interface WorkerConfig {
   qualityProfileMaxAgeMs: number;
   /** Master switch for automatic source discovery and vetting. */
   sourceDiscoveryEnabled: boolean;
+  /** Autonomous discovery channels that need no third-party API. */
+  linkDiscoveryEnabled: boolean;
+  telegramDiscoveryEnabled: boolean;
+  githubDiscoveryEnabled: boolean;
+  githubDiscoveryTopics: string[];
+  /** Read every 16688 marketplace category (AI-looking goods only outside the AI category). */
+  sixteen688AllCategories: boolean;
+  autonomousDiscoveryIntervalMs: number;
   browserExecutablePath?: string;
   notificationWebhookUrl?: string;
   notificationWebhookSecret?: string;
@@ -54,6 +62,12 @@ export function readWorkerConfig(
     channelPlatformConcurrency: Math.min(8, Math.max(1, Math.floor(positiveNumber(env.CHANNEL_PLATFORM_CONCURRENCY, 4)))),
     qualityProfileMaxAgeMs: positiveNumber(env.QUALITY_PROFILE_MAX_AGE_MS, 7 * 24 * 60 * 60 * 1_000),
     sourceDiscoveryEnabled: (env.SOURCE_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
+    linkDiscoveryEnabled: (env.LINK_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
+    telegramDiscoveryEnabled: (env.TELEGRAM_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
+    githubDiscoveryEnabled: (env.GITHUB_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
+    githubDiscoveryTopics: (env.GITHUB_DISCOVERY_TOPICS ?? "").split(",").map((item) => item.trim()).filter(Boolean),
+    sixteen688AllCategories: (env.SIXTEEN688_ALL_CATEGORIES ?? "true").toLowerCase() !== "false",
+    autonomousDiscoveryIntervalMs: positiveNumber(env.AUTONOMOUS_DISCOVERY_INTERVAL_MS, 24 * 60 * 60 * 1_000),
     ...(env.BROWSER_EXECUTABLE_PATH
       ? { browserExecutablePath: env.BROWSER_EXECUTABLE_PATH }
       : {}),

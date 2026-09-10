@@ -38,6 +38,13 @@ async function post(path: string, body: unknown, signal: AbortSignal): Promise<u
 
 export interface MarketplaceCategory { id: number | string; name: string }
 
+/** Goods names that plausibly belong to an AI subscription, account or credit shop. Vetting still decides. */
+const AI_GOODS_NAME = /chat\s?gpt|gpt|openai|claude|anthropic|gemini|grok|midjourney|cursor|copilot|perplexity|sora|codex|deepseek|kimi|poe\b|runway|suno|notebooklm|windsurf|ai\s?(?:会员|账号|账户|订阅|充值|代充|升级)|人工智能/i;
+
+export function isAiRelatedGoodsName(name: string): boolean {
+  return AI_GOODS_NAME.test(name);
+}
+
 export function parseCategoryTree(data: unknown): MarketplaceCategory[] {
   const list = isRecord(data) && Array.isArray(data.list) ? data.list : [];
   const categories: MarketplaceCategory[] = [];
@@ -85,6 +92,8 @@ export async function enumerate16688SourceMarketplace(db: Database, options: Enu
         if (list.length === 0) break;
         for (const item of list) {
           if (!isRecord(item) || typeof item.goods_no !== "string" || !item.goods_no.trim()) continue;
+          // Outside the AI category only AI-looking goods justify a per-merchant detail request.
+          if (category.name !== AI_CATEGORY_NAME && !(typeof item.name === "string" && isAiRelatedGoodsName(item.name))) continue;
           const goodsNo = item.goods_no.trim();
           const merchantNo = isRecord(item.merchant) && typeof item.merchant.merchant_no === "string" ? item.merchant.merchant_no : "";
           let shopNo = merchantNo ? shopByMerchant.get(merchantNo) : undefined;
