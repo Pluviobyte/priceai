@@ -28,7 +28,7 @@ const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱�
 // A phone-verification service is sold per use; 马/🐎 is the common homophone for 码.
 // "已接码"/"未接马" instead describes an account that is already verified, so it is an
 // attribute of the thing being sold and must never outrank the plan or mailbox it modifies.
-const VERIFICATION_SERVICE = /(?<![已未带含不])接\s*(?:码|马|🐎)|(?<![未没不无]绑定?手机)验证码/i;
+const VERIFICATION_SERVICE = /(?<![已未带含不])接\s*(?:码|马|🐎)(?!\s*(?:后|之后|可|能|即))|(?<![未没不无]绑定?手机)验证码/i;
 
 // A mailbox bundled with an AI account is an accessory; a mailbox sold in order to
 // register one announces itself ("长效微软邮箱注册") and stays a mailbox offer.
@@ -107,7 +107,7 @@ const productRules: ProductRule[] = [
   {
     slug: "gemini-pro",
     include: [
-      /\bgemini\b.*\bpro\b/i,
+      /\bgemini\b.*pro(?![a-z])/i,
       /\bgemini\s*\d+(?:\.\d+)?\s*pro\b/i,
       /\bgoogle\s*ai\s*pro\b/i,
     ],
@@ -116,7 +116,7 @@ const productRules: ProductRule[] = [
   {
     slug: "supergrok",
     include: [/\bsuper\s*grok\b/i, /\bgrok\b.*\bsuper\b/i],
-    exclude: [/heavy/i],
+    exclude: [/heavy/i, /(?:包含|含|附赠|赠送|送)[^。]{0,10}supergrok/i],
   },
   {
     slug: "cursor-pro",
@@ -229,6 +229,14 @@ function normalizedProductText(offer: RawOfferInput): string {
   return normalizeBrandAliases([offer.rawTitle, offer.rawCategory]
     .filter((value): value is string => Boolean(value))
     .join(" ")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim());
+}
+
+// The title alone, for deciding whether the listing names its own plan.
+function normalizedTitleText(offer: RawOfferInput): string {
+  return normalizeBrandAliases(offer.rawTitle
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim());
@@ -387,7 +395,14 @@ function extractAttributes(text: string, mode: OfferMode): OfferAttributes {
 
 export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const text = normalizedText(offer);
-  const product = matchProduct(normalizedProductText(offer));
+  // A title that names its own plan outranks the category: shops file a Plus listing
+  // under a "Pro 20X" category. But a title that only says "account" is not more precise
+  // than the category, so it defers unless it calls itself a free or basic account.
+  const titleText = normalizedTitleText(offer);
+  const titleMatch = matchProduct(titleText);
+  const titleIsPrecise = titleMatch.slug !== null
+    && (!/-account$/.test(titleMatch.slug) || /free|普号|空号|普通号|半成品/i.test(titleText));
+  const product = titleIsPrecise ? titleMatch : matchProduct(normalizedProductText(offer));
   const mode = matchOfferMode(text);
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];

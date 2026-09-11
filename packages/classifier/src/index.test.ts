@@ -113,6 +113,8 @@ test('already-verified is an account attribute, a bare 接码 is the service its
   assert.equal(classify('谷歌邮箱 老号 已接码 2FA').canonicalProductSlug, 'resource-gmail');
   assert.equal(classify('【Google个人邮箱】未接马 2020-2025老号').canonicalProductSlug, 'resource-gmail');
   assert.equal(classify('微软邮箱 outlook 已接马').canonicalProductSlug, 'resource-outlook');
+  // "接码后可用" is a condition for using the account, not a 接码 service on sale.
+  assert.equal(classify('GPT Plus 成品号 【质保5天】【接码后可用codex】【未接码】').canonicalProductSlug, 'chatgpt-plus');
 });
 
 test('the category column carries plan identity when the title omits it', () => {
@@ -175,4 +177,41 @@ test('mentioning Plus as a capability or a negation does not make it a Plus offe
   // 验证码 is the product when it is what is sold, an attribute when the account merely lacks it.
   assert.equal(classify('美国短效codex验证和手机号注册codex Codex手机验证码').canonicalProductSlug, 'resource-openai-verification');
   assert.equal(classify('Gplus成品号，未绑定手机验证码，纯邮箱注册，质保首登').canonicalProductSlug, 'chatgpt-plus');
+});
+
+test('a title that names its own plan outranks a category naming another', () => {
+  const withCategory = (rawTitle: string, rawCategory: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawCategory, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  // Shops file a Plus listing under a "Pro 20X" category; the category must not rename it.
+  assert.equal(withCategory('【官方正规】G Plus 官方充值 【品质有保障】', 'OpenAI Pro 20X 充值').canonicalProductSlug, 'chatgpt-plus');
+  assert.equal(withCategory('【官方代充】Codex Plus 月卡（源头代充）', 'G代充/20X Pro').canonicalProductSlug, 'chatgpt-plus');
+  // A Free account filed under Plus/team is still a free account.
+  assert.equal(withCategory('G Free-账密 RT-长效outlook-适合各类业务(可网页反代，除Codex)', '❤️Plus/team/K12').canonicalProductSlug, 'chatgpt-account');
+  // Titles that do name the tier keep it.
+  assert.equal(withCategory('G PRO 20x 1个月充值【官方卡充｜菲区｜质保掉订阅】', 'Codex 充值').canonicalProductSlug, 'chatgpt-pro-20x');
+  assert.equal(withCategory('5x team 非轮转', 'Codex 成品').canonicalProductSlug, 'chatgpt-team');
+  // A title with no plan of its own still defers to the category.
+  assert.equal(withCategory('Cursor月卡--质保', 'Cursor Pro').canonicalProductSlug, 'cursor-pro');
+  assert.equal(withCategory('perplexity-年卡-独享', 'Perplexity Pro').canonicalProductSlug, 'perplexity-pro');
+});
+
+test('a title saying only "account" is not more precise than a category naming the tier', () => {
+  const withCategory = (rawTitle: string, rawCategory: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawCategory, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  // "成品号" names no tier, so the category still decides which plan it is.
+  assert.equal(withCategory('Gemini成品号12个月，6-8月份订阅的号。质保6小时首登', 'Gemini Pro会员').canonicalProductSlug, 'gemini-pro');
+  assert.equal(withCategory('库存老号，只能登录网页，需要codex接🐴，成品号', 'G PLUS').canonicalProductSlug, 'chatgpt-plus');
+  // A title calling itself free or 普号 does contradict the category, and wins.
+  assert.equal(withCategory('G Free-账密 RT-长效outlook-适合各类业务(可网页反代，除Codex)', '❤️Plus/team/K12').canonicalProductSlug, 'chatgpt-account');
+  assert.equal(withCategory('【groK 普号】【帐密+sso】成品｜域名邮箱】无保', 'super gro').canonicalProductSlug, 'grok-account');
+  // A plan bundled in as a freebie is not what the listing sells.
+  assert.equal(withCategory('【正规实付】X Premium 12个月 全程质保订阅（包含同时长Supergro Lite）', 'X 推特 Premium/P+').canonicalProductSlug, 'x-premium');
+  // "Pro18个月" puts a digit after the tier; the tier still counts.
+  assert.equal(withCategory('Gemini-Pro18个月全年激活-到自己账号', 'Gemini pro').canonicalProductSlug, 'gemini-pro');
 });
