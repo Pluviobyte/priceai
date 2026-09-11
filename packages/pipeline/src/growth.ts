@@ -1,4 +1,5 @@
 import { platformKeySql } from './platform-policy.js';
+import { isUtilityHost } from './discovery-links.js';
 import { sql } from 'drizzle-orm';
 import type { Database } from '@price-radar/database';
 
@@ -109,4 +110,57 @@ export async function recoverAdmissionCandidates(db: Database, limit = 100) {
       '{"status":"pending","version":"2026-09-10.1"}'::jsonb from changed
   ) select id from changed`);
   return {requeued:rows.length};
+}
+
+/** One-time recheck for the loosened classifier. Shops rejected only because nothing in
+ * their catalogue looked AI-related may match now that brand-obfuscated and brandless
+ * plan wording resolves. Manual decisions are never touched. */
+export async function recoverClassifierCandidates(db: Database, limit = 100) {
+  const {rows}=await db.execute<{id:string}>(sql`with selected as (
+    select c.id from source_candidates c
+    where c.status in ('review','rejected','blocked_egress')
+      and coalesce(c.vetting_result->>'classifierRecoveryVersion','')<>'2026-09-11.1'
+      and c.vetting_result->'reasons' @> '["no_ai_relevant_items"]'::jsonb
+      and not exists(select 1 from audit_logs a where a.target_id=c.id::text
+        and a.actor_id<>'automatic_vetting' and a.action like 'source_candidate.%')
+    order by c.priority desc,c.discovered_at limit ${Math.max(1,Math.min(limit,1000))} for update of c skip locked
+  ), changed as (
+    update source_candidates c set status='pending',next_vet_at=now(),
+      vetting_result=coalesce(c.vetting_result,'{}'::jsonb)||jsonb_build_object(
+        'previousClassifierDecision',c.vetting_result,'attempts',0,'classifierRecoveryVersion','2026-09-11.1')
+    from selected where c.id=selected.id returning c.id
+  ), audited as (
+    insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value)
+    select 'automatic_vetting','source_candidate.classifier_recheck','source_candidate',id::text,
+      'loosened classifier now resolves obfuscated and brandless plan wording; full admission checks still required',
+      '{"status":"pending","version":"2026-09-11.1"}'::jsonb from changed
+  ) select id from changed`);
+  return {requeued:rows.length};
+}
+
+/** A file-sharing or cloud-phone link can never be a shop, yet a rejected candidate
+ * returns to the queue once next_vet_at passes. Clearing next_vet_at is what actually
+ * stops the probing; discovery already refuses to add new ones. */
+export async function retireUtilityHostCandidates(db: Database, limit = 2000) {
+  const {rows}=await db.execute<{id:string;candidate_url:string}>(sql`
+    select c.id, c.candidate_url from source_candidates c
+    where c.status in ('pending','review','rejected','adapter_needed','blocked_egress')
+      and coalesce(c.vetting_result->>'retiredReason','')<>'utility_host'
+      and not exists(select 1 from audit_logs a where a.target_id=c.id::text
+        and a.actor_id<>'automatic_vetting' and a.action like 'source_candidate.%')
+    limit ${Math.max(1,Math.min(limit,5000))}`);
+  const retire=rows.filter(row=>{
+    try { return isUtilityHost(new URL(row.candidate_url).hostname); } catch { return false; }
+  });
+  if (!retire.length) return {retired:0};
+  const ids=sql.join(retire.map(row=>sql`${row.id}::uuid`),sql`,`);
+  await db.execute(sql`with changed as (
+    update source_candidates set status='rejected', next_vet_at=null,
+      vetting_result=coalesce(vetting_result,'{}'::jsonb)||jsonb_build_object('retiredReason','utility_host','retiredVersion','2026-09-11.1')
+    where id in (${ids}) returning id
+  ) insert into audit_logs(actor_id,action,target_type,target_id,reason,after_value)
+    select 'automatic_vetting','source_candidate.retired','source_candidate',id::text,
+      'file-sharing or cloud-phone host cannot be a shop; cleared next_vet_at so the queue stops probing it',
+      '{"status":"rejected","nextVetAt":null}'::jsonb from changed`);
+  return {retired:retire.length};
 }

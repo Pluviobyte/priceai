@@ -20,4 +20,4 @@ export * from "./url-security.js";
 export * from "./vetting.js";
 export * from './platform-policy.js';
 
-export { measureCatalogGrowth, recoverGrowthCandidates, recoverClearedPlatformCandidates, recoverAdmissionCandidates } from './growth.js';
+export { measureCatalogGrowth, recoverGrowthCandidates, recoverClearedPlatformCandidates, recoverAdmissionCandidates, recoverClassifierCandidates, retireUtilityHostCandidates } from './growth.js';

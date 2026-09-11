@@ -9,6 +9,8 @@ import {
   crawlSource,
   measureCatalogGrowth,
   recoverGrowthCandidates,
+  recoverClassifierCandidates,
+  retireUtilityHostCandidates,
   deliverNotificationOutbox,
   discoverGithubTopicReadmes,
   discoverTelegramChannels,
@@ -62,6 +64,8 @@ async function main(): Promise<void> {
   try {
     if (command === 'growth-report') { console.log(JSON.stringify(await measureCatalogGrowth(database.db),null,2)); return; }
     if (command === 'recover-growth') { console.log(JSON.stringify(await recoverGrowthCandidates(database.db, Number(argument) || 30))); return; }
+    if (command === 'recover-classifier') { console.log(JSON.stringify(await recoverClassifierCandidates(database.db, Number(argument) || 100))); return; }
+    if (command === 'retire-utility-hosts') { console.log(JSON.stringify(await retireUtilityHostCandidates(database.db, Number(argument) || 2000))); return; }
     if (command === "refresh-channels") {
       await seedCanonicalProducts(database.db);
       const enabled = await database.db.select({id:sources.id}).from(sources).where(eq(sources.enabled,true));

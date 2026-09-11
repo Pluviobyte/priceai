@@ -14,9 +14,9 @@ import { sql } from 'drizzle-orm';
 import { createDatabase } from '@price-radar/database';
 import { InMemoryCollectorRegistry, PlatformDeferredError, WafChallengeError } from '@price-radar/collector-sdk';
 import { PostgresRequestPolicy, platformKey } from './platform-policy.js';
-import { recoverGrowthCandidates, measureCatalogGrowth, recoverClearedPlatformCandidates, recoverAdmissionCandidates } from './growth.js';
+import { recoverGrowthCandidates, measureCatalogGrowth, recoverClearedPlatformCandidates, recoverAdmissionCandidates, recoverClassifierCandidates, retireUtilityHostCandidates } from './growth.js';
 import { findDueSources, findVettableCandidates, findChannelWork } from './scheduler.js';
-import { vetCandidate, vetNextCandidates } from './vetting.js';
+import { vetCandidate, vetNextCandidates, prepareVettingQueue } from './vetting.js';
 
 // Explicit opt-in. Creates and drops its OWN database, never truncates caller data.
 const adminUrl = process.env.POLICY_TEST_DATABASE_URL;
@@ -171,6 +171,38 @@ test('persistent platform policy and candidate scheduling (PostgreSQL)', { skip:
       const queue = await findVettableCandidates(db,1000);
       assert.ok(queue.some(row=>row.candidateUrl.includes('wzyp.cn')));
       assert.ok(queue.some(row=>row.candidateUrl.includes('recovery.example')));
+    });
+    await t.test('classifier recovery requeues AI-relevance rejections once and spares manual decisions', async () => {
+      const manual = randomUUID();
+      await db.execute(sql`insert into source_candidates(id,candidate_url,discovery_kind,status,platform_kind,vetting_result)
+        values(${manual}::uuid,'https://manual-reject.example/','directory','rejected','kami','{"version":"vetting-2026-09-10.1","reasons":["no_ai_relevant_items"]}'::jsonb)`);
+      await db.execute(sql`insert into audit_logs(actor_id,action,target_type,target_id,reason)
+        values('rain','source_candidate.rejected','source_candidate',${manual}::text,'reviewed by hand')`);
+      await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind,status,platform_kind,vetting_result)
+        values('https://loosened.example/','directory','rejected','kami','{"version":"vetting-2026-09-10.1","reasons":["no_ai_relevant_items"]}'::jsonb)`);
+      assert.equal((await recoverClassifierCandidates(db)).requeued, 1, 'only the automatic decision is requeued');
+      assert.equal((await recoverClassifierCandidates(db)).requeued, 0, 'the recheck is one-time');
+      const kept = (await db.execute<{status:string}>(sql`select status from source_candidates where id=${manual}::uuid`)).rows;
+      assert.equal(kept[0]?.status, 'rejected', 'a decision made by a person is never overwritten');
+    });
+    await t.test('utility hosts are retired for good and stop returning to the queue', async () => {
+      await db.execute(sql`insert into source_candidates(candidate_url,discovery_kind,status,platform_kind,next_vet_at)
+        values('https://wwbec.lanzouu.com/','crawl','blocked_egress','unknown',now()-interval '1 hour'),
+              ('https://h.vmos.cn/','crawl','blocked_egress','unknown',now()-interval '1 hour'),
+              ('https://realshop.example/','crawl','rejected','kami',now()-interval '1 hour')`);
+      assert.equal((await retireUtilityHostCandidates(db)).retired, 2, 'only file-sharing and cloud-phone hosts are retired');
+      assert.equal((await retireUtilityHostCandidates(db)).retired, 0, 'retirement is idempotent');
+      const retired = (await db.execute<{next_vet_at:Date|null}>(sql`select next_vet_at from source_candidates where candidate_url like '%lanzouu.com%'`)).rows;
+      assert.equal(retired[0]?.next_vet_at, null, 'clearing next_vet_at is what actually stops the probing');
+      // A rejected candidate returns to pending once next_vet_at passes, so prove it cannot.
+      await prepareVettingQueue(db);
+      const still = (await db.execute<{count:string}>(sql`select count(*)::text count from source_candidates
+        where candidate_url like '%lanzouu.com%' and status='pending'`)).rows;
+      assert.equal(still[0]?.count, '0', 'a retired utility host never returns to pending');
+      // The contrast that matters: an ordinary rejected shop does come back once its
+      // next_vet_at passes, which is exactly what the retired hosts above no longer do.
+      const shop = (await db.execute<{status:string}>(sql`select status from source_candidates where candidate_url like '%realshop.example%'`)).rows;
+      assert.equal(shop[0]?.status, 'pending', 'an ordinary shop is still retried, so clearing next_vet_at is what stopped the others');
     });
     await t.test('cleared platform recovery handles null evidence, excludes manual decisions and is idempotent',async()=>{
       const ids=[randomUUID(),randomUUID(),randomUUID()];
