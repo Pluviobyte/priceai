@@ -5,13 +5,38 @@ import type {
   RawOfferInput,
 } from "@price-radar/schema";
 
-const VERSION = "rules-2026-09-09.2";
+const VERSION = "rules-2026-09-11.1";
 
 interface ProductRule {
   slug: string;
   include: RegExp[];
   exclude?: RegExp[];
+  /** Every pattern must also match. Gates brandless plan words on card-shop wording. */
+  require?: RegExp[];
 }
+
+// Card-shop purchase wording. Note: `\b` is defined on [A-Za-z0-9_] and therefore
+// never matches beside a Chinese character, so these alternatives carry no `\b`.
+const PURCHASE_CONTEXT = /充值|代充|直充|成品|普号|空号|账号|月卡|年卡|季卡|周卡|质保|订阅|卡密|兑换|cdk|秒发|自动发货|车位|席位|拼车|轮转|开票|发票|反代|会员|限制/i;
+
+// Other vendors' plans, and unrelated memberships that also use "plus"/"team".
+// Only the brandless rules below consult these; branded rules keep reporting
+// cross-vendor matches as conflicts.
+const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora/i;
+const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱奇艺|优酷|芒果|酷狗|网易云|喜马拉雅|剪映|网盘|文库|影视|视频会员|音乐|打车|外卖|粉丝|抖音|快手|美团|饿了么|迅雷|夸克|steam|netflix|spotify|youtube|disney|office|wps/i;
+
+// A phone-verification service is sold per use; 马/🐎 is the common homophone for 码.
+// "已接码"/"未接马" instead describes an account that is already verified, so it is an
+// attribute of the thing being sold and must never outrank the plan or mailbox it modifies.
+const VERIFICATION_SERVICE = /(?<![已未带含不])接\s*(?:码|马|🐎)|(?<![未没不无]绑定?手机)验证码/i;
+
+// A mailbox bundled with an AI account is an accessory; a mailbox sold in order to
+// register one announces itself ("长效微软邮箱注册") and stays a mailbox offer.
+const MAILBOX_AS_ITEM = /(?:长效|注册专用|注册用|账密|自助)[^,，。]{0,8}邮箱|邮箱[^,，。]{0,6}(?:注册|账密|直登|成品|自助)/i;
+
+// Mentioning Plus is not selling Plus: "非plus" denies it, "可升级plus"/"开plus绑定专用"
+// describe what a mailbox can later be used for, and 子邮箱/隐私邮箱 name the mailbox itself.
+const PLUS_NOT_SOLD = /非\s*plus|(?:可|支持|能)\s*升级[^a-z]{0,2}plus|开\s*plus[^。]{0,4}(?:绑定|专用)|子邮箱|隐私邮箱/i;
 
 const productRules: ProductRule[] = [
   {
@@ -29,12 +54,12 @@ const productRules: ProductRule[] = [
   },
   {
     slug: "chatgpt-pro-5x",
-    include: [/(?:chat\s*gpt|gpt).*?(?:pro[-\s]*5\s*x|5\s*x[-\s]*pro)/i],
+    include: [/(?:chat\s*gpt|gpt).*?(?:pro[\s\S]{0,20}?5\s*x|5\s*x[\s\S]{0,20}?pro)/i],
     exclude: [/教程|免费|free/i],
   },
   {
     slug: "chatgpt-pro-20x",
-    include: [/(?:chat\s*gpt|gpt).*?(?:pro[-\s]*20\s*x|20\s*x[-\s]*pro)/i],
+    include: [/(?:chat\s*gpt|gpt).*?(?:pro[\s\S]{0,20}?20\s*x|20\s*x[\s\S]{0,20}?pro)/i],
     exclude: [/教程|免费|free/i],
   },
   {
@@ -52,9 +77,10 @@ const productRules: ProductRule[] = [
       /\bgpt(?:[-\s]+|\s*)plus\b/i,
       /\bgpt\s*(?:[一二三四五六七八九十0-9]+个月|月卡|年卡)\s*plus\b/i,
       /\bg[-\s]*plus\b/i,
-      /\bplus\b.*\b(?:codex|成品|账号|充值|代充)\b/i,
+      // Bidirectional: "Codex Plus" and "Plus 代充" must both resolve.
+      /plus[\s\S]*(?:codex|成品|账号|充值|代充)|(?:codex|成品|账号|充值|代充)[\s\S]*plus/i,
     ],
-    exclude: [/\b(?:pro|go|team|k12|free)\b|接马|接码|额度/i],
+    exclude: [/\b(?:pro|go|team|k12|free)\b|额度/i, VERIFICATION_SERVICE, PLUS_NOT_SOLD],
   },
   {
     slug: "claude-max-20x",
@@ -99,11 +125,40 @@ const productRules: ProductRule[] = [
     slug: "x-premium",
     include: [/(?:x[-\s]*twitter|twitter|推特).*\bpremium\b/i],
   },
+  // Shops routinely drop the brand entirely ("PRO 20X 官方充值月卡", "5X TEAM 轮转号").
+  // These sit last so any branded rule wins, and they only fire inside card-shop
+  // purchase wording, never for another vendor or an unrelated membership.
+  {
+    slug: "chatgpt-team",
+    include: [/(?:^|[^a-z])team(?:[^a-z]|$)/i],
+    require: [PURCHASE_CONTEXT],
+    exclude: [VENDOR_OTHER, NON_AI_BRANDS, /microsoft|teams(?:[^a-z]|$)/i],
+  },
+  {
+    slug: "chatgpt-pro-20x",
+    include: [/pro[^a-z]{0,8}20\s*x|20\s*x[^a-z]{0,8}pro|(?:^|[^a-z])20\s*x(?:[^a-z]|$)/i],
+    require: [PURCHASE_CONTEXT],
+    exclude: [VENDOR_OTHER, NON_AI_BRANDS, /(?:^|[^a-z])team(?:[^a-z]|$)|教程|免费|free/i],
+  },
+  {
+    slug: "chatgpt-pro-5x",
+    include: [/pro[^a-z]{0,8}5\s*x|5\s*x[^a-z]{0,8}pro|(?:^|[^a-z])5\s*x(?:[^a-z]|$)/i],
+    require: [PURCHASE_CONTEXT],
+    exclude: [VENDOR_OTHER, NON_AI_BRANDS, /(?:^|[^a-z])team(?:[^a-z]|$)|20\s*x|教程|免费|free/i],
+  },
+  {
+    slug: "chatgpt-plus",
+    include: [/(?:^|[^a-z])plus(?:[^a-z]|$)/i],
+    require: [PURCHASE_CONTEXT],
+    // 接码/接马 priced as a service must not set a ChatGPT Plus minimum price.
+    exclude: [VENDOR_OTHER, NON_AI_BRANDS, /(?:^|[^a-z])(?:pro|go|team|k12)(?:[^a-z]|$)|额度/i, VERIFICATION_SERVICE, PLUS_NOT_SOLD],
+  },
 ];
+
 
 // Broad account/service categories never impersonate an exact paid plan.
 const additionalRules: ProductRule[] = [
-  { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i] },
+  { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i, /codex.*(?:成品|普号|空号)/i, /(?:chat\s*gpt|gpt)\s*free[\s\S]{0,4}账号/i] },
   { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
   { slug: 'gemini-account', include: [/gemini.*(?:账号|成品|账户)/i] },
   { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i] },
@@ -113,13 +168,14 @@ const additionalRules: ProductRule[] = [
   { slug: 'kiro-account', include: [/kiro.*(?:普号|free|账号)/i] },
   { slug: 'suno-account', include: [/suno.*(?:账号|会员|pro|成品)/i] },
   { slug: 'dreamina-account', include: [/(?:即梦|dreamina).*(?:账号|会员|成品|积分)/i] },
-  { slug: 'resource-gmail', include: [/(?:gmail|谷歌邮箱|google\s*邮箱)/i] },
-  { slug: 'resource-outlook', include: [/(?:outlook|hotmail|微软邮箱)/i] },
+  // Merchants write "Google个人邮箱"/"谷歌 邮箱"; allow a short filler before 邮箱.
+  { slug: 'resource-gmail', include: [/(?:gmail|(?:谷歌|google)[^a-z]{0,4}邮箱)/i], exclude: [VERIFICATION_SERVICE] },
+  { slug: 'resource-outlook', include: [/(?:outlook|hotmail|微软[^a-z]{0,4}邮箱)/i] },
   { slug: 'resource-icloud', include: [/icloud.*(?:邮箱|邮件)/i] },
   { slug: 'resource-education-email', include: [/(?:教育邮箱|edu\s*邮箱)/i] },
   { slug: 'resource-apple-account', include: [/apple\s*id|苹果账号/i] },
-  { slug: 'resource-openai-verification', include: [/(?:openai|chat\s*gpt|codex|gpt).*(?:接码|验证码)/i] },
-  { slug: 'resource-google-verification', include: [/(?:google|gemini|谷歌).*(?:接码|验证码)/i] },
+  { slug: 'resource-openai-verification', include: [/(?:openai|chat\s*gpt|codex|gpt)/i], require: [VERIFICATION_SERVICE] },
+  { slug: 'resource-google-verification', include: [/(?:google|gmail|gemini|谷歌|youtube|油管)/i], require: [VERIFICATION_SERVICE] },
   { slug: 'resource-telegram-premium', include: [/(?:telegram|电报|tg).*(?:premium|会员)/i] },
 ];
 
@@ -135,22 +191,42 @@ const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
   { mode: "short_term", patterns: [/日抛|小时号|[1-9]\s*天号/i] },
 ];
 
+/**
+ * Merchants disguise brand names to dodge platform filters ("GP.T", "Gtp", "Gρt",
+ * "Co dex", "Super gr0k"). Normalising once here lets every rule benefit instead
+ * of each one growing its own alias list.
+ */
+function normalizeBrandAliases(text: string): string {
+  return text
+    .replace(/[\u03c1\u0440]/g, "p")
+    .replace(/\bgr0k\b/gi, "grok")
+    .replace(/[×✖╳]/g, "x")
+    .replace(/\bg\s*[.\u00b7\u30fb]\s*p\s*[.\u00b7\u30fb]?\s*t\b/gi, "gpt")
+    .replace(/\bg\s*[皮屁]\s*t\b/gi, "gpt")
+    .replace(/\b(?:gtp|gpp|ggt|jpt)\b/gi, "gpt")
+    .replace(/\bco\s+dex\b/gi, "codex")
+    .replace(/\bcla\s+ude\b/gi, "claude")
+    .replace(/\bgro\s+k\b/gi, "grok")
+    .replace(/\bsuper\s*gr[o0](?!k)\b/gi, "supergrok")
+    .replace(/\boai\b/gi, "openai");
+}
+
 function normalizedText(offer: RawOfferInput): string {
-  return [offer.rawTitle, offer.rawDescription, offer.rawCategory]
+  return normalizeBrandAliases([offer.rawTitle, offer.rawDescription, offer.rawCategory]
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim());
 }
 
 function normalizedProductText(offer: RawOfferInput): string {
-  return [offer.rawTitle, offer.rawCategory]
+  return normalizeBrandAliases([offer.rawTitle, offer.rawCategory]
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim());
 }
 
 function matchProduct(text: string): {
@@ -158,17 +234,17 @@ function matchProduct(text: string): {
   matchedRules: string[];
   conflicts: string[];
 } {
-  let matches = productRules.filter(
-    (rule) =>
-      rule.include.some((pattern) => pattern.test(text)) &&
-      !rule.exclude?.some((pattern) => pattern.test(text)),
-  );
+  const eligible = (rule: ProductRule) =>
+    rule.include.some((pattern) => pattern.test(text)) &&
+    (rule.require?.every((pattern) => pattern.test(text)) ?? true) &&
+    !rule.exclude?.some((pattern) => pattern.test(text));
+  let matches = productRules.filter(eligible);
 
   if (!matches.length) matches = additionalRules.filter(rule => {
     // Mail bundled with an AI account is not a separate mailbox offer.
     if (['resource-gmail','resource-outlook','resource-icloud','resource-education-email'].includes(rule.slug)
-      && /chat\s*gpt|codex|claude|gemini|grok/i.test(text)) return false;
-    return rule.include.some(pattern => pattern.test(text));
+      && /chat\s*gpt|codex|claude|gemini|grok/i.test(text) && !MAILBOX_AS_ITEM.test(text)) return false;
+    return eligible(rule);
   });
   if (matches.length === 0) {
     return { slug: null, matchedRules: [], conflicts: [] };
@@ -179,10 +255,14 @@ function matchProduct(text: string): {
     return { slug: null, matchedRules: [], conflicts: [] };
   }
 
+  // Two rules naming the same plan agree; only a different plan is a conflict.
+  const otherSlugs = [...new Set(matches.map((match) => match.slug))].filter(
+    (slug) => slug !== first.slug,
+  );
   return {
     slug: first.slug,
     matchedRules: [`product:${first.slug}`],
-    conflicts: matches.slice(1).map((match) => `also_matches:${match.slug}`),
+    conflicts: otherSlugs.map((slug) => `also_matches:${slug}`),
   };
 }
 
