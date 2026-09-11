@@ -144,6 +144,28 @@ test('verification status, tier spacing and fullwidth glyphs do not erase plan i
   assert.equal(classify('G-Free普号 codex未接phone 微软邮箱').canonicalProductSlug, 'chatgpt-account');
 });
 
+test('tutorials, tools and spare mailboxes never set a subscription price', () => {
+  const withCategory = (rawTitle: string, rawCategory: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawCategory, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  // A card shop files these under a plan's category, which then sets that plan's minimum price.
+  for (const [title, category] of [
+    ['使用教程', 'GTP Plus中转'],
+    ['codex橙皮书', 'GTP Plus中转'],
+    ['🚀防封必看！G Plus土区稳定订阅保姆级教程，同步更新', '教程'],
+    ['G·P·T Plus会员提取支付链接--GCash提链助手--含10个CDK', 'OpenAI PLUS 提链'],
+    ['codex 破甲 破限', 'G Plus'],
+    ['Gemini登陆教程（仅文字教程，不含账号）', '教程'],
+  ] as const) assert.equal(withCategory(title, category).canonicalProductSlug, null, title);
+  // A mailbox filed under a plan category is still the mailbox, not the plan.
+  assert.equal(withCategory('iCloud邮箱母号', 'iCloud邮箱Plus成品号').canonicalProductSlug, 'resource-icloud');
+  // Real deliveries keep their plan: a mirror site and a virtual-card top-up both sell Plus.
+  assert.equal(withCategory('G PLUS 镜像站(天卡)', 'G PlUS 镜像').canonicalProductSlug, 'chatgpt-plus');
+  assert.equal(withCategory('虚拟卡代充 plus 官方直充月卡 质保', 'G Plus').canonicalProductSlug, 'chatgpt-plus');
+});
+
 test('mentioning Plus as a capability or a negation does not make it a Plus offer', () => {
   assert.equal(classify('【G Free 成品号】未接马 | 账密 AT | 长效outlook | 不支持codex | 非plus').canonicalProductSlug, 'chatgpt-account');
   assert.equal(classify('iCloud/gmail邮箱 已开通2fa | 已注册G free | 可升级plus | cpa反代需绑卡').canonicalProductSlug, 'resource-gmail');

@@ -36,7 +36,12 @@ const MAILBOX_AS_ITEM = /(?:长效|注册专用|注册用|账密|自助)[^,，�
 
 // Mentioning Plus is not selling Plus: "非plus" denies it, "可升级plus"/"开plus绑定专用"
 // describe what a mailbox can later be used for, and 子邮箱/隐私邮箱 name the mailbox itself.
-const PLUS_NOT_SOLD = /非\s*plus|(?:可|支持|能)\s*升级[^a-z]{0,2}plus|开\s*plus[^。]{0,4}(?:绑定|专用)|子邮箱|隐私邮箱/i;
+const PLUS_NOT_SOLD = /非\s*plus|(?:可|支持|能)\s*升级[^a-z]{0,2}plus|开\s*plus[^。]{0,4}(?:绑定|专用)|子邮箱|隐私邮箱|邮箱\s*母号|free\s*号/i;
+
+// Card shops file tutorials, tools and spare mailboxes under a plan's category, which
+// then sets that plan's minimum price. None of these deliver the subscription itself.
+// Resource products are exempt: a mailbox or verification listing is its own product.
+const NOT_A_SUBSCRIPTION = /教程|橙皮书|破甲|破限|提链|返利|不含\s*(?:plus|账号|会员)/i;
 
 const productRules: ProductRule[] = [
   {
@@ -237,7 +242,8 @@ function matchProduct(text: string): {
   const eligible = (rule: ProductRule) =>
     rule.include.some((pattern) => pattern.test(text)) &&
     (rule.require?.every((pattern) => pattern.test(text)) ?? true) &&
-    !rule.exclude?.some((pattern) => pattern.test(text));
+    !rule.exclude?.some((pattern) => pattern.test(text)) &&
+    (rule.slug.startsWith("resource-") || !NOT_A_SUBSCRIPTION.test(text));
   let matches = productRules.filter(eligible);
 
   if (!matches.length) matches = additionalRules.filter(rule => {
