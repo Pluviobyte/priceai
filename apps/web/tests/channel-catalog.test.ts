@@ -186,5 +186,25 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(resources.total,1);assert.equal(resources.rows[0]?.price,null);
       assert.equal(parseChannelFilters({catalog:'resources'}).catalog,'resources');
     });
+    await t.test("resource listings merge instead of standing alone per offer", async () => {
+      await db.query("insert into canonical_products values ('pr2','resource-outlook','Outlook 邮箱','Microsoft','active')");
+      // A mailbox has no term and no delivery tier, so these three belong on one row.
+      await offer('mailA',2,{product:'pr2',mode:'unknown',days:null});
+      await offer('mailB',3,{product:'pr2',mode:'redeem_code',days:null,source:'s2'});
+      await offer('mailC',4,{product:'pr2',mode:'finished_account'});
+      const resources=await getChannelCatalog(parseChannelFilters({catalog:'resources'}),read);
+      const outlook=resources.rows.filter(row=>row.product_slug==='resource-outlook');
+      assert.equal(outlook.length,1,'a mailbox must not split into one row per offer');
+      assert.equal(outlook[0]?.offer_count,3);
+      assert.equal(outlook[0]?.merchant_count,2);
+      assert.equal(outlook[0]?.offer_mode,'unknown','resources do not claim a delivery tier');
+      // One row stands for many offers, so it must not borrow one of their terms or warranties.
+      assert.equal(outlook[0]?.duration_days,null,'a merged resource row states no term');
+      assert.equal(outlook[0]?.warranty_type,'unknown','a merged resource row states no warranty');
+      // Subscriptions keep their boundaries: delivery, duration and warranty still split.
+      const subscriptions=await getChannelCatalog(parseChannelFilters({}),read);
+      assert.ok(subscriptions.rows.filter(row=>row.product_slug==='chatgpt-plus').length>1,
+        'subscriptions must stay separated by delivery and duration');
+    });
   } finally { await db.end(); }
 });

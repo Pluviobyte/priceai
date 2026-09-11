@@ -63,9 +63,12 @@ const BASE = `with published as (
       and o.stock_state in ('in_stock','low_stock') and (o.stock_count is null or o.stock_count>0)
       and o.offer_verified_at>now()-interval '24 hours', false) available,
     o.risk_facts,
-    md5(jsonb_build_array(cp.slug,o.offer_mode,oa.duration_days,o.currency,oa.region,
-      coalesce(oa.account_ownership,'unknown'),coalesce(oa.warranty_type,'unknown'),oa.warranty_hours,
-      case when oa.duration_days is null or o.offer_mode='unknown' then o.id::text else null end)::text) spec_key
+    case when (cp.slug like 'resource-%' or o.offer_mode='api_credit')
+      then md5(jsonb_build_array(cp.slug,o.currency,oa.region,coalesce(oa.account_ownership,'unknown'))::text)
+      else md5(jsonb_build_array(cp.slug,o.offer_mode,oa.duration_days,o.currency,oa.region,
+        coalesce(oa.account_ownership,'unknown'),coalesce(oa.warranty_type,'unknown'),oa.warranty_hours,
+        case when oa.duration_days is null or o.offer_mode='unknown' then o.id::text else null end)::text)
+    end spec_key
   from offers o
   join canonical_products cp on cp.id=o.canonical_product_id
   join sources s on s.id=o.source_id
@@ -97,11 +100,10 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   if (filters.spec) conditions.push(`spec_key=${parameter(filters.spec)}`);
   if (filters.stock === "available") conditions.push("available=true");
   const filtered = `${BASE}, filtered as (select * from catalog${conditions.length ? ` where ${conditions.join(" and ")}` : ""})`;
-  // Preserve delivery, duration, currency, region, ownership and warranty boundaries.
-  // When duration is unknown, do not merge unrelated offers into a minimum price.
-  const group = `spec_key,product_slug,product_name,platform,offer_mode,duration_days,currency,
-    region,account_ownership,warranty_type,warranty_hours,
-    case when duration_days is null then id else null end`;
+  // spec_key already encodes every boundary that makes two offers comparable, so the
+  // grouping follows it. Subscriptions keep delivery, duration and warranty apart and an
+  // unknown duration still stands alone; resources merge, having no term or tier.
+  const group = `spec_key,product_slug,product_name,platform,currency,region,account_ownership`;
   // Rank one fresh minimum per merchant/spec against the full catalog. Search must
   // not turn the selected merchant into its own sole competitor.
   const merchantRanking = view === "merchants" ? `, merchant_prices as (
@@ -121,8 +123,13 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
     where competitors>=2 group by r.merchant_slug
   )` : "";
   const selection = view === "products"
-    ? `select min(id) id, spec_key,product_slug,product_name,platform,offer_mode,duration_days,currency,
-        region,account_ownership,warranty_type,warranty_hours,min(merchant_host) merchant_host,
+    ? `select min(id) id, spec_key,product_slug,product_name,platform,
+        case when bool_or(is_resource) then 'unknown' else min(offer_mode) end offer_mode,
+        case when bool_or(is_resource) then null else min(duration_days) end duration_days,currency,
+        region,account_ownership,
+        case when bool_or(is_resource) then 'unknown' else min(warranty_type) end warranty_type,
+        case when bool_or(is_resource) then null else min(warranty_hours) end warranty_hours,
+        min(merchant_host) merchant_host,
         min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')) price,
         count(*)::int offer_count, count(distinct merchant_slug)::int merchant_count,
         count(*) filter (where available)::int available_count, max(verified_at) verified_at
