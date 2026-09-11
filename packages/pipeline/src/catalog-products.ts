@@ -38,6 +38,10 @@ const ADDITIONAL_PRODUCTS = [
   ['OpenAI','resource-openai-verification','OpenAI / ChatGPT 验证服务'],
   ['Google','resource-google-verification','Google / Gemini 验证服务'],
   ['Telegram','resource-telegram-premium','Telegram Premium'],
+  // Shops sell guides and helper tools alongside subscriptions. They are real goods,
+  // so they get their own entries instead of being dropped from the catalog.
+  ['Guide','resource-tutorial','使用教程 / 攻略'],
+  ['Tool','resource-tool','账号工具 / 助手'],
 ] as const;
 
 export async function seedCanonicalProducts(db: Database): Promise<number> {

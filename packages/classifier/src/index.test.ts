@@ -152,7 +152,8 @@ test('tutorials, tools and spare mailboxes never set a subscription price', () =
     stockState: 'in_stock', productUrl: 'https://example.com/item/1',
     capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
   });
-  // A card shop files these under a plan's category, which then sets that plan's minimum price.
+  // A card shop files these under a plan's category, which would set that plan's minimum
+  // price. They are catalogued as resources of their own, so they never reach a plan.
   for (const [title, category] of [
     ['使用教程', 'GTP Plus中转'],
     ['codex橙皮书', 'GTP Plus中转'],
@@ -160,7 +161,7 @@ test('tutorials, tools and spare mailboxes never set a subscription price', () =
     ['G·P·T Plus会员提取支付链接--GCash提链助手--含10个CDK', 'OpenAI PLUS 提链'],
     ['codex 破甲 破限', 'G Plus'],
     ['Gemini登陆教程（仅文字教程，不含账号）', '教程'],
-  ] as const) assert.equal(withCategory(title, category).canonicalProductSlug, null, title);
+  ] as const) assert.match(String(withCategory(title, category).canonicalProductSlug), /^resource-/, title);
   // A mailbox filed under a plan category is still the mailbox, not the plan.
   assert.equal(withCategory('iCloud邮箱母号', 'iCloud邮箱Plus成品号').canonicalProductSlug, 'resource-icloud');
   // Real deliveries keep their plan: a mirror site and a virtual-card top-up both sell Plus.
@@ -214,4 +215,25 @@ test('a title saying only "account" is not more precise than a category naming t
   assert.equal(withCategory('【正规实付】X Premium 12个月 全程质保订阅（包含同时长Supergro Lite）', 'X 推特 Premium/P+').canonicalProductSlug, 'x-premium');
   // "Pro18个月" puts a digit after the tier; the tier still counts.
   assert.equal(withCategory('Gemini-Pro18个月全年激活-到自己账号', 'Gemini pro').canonicalProductSlug, 'gemini-pro');
+});
+
+test('guides and helper tools are goods in their own right, not dropped', () => {
+  const withCategory = (rawTitle: string, rawCategory: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawCategory, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  assert.equal(withCategory('使用教程', 'GTP Plus中转').canonicalProductSlug, 'resource-tutorial');
+  assert.equal(withCategory('codex橙皮书', 'GTP Plus中转').canonicalProductSlug, 'resource-tutorial');
+  assert.equal(withCategory('Gemini登陆教程（仅文字教程，不含账号）', '教程').canonicalProductSlug, 'resource-tutorial');
+  assert.equal(withCategory('codex 破甲 破限', 'G Plus').canonicalProductSlug, 'resource-tool');
+  assert.equal(withCategory('G·P·T Plus会员提取支付链接--GCash提链助手--含10个CDK', 'OpenAI PLUS 提链').canonicalProductSlug, 'resource-tool');
+  // A guide's "同步更新" is not a subscription period.
+  assert.equal(withCategory('🚀防封必看！G Plus土区稳定订阅保姆级教程，同步更新', '教程').attributes.durationDays, undefined);
+  // Real subscriptions must not be swept into the guide catalogue.
+  assert.equal(withCategory('GPT正规冲 plus 一个月 150 正规冲整月质保', 'AI类会员').canonicalProductSlug, 'chatgpt-plus');
+  assert.equal(withCategory('G PLUS 镜像站(天卡)', 'G PlUS 镜像').canonicalProductSlug, 'chatgpt-plus');
+  // Courses about running a Douyin or YouTube account are somebody else's catalogue.
+  assert.equal(classify('youtube海外运营教程').canonicalProductSlug, null);
+  assert.equal(classify('2026抖音DSO搜索流量实操手册 抖音运营获客教程 选词图文复盘').canonicalProductSlug, null);
 });

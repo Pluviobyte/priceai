@@ -163,6 +163,10 @@ const productRules: ProductRule[] = [
 
 // Broad account/service categories never impersonate an exact paid plan.
 const additionalRules: ProductRule[] = [
+  // Guides and helper tools are sold in their own right; NOT_A_SUBSCRIPTION keeps them
+  // out of the plan rules, and these two give them a home instead of dropping them.
+  { slug: 'resource-tutorial', include: [/教程|橙皮书|攻略/i], exclude: [NON_AI_BRANDS] },
+  { slug: 'resource-tool', include: [/提链|破甲|破限|注册机/i], exclude: [NON_AI_BRANDS] },
   { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i, /codex.*(?:成品|普号|空号)/i, /(?:chat\s*gpt|gpt)\s*free[\s\S]{0,4}账号/i] },
   { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
   { slug: 'gemini-account', include: [/gemini.*(?:账号|成品|账户)/i] },
@@ -407,7 +411,7 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];
   const attributes = extractAttributes(text, mode.mode);
-  if (product.slug && ['resource-gmail','resource-outlook','resource-icloud','resource-education-email','resource-apple-account'].includes(product.slug)) {
+  if (product.slug && ['resource-gmail','resource-outlook','resource-icloud','resource-education-email','resource-apple-account','resource-tutorial','resource-tool'].includes(product.slug)) {
     // Mailbox registration age and download-link validity are not subscription periods.
     delete attributes.durationDays;
   }
