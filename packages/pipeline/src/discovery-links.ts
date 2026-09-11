@@ -25,11 +25,18 @@ const UTILITY_HOST_SUFFIXES = [
   "tinyurl.com", "bit.ly", "t.cn", "dwz.cn", "u.nu", "is.gd", "cutt.ly", "surl.li", "taobao.com", "tmall.com", "jd.com",
   "pinduoduo.com", "alipay.com", "wikihow.com", "mozilla.org", "gmail.com", "outlook.com", "proton.me", "protonmail.com",
   "example.com", "xxxxxx.com", "localhost", "ping0.cc", "ipinfo.io", "ip.sb", "ip138.com", "whoer.net", "browserleaks.com",
-  "cloudflare.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "aliyun.com", "alicdn.com", "aliyuncs.com",
-  "oss-cn-hangzhou.aliyuncs.com", "qiniu.com", "ldxp.cn", "hotmail.com", "adobe.com", "duckdns.org", "dpdns.org", "ccwu.cc",
-  "eu.cc", "lanzn.com", "123pan.com", "pan.baidu.com", "quark.cn", "rambler.ru", "yandex.ru", "mail.ru", "vmos.cn",
-  "trycloudflare.com",
+  "cloudflare.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "trycloudflare.com",
+  "aliyun.com", "alicdn.com", "aliyuncs.com",
+  "oss-cn-hangzhou.aliyuncs.com", "qiniu.com", "ldxp.cn", "hotmail.com", "adobe.com",
+  "lanzn.com", "123pan.com", "pan.baidu.com", "quark.cn", "rambler.ru", "yandex.ru", "mail.ru", "vmos.cn",
 ];
+
+// Free domains where the merchant registers a name of their own. The bare domain is
+// never a shop, but real storefronts do run on the subdomains: shop.zongzhu.ccwu.cc and
+// shop.txyxt.dpdns.org are enabled sources publishing offers right now. Hosting
+// platforms and throwaway tunnels stay refused outright above, since their subdomains
+// are generated rather than chosen and no shop of ours has ever used one.
+const REGISTRAR_SUFFIXES = ["duckdns.org", "dpdns.org", "ccwu.cc", "eu.cc"];
 
 // File-sharing hosts registered under many spellings (lanzou[a-z].com).
 const UTILITY_HOST_PATTERNS = [/(?:^|\.)lanzou[a-z]?\.com$/i, /(?:^|\.)lanzo[a-z]{1,2}\.com$/i];
@@ -43,6 +50,7 @@ const UTILITY_LABEL_PATTERN = /^(?:2fa|mfa|otp|totp|sms|otpsms|jiema|mail|email|
 export function isUtilityHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (UTILITY_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) return true;
+  if (REGISTRAR_SUFFIXES.includes(host)) return true;
   if (UTILITY_HOST_PATTERNS.some((pattern) => pattern.test(host))) return true;
   if (UTILITY_HOST_FRAGMENT.test(host)) return true;
   const labels = host.split(".");

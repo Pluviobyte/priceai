@@ -33,6 +33,12 @@ export interface ChannelRow {
   offer_count: number;
   available_count: number;
   merchant_count: number;
+  /** Lowest price among offers that actually carry a warranty; null when none do. */
+  warranty_price?: string | null;
+  unavailable_count?: number;
+  /** The shop and its own wording behind the lowest price, so the number is traceable. */
+  lowest_merchant_name?: string | null;
+  lowest_raw_title?: string | null;
 }
 
 export interface ChannelCatalog {
@@ -131,8 +137,12 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
         case when bool_or(is_resource) then null else min(warranty_hours) end warranty_hours,
         min(merchant_host) merchant_host,
         min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')) price,
+        min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') and warranty_type not in ('none','unknown')) warranty_price,
+        (array_agg(merchant_name order by case when available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') then price end asc nulls last))[1] lowest_merchant_name,
+        (array_agg(raw_title order by case when available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') then price end asc nulls last))[1] lowest_raw_title,
         count(*)::int offer_count, count(distinct merchant_slug)::int merchant_count,
-        count(*) filter (where available)::int available_count, max(verified_at) verified_at
+        count(*) filter (where available)::int available_count,
+        count(*) filter (where not available)::int unavailable_count, max(verified_at) verified_at
        from filtered group by ${group}`
     : view === "merchants"
       ? `select merchant_slug id, merchant_slug,merchant_name,min(merchant_host) merchant_host,count(*)::int offer_count,

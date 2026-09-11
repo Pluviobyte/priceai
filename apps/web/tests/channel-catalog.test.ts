@@ -116,6 +116,11 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(row?.merchant_count, 2);
       assert.equal(data.offerCount, 12);
       assert.equal(data.rows.find(row => row.duration_days === null)?.price, null);
+      // The warranty minimum, the out-of-stock tally and the shop behind the lowest price.
+      assert.equal(Number(row?.warranty_price), 80, 'warranty minimum ignores offers without one');
+      assert.equal(row?.unavailable_count, 4, 'stale, unknown-stock, sold-out and zero-stock offers all count as unavailable');
+      assert.equal(row?.lowest_merchant_name, '卡网 B', 'the lowest price is traceable to its shop');
+      assert.match(String(row?.lowest_raw_title), /^cheap/, 'and to the shop\'s own wording');
     });
     await t.test("specification drill-down returns only the exact group", async () => {
       const groups = await getChannelCatalog(parseChannelFilters({ duration: "365" }), read);

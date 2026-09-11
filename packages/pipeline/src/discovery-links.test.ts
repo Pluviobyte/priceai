@@ -16,10 +16,13 @@ test("extracts full URLs and bare domains from Chinese product descriptions", ()
 });
 
 test("supporting-tool hosts are recognised by name, label and suffix", () => {
-  for (const host of ["2fa.fun", "2fa.run", "sms.linlinflow.ccwu.cc", "mail.chatai.codes", "convert.13916454.xyz", "session.ameng2027.xyz", "www.gmailcheck.com", "ping0.cc", "github.com", "aistore.notion.site", "docs.qq.com", "tinyurl.com", "t.me", "chatgpt.com", "hero-sms.com", "tmail.xuanlich.com", "getsms.website", "boardermail.com", "www.yunmasms.asia", "gpt.hjwl.email", "wwbch.lanzouw.com", "dtpz123.lanzouu.com", "h.vmos.cn", "logged-lance.trycloudflare.com", "kw-stillhappy.duckdns.org", "u38731018b1.ccwu.cc"]) {
+  for (const host of ["2fa.fun", "2fa.run", "sms.linlinflow.ccwu.cc", "mail.chatai.codes", "convert.13916454.xyz", "session.ameng2027.xyz", "www.gmailcheck.com", "ping0.cc", "github.com", "ccwu.cc", "dpdns.org", "pages.dev", "aistore.notion.site", "docs.qq.com", "tinyurl.com", "t.me", "chatgpt.com", "hero-sms.com", "tmail.xuanlich.com", "getsms.website", "boardermail.com", "www.yunmasms.asia", "gpt.hjwl.email", "wwbch.lanzouw.com", "dtpz123.lanzouu.com", "h.vmos.cn", "logged-lance.trycloudflare.com"]) {
     assert.equal(isUtilityHost(host), true, host);
   }
-  for (const host of ["chaai.cc", "8t92.cc", "vip666ai.com", "wzyp.cn", "shop.gpt.ge", "xingbao-ai.shop", "plus.eidolon-ai.com"]) {
+  // A free domain the merchant chose a name under is a shop until a probe says otherwise:
+  // these three are enabled sources publishing offers. Only the bare domain is refused.
+  for (const host of ["chaai.cc", "8t92.cc", "vip666ai.com", "wzyp.cn", "shop.gpt.ge", "xingbao-ai.shop", "plus.eidolon-ai.com",
+    "shop.zongzhu.ccwu.cc", "shop.txyxt.dpdns.org", "shop.sunnydolls.dpdns.org", "kw-stillhappy.duckdns.org", "u38731018b1.ccwu.cc"]) {
     assert.equal(isUtilityHost(host), false, host);
   }
 });
