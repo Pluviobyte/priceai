@@ -204,11 +204,14 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       // anyway left seven of the ten resource products blank with stock on the shelf.
       await offer('toolA', 5, { product: 'pr3', mode: 'redeem_code', days: null });
       await offer('toolB', 9, { product: 'pr3', mode: 'finished_account', days: null, source: 's2' });
+      // A shelf listing priced at a token cent is a menu entry, not this product's floor.
+      // Resources are exempt from the median rule, so nothing else would keep it out.
+      await offer('toolMenu', 0.01, { product: 'pr3', mode: 'redeem_code', days: null });
       const resources = await getChannelCatalog(parseChannelFilters({ catalog: 'resources', q: 'tool' }), read);
       const tool = resources.rows.find(row => row.product_slug === 'resource-tool');
       assert.equal(Number(tool?.price), 5, 'a termless resource still has a floor');
       assert.equal(tool?.duration_days, null, 'and the merged row still states no term');
-      await db.query("delete from offers where id in ('toolA','toolB')");
+      await db.query("delete from offers where id in ('toolA','toolB','toolMenu')");
       await db.query("delete from canonical_products where id='pr3'");
     });
     await t.test("bare accounts keep their own heading, and a product with no outright sale still shows a floor", async () => {

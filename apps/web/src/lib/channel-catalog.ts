@@ -123,7 +123,13 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // A term is asked of a subscription and never of a resource: a mailbox has no term,
   // which is exactly why resources merge on a key that ignores one. Demanding it here
   // contradicted that and left seven of the ten resource products unpriceable for good.
-  const termed = `available and (is_resource or duration_days>0) and offer_mode<>'unknown' and raw_title !~* '补差价|定金|预付'`;
+  // Below two cents is a placeholder, not a price. Resources are exempt from the median
+  // rule below — rightly, since a category can span a ¥0.30 throwaway mailbox and a ¥90
+  // edu account — so nothing else keeps a menu entry out of their floor. Of the offers
+  // under ¥0.02 every one was a shelf listing ("使用教程") or a rebate ("推广充值返利
+  // 10%可提现"), and the cheapest genuine stock sits at ¥0.03.
+  const termed = `available and (is_resource or duration_days>0) and offer_mode<>'unknown'
+    and price>=0.02 and raw_title !~* '补差价|定金|预付'`;
   const comparable = `${termed} and offer_mode in ('recharge','finished_account','redeem_code','team_seat')`;
   // A product whose entire market is sold one way — Ultra only as family seats, say —
   // has no offer in the strict set, and a blank price reads as a broken page rather
