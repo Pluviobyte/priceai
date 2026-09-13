@@ -104,12 +104,27 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   if (filters.warranty) conditions.push(`warranty_type=${parameter(filters.warranty)}`);
   if (filters.currency) conditions.push(`currency=${parameter(filters.currency)}`);
   if (filters.spec) conditions.push(`spec_key=${parameter(filters.spec)}`);
+  if (filters.product) conditions.push(`product_slug=${parameter(filters.product)}`);
   if (filters.stock === "available") conditions.push("available=true");
-  const filtered = `${BASE}, filtered as (select * from catalog${conditions.length ? ` where ${conditions.join(" and ")}` : ""})`;
+  // A comparable price needs a known delivery and a real term. Ranking the rest of the
+  // row by it lets one product occupy one row while the number stays traceable to the
+  // offer behind it. A price a tenth of its product's median is a placeholder or a
+  // misfiled item, never a real floor, so it is kept out of the minimum.
+  const comparable = `available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')
+    and raw_title !~* '补差价|定金|预付'`;
+  const filtered = `${BASE}, filtered as (select * from catalog${conditions.length ? ` where ${conditions.join(" and ")}` : ""})
+    , priced as (select *, case when ${comparable} then price end cmp from filtered)
+    , medians as (select product_slug, currency, percentile_cont(0.5) within group (order by cmp) med
+        from priced where cmp is not null group by product_slug, currency)
+    , ranked as (select p.*, case when p.cmp is not null
+        and (m.med is null or p.is_resource or p.cmp > m.med*0.1) then p.cmp end cmp_ok
+        from priced p left join medians m using (product_slug, currency))`;
   // spec_key already encodes every boundary that makes two offers comparable, so the
   // grouping follows it. Subscriptions keep delivery, duration and warranty apart and an
   // unknown duration still stands alone; resources merge, having no term or tier.
-  const group = `spec_key,product_slug,product_name,platform,currency,region,account_ownership`;
+  // One row per product, as a shopper reads the page. The specification that produced
+  // the minimum is carried on the row, so the price still says what it belongs to.
+  const group = `product_slug,product_name,platform,currency`;
   // Rank one fresh minimum per merchant/spec against the full catalog. Search must
   // not turn the selected merchant into its own sole competitor.
   const merchantRanking = view === "merchants" ? `, merchant_prices as (
@@ -129,21 +144,28 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
     where competitors>=2 group by r.merchant_slug
   )` : "";
   const selection = view === "products"
-    ? `select min(id) id, spec_key,product_slug,product_name,platform,
-        case when bool_or(is_resource) then 'unknown' else min(offer_mode) end offer_mode,
-        case when bool_or(is_resource) then null else min(duration_days) end duration_days,currency,
-        region,account_ownership,
-        case when bool_or(is_resource) then 'unknown' else min(warranty_type) end warranty_type,
-        case when bool_or(is_resource) then null else min(warranty_hours) end warranty_hours,
+    ? `select min(id) id,
+        (array_agg(spec_key order by cmp_ok asc nulls last))[1] spec_key,
+        product_slug,product_name,platform,currency,
+        case when bool_or(is_resource) then 'unknown'
+          else (array_agg(offer_mode order by cmp_ok asc nulls last))[1] end offer_mode,
+        case when bool_or(is_resource) then null
+          else (array_agg(duration_days order by cmp_ok asc nulls last))[1] end duration_days,
+        (array_agg(region order by cmp_ok asc nulls last))[1] region,
+        (array_agg(account_ownership order by cmp_ok asc nulls last))[1] account_ownership,
+        case when bool_or(is_resource) then 'unknown'
+          else (array_agg(warranty_type order by cmp_ok asc nulls last))[1] end warranty_type,
+        case when bool_or(is_resource) then null
+          else (array_agg(warranty_hours order by cmp_ok asc nulls last))[1] end warranty_hours,
         min(merchant_host) merchant_host,
-        min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')) price,
-        min(price) filter (where available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') and warranty_type not in ('none','unknown')) warranty_price,
-        (array_agg(merchant_name order by case when available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') then price end asc nulls last))[1] lowest_merchant_name,
-        (array_agg(raw_title order by case when available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat') then price end asc nulls last))[1] lowest_raw_title,
+        min(cmp_ok) price,
+        min(cmp_ok) filter (where warranty_type not in ('none','unknown')) warranty_price,
+        (array_agg(merchant_name order by cmp_ok asc nulls last))[1] lowest_merchant_name,
+        (array_agg(raw_title order by cmp_ok asc nulls last))[1] lowest_raw_title,
         count(*)::int offer_count, count(distinct merchant_slug)::int merchant_count,
         count(*) filter (where available)::int available_count,
         count(*) filter (where not available)::int unavailable_count, max(verified_at) verified_at
-       from filtered group by ${group}`
+       from ranked group by ${group}`
     : view === "merchants"
       ? `select merchant_slug id, merchant_slug,merchant_name,min(merchant_host) merchant_host,count(*)::int offer_count,
           count(*) filter (where available)::int available_count,
@@ -156,13 +178,13 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
           null::numeric price, ''::text currency
          from filtered left join merchant_scores ms using (merchant_slug)
          group by merchant_slug,merchant_name`
-      : `select *,1::int offer_count,available::int available_count,1::int merchant_count from filtered`;
+      : `select *,1::int offer_count,available::int available_count,1::int merchant_count from ranked`;
   const cte = `${filtered}${merchantRanking}, results as (${selection})`;
   const [summary] = await read<{
     total: number; offer_count: number; merchant_count: number; available_count: number; latest: Date | null;
   }>(`${cte} select (select count(*)::int from results) total,
       count(*)::int offer_count,count(distinct merchant_slug)::int merchant_count,
-      count(*) filter (where available)::int available_count,max(verified_at) latest from filtered`, values);
+      count(*) filter (where available)::int available_count,max(verified_at) latest from ranked`, values);
   const pageSize = 24;
   const total = summary?.total ?? 0;
   const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));

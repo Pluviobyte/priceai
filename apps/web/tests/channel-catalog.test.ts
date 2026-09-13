@@ -110,17 +110,20 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
 
     await t.test("minimum excludes stale, unknown, sold-out, zero-stock and quarantined prices", async () => {
       const data = await getChannelCatalog(parseChannelFilters({}), read);
-      const row = data.rows.find(row => row.product_slug === "chatgpt-plus" && row.duration_days === 30 && row.currency === "CNY" && row.region === "HK" && row.warranty_type === "subscription_period");
-      assert.equal(Number(row?.price), 80);
-      assert.equal(row?.available_count, 2);
+      // One row per product and currency, carrying the specification that produced the minimum.
+      const row = data.rows.find(row => row.product_slug === "chatgpt-plus" && row.currency === "CNY");
+      assert.equal(Number(row?.price), 50, 'the cheapest comparable offer wins, whatever its term');
+      assert.equal(row?.duration_days, 365, 'and the row states the term that price belongs to');
+      assert.equal(row?.available_count, 6);
       assert.equal(row?.merchant_count, 2);
       assert.equal(data.offerCount, 12);
-      assert.equal(data.rows.find(row => row.duration_days === null)?.price, null);
+      // A foreign-currency offer is its own row and is never judged against yuan prices.
+      assert.equal(Number(data.rows.find(row => row.product_slug === "chatgpt-plus" && row.currency === "USD")?.price), 5);
       // The warranty minimum, the out-of-stock tally and the shop behind the lowest price.
-      assert.equal(Number(row?.warranty_price), 80, 'warranty minimum ignores offers without one');
+      assert.equal(Number(row?.warranty_price), 50, 'warranty minimum ignores offers without one');
       assert.equal(row?.unavailable_count, 4, 'stale, unknown-stock, sold-out and zero-stock offers all count as unavailable');
-      assert.equal(row?.lowest_merchant_name, '卡网 B', 'the lowest price is traceable to its shop');
-      assert.match(String(row?.lowest_raw_title), /^cheap/, 'and to the shop\'s own wording');
+      assert.equal(row?.lowest_merchant_name, '卡网 A', 'the lowest price is traceable to its shop');
+      assert.match(String(row?.lowest_raw_title), /^year/, 'and to the shop\'s own wording');
     });
     await t.test("specification drill-down returns only the exact group", async () => {
       const groups = await getChannelCatalog(parseChannelFilters({ duration: "365" }), read);
@@ -208,8 +211,8 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(outlook[0]?.warranty_type,'unknown','a merged resource row states no warranty');
       // Subscriptions keep their boundaries: delivery, duration and warranty still split.
       const subscriptions=await getChannelCatalog(parseChannelFilters({}),read);
-      assert.ok(subscriptions.rows.filter(row=>row.product_slug==='chatgpt-plus').length>1,
-        'subscriptions must stay separated by delivery and duration');
+      assert.equal(subscriptions.rows.filter(row=>row.product_slug==='chatgpt-plus'&&row.currency==='CNY').length,1,
+        'a product occupies exactly one row per currency');
     });
   } finally { await db.end(); }
 });

@@ -25,6 +25,9 @@ const PURCHASE_CONTEXT = /充值|代充|直充|成品|普号|空号|账号|月�
 const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora/i;
 const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱奇艺|优酷|芒果|酷狗|网易云|喜马拉雅|剪映|网盘|文库|影视|视频会员|音乐|打车|外卖|粉丝|抖音|快手|美团|饿了么|迅雷|夸克|steam|netflix|spotify|youtube|disney|office|wps/i;
 
+// Another vendor's assistant, often shelved under an OpenAI category by mistake.
+const OTHER_ASSISTANTS = /豆包|doubao|文心|通义|讯飞|kimi|智谱|glm|混元/i;
+
 // A phone-verification service is sold per use; 马/🐎 is the common homophone for 码.
 // "已接码"/"未接马" instead describes an account that is already verified, so it is an
 // attribute of the thing being sold and must never outrank the plan or mailbox it modifies.
@@ -55,7 +58,8 @@ const productRules: ProductRule[] = [
   },
   {
     slug: "chatgpt-go",
-    include: [/(?:chat\s*gpt|gpt).*\bgo\b/i],
+    // Shops write "Codex Go" as often as "GPT Go"; both are the Go plan, not Team.
+    include: [/(?:chat\s*gpt|gpt|codex)[\s\S]{0,8}\bgo\b/i],
   },
   {
     slug: "chatgpt-pro-5x",
@@ -257,7 +261,8 @@ function matchProduct(text: string): {
     rule.include.some((pattern) => pattern.test(text)) &&
     (rule.require?.every((pattern) => pattern.test(text)) ?? true) &&
     !rule.exclude?.some((pattern) => pattern.test(text)) &&
-    (rule.slug.startsWith("resource-") || !NOT_A_SUBSCRIPTION.test(text));
+    (rule.slug.startsWith("resource-") || !NOT_A_SUBSCRIPTION.test(text)) &&
+    (rule.slug.startsWith("resource-") || !OTHER_ASSISTANTS.test(text));
   let matches = productRules.filter(eligible);
 
   if (!matches.length) matches = additionalRules.filter(rule => {

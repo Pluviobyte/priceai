@@ -30,7 +30,7 @@ export type ChannelGroup = "merged" | "expanded";
 export type ChannelFilters = {
   q: string; platform: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
-  catalog?: "subscriptions" | "resources"; page: number; spec: string; layout: "cards" | "table";
+  catalog?: "subscriptions" | "resources"; page: number; spec: string; product: string; layout: "cards" | "table";
 };
 
 /** A specification is what makes two offers comparable; it is the unit `merged` groups by. */
@@ -85,6 +85,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     catalog: choice("catalog", ["subscriptions", "resources"], "subscriptions") as "subscriptions" | "resources",
     q: first("q").slice(0, 160),
     spec: /^[a-f0-9]{32}$/.test(first("spec")) ? first("spec") : "",
+    product: /^[a-z0-9][a-z0-9-]{1,59}$/.test(first("product")) ? first("product") : "",
     platform: choice("platform", CHANNEL_PLATFORMS.map(([value]) => value)),
     mode: choice("mode", Object.keys(CHANNEL_MODES)),
     duration: choice("duration", ["7", "30", "90", "180", "365"]),

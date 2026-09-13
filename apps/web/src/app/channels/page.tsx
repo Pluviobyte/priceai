@@ -38,7 +38,7 @@ function OfferFacts({ row }: { row: ChannelRow }) {
 
 // Keeps the reader's search, stock and sort while narrowing to one specification.
 function CompareLink({ row, filters }: { row: ChannelRow; filters: ChannelFilters }) {
-  return <Link scroll={false} className={styles.button} href={channelHref(filters, { view: "compare", group: "expanded", spec: row.spec_key })}>比较这 {row.offer_count} 条报价 →</Link>;
+  return <Link scroll={false} className={styles.button} href={channelHref(filters, { view: "compare", group: "expanded", spec: "", product: row.product_slug })}>比较这 {row.offer_count} 条报价 →</Link>;
 }
 
 function ReportOffer({ row }: { row: ChannelRow }) {
