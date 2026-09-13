@@ -125,7 +125,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   const filtered = `${BASE}, filtered as (select * from catalog${conditions.length ? ` where ${conditions.join(" and ")}` : ""})
     , priced as (select *, case when ${comparable} then price end cmp,
         case when ${termed} then price end alt from filtered)
-    , medians as (select product_slug, currency, count(cmp) strict_n,
+    , medians as materialized (select product_slug, currency, count(cmp) strict_n,
         percentile_cont(0.5) within group (order by cmp) med_cmp,
         percentile_cont(0.5) within group (order by alt) med_alt
         from priced group by product_slug, currency)
