@@ -116,9 +116,11 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       const row = data.rows.find(row => row.product_slug === "chatgpt-plus" && row.currency === "CNY");
       assert.equal(Number(row?.price), 50, 'the cheapest comparable offer wins, whatever its term');
       assert.equal(row?.duration_days, 365, 'and the row states the term that price belongs to');
-      assert.equal(row?.available_count, 6);
+      // An API-credit offer belongs to the catalogue of the product it is sold for, not
+      // to 周边; it is counted with its product and still cannot set the minimum.
+      assert.equal(row?.available_count, 7);
       assert.equal(row?.merchant_count, 2);
-      assert.equal(data.offerCount, 12);
+      assert.equal(data.offerCount, 13);
       // A foreign-currency offer is its own row and is never judged against yuan prices.
       assert.equal(Number(data.rows.find(row => row.product_slug === "chatgpt-plus" && row.currency === "USD")?.price), 5);
       // The warranty minimum, the out-of-stock tally and the shop behind the lowest price.
@@ -181,9 +183,9 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
     await t.test("pagination clamps out-of-range pages and preserves zero prices", async () => {
       for (let i = 0; i < 30; i++) await offer(`extra-${i}`, i);
       const data = await getChannelCatalog(parseChannelFilters({ view: "offers", page: "999" }), read);
-      assert.equal(data.total, 42);
+      assert.equal(data.total, 43);
       assert.equal(data.page, 2);
-      assert.equal(data.rows.length, 18);
+      assert.equal(data.rows.length, 19);
       const cheapest = await getChannelCatalog(parseChannelFilters({ view: "offers", stock: "available", currency: "CNY", sort: "price" }), read);
       assert.equal(Number(cheapest.rows[0]?.price), 0);
     });

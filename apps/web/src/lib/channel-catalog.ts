@@ -60,7 +60,11 @@ const BASE = `with published as (
   select current_generation_id from publication_channels where channel='card_prices'
 ), catalog as (
   select o.id::text, cp.slug product_slug, cp.display_name product_name, cp.brand platform,
-    (cp.slug like 'resource-%' or o.offer_mode='api_credit') is_resource,
+    -- Which catalogue a product belongs to is a fact about the product, not about how
+    -- one shop happens to deliver one of its offers. Tabbing on the delivery put nine
+    -- products in two catalogues at once: ChatGPT Plus sat under 周边 because a shop
+    -- mentioned "api" in its boilerplate, which reads as the same category twice.
+    (cp.slug like 'resource-%') is_resource,
     m.slug merchant_slug, m.name merchant_name, s.canonical_entry_url merchant_host, ros.raw_title, o.offer_mode,
     oa.duration_days, oa.region, coalesce(oa.account_ownership,'unknown') account_ownership,
     coalesce(oa.warranty_type,'unknown') warranty_type, oa.warranty_hours,
@@ -69,7 +73,7 @@ const BASE = `with published as (
       and o.stock_state in ('in_stock','low_stock') and (o.stock_count is null or o.stock_count>0)
       and o.offer_verified_at>now()-interval '24 hours', false) available,
     o.risk_facts,
-    case when (cp.slug like 'resource-%' or o.offer_mode='api_credit')
+    case when (cp.slug like 'resource-%')
       then md5(jsonb_build_array(cp.slug,o.currency,oa.region,coalesce(oa.account_ownership,'unknown'))::text)
       else md5(jsonb_build_array(cp.slug,o.offer_mode,oa.duration_days,o.currency,oa.region,
         coalesce(oa.account_ownership,'unknown'),coalesce(oa.warranty_type,'unknown'),oa.warranty_hours,
