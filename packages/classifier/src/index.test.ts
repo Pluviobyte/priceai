@@ -35,6 +35,30 @@ test('shops write the term in words as often as in digits',()=>{
   assert.equal(classify('【美区IOS】Pro 5X 官方充值 质保30天订阅直充').attributes.durationDays,undefined);
 });
 
+test('the delivery is recognised in the wording shops actually use',()=>{
+  // Production titles. 充 is written 冲 about as often, and "官方充值" is the
+  // commonest way to say the buyer's own account is topped up.
+  assert.equal(classify('【美区IOS】CLAUDE Pro 官方充值（月卡）').attributes.offerMode,'recharge');
+  assert.equal(classify('Claude PRO代冲 UID直冲，秒冲秒到账！官方订阅 勿囤卡').attributes.offerMode,'recharge');
+  assert.equal(classify('【IOS美区】GTP Pro 5x 官充 月卡【质保订阅30天】').attributes.offerMode,'recharge');
+  // A code is a code whether the shop calls it 兑换码, 兑换链接 or 激活码.
+  assert.equal(classify('Gemini Pro 18个月 Google One 5TB（兑换链接）').attributes.offerMode,'redeem_code');
+  assert.equal(classify('gemini pro 18个月会员激活码，不确定会不会掉介意勿拍（使用起来很方便，发货格式：链接）').attributes.offerMode,'redeem_code');
+  // Credentials come with whatever separator was handy.
+  assert.equal(classify('9-13已接🐎质保首登【手搓】-Plus-个人自用超级合适--发货格式账号---密码---2FA').attributes.offerMode,'finished_account');
+  // "成品" on its own is deliberately not a rule. Measured over in-stock offers it
+  // appears in descriptions often enough to outrank the delivery the title states,
+  // which turned 日抛 and 直充 offers into stock accounts.
+  const withDescription = (rawTitle: string, rawDescription: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawDescription, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  assert.equal(withDescription('plus直充 官方 菲区 一卡一充 保订阅 30天','本店成品充足，长期稳定').attributes.offerMode,'recharge');
+  // A title that names no delivery must still say so rather than guess.
+  assert.equal(classify('plus 已接 可网页可codex【质保30分钟】').attributes.offerMode,'unknown');
+});
+
 test('resource categories do not replace a recognized subscription',()=>{
   assert.equal(classify('ChatGPT Plus 成品号 自带gmail邮箱').canonicalProductSlug,'chatgpt-plus');
   assert.equal(classify('谷歌邮箱 美区').canonicalProductSlug,'resource-gmail');

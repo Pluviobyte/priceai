@@ -193,9 +193,14 @@ const additionalRules: ProductRule[] = [
 ];
 
 const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
-  { mode: "recharge", patterns: [/代充|直充|充值到.*账号|自己账号|原号/i] },
-  { mode: "finished_account", patterns: [/成品号|成号|账号密码|账密|独享账号|普号|普通号|空号/i] },
-  { mode: "redeem_code", patterns: [/卡密|兑换码|礼品卡|\bcdk\b/i] },
+  // This market writes 充 as 冲 about as often, and "官方充值" is its commonest
+  // wording for recharging the buyer's own account.
+  { mode: "recharge", patterns: [/代[充冲]|直[充冲]|官[充冲]|秒[充冲]|官方[充冲]值|充值到.*账号|自己账号|原号/i] },
+  // Credentials are written with whatever separator the shop happens to use. "成品"
+  // on its own is not added: it appears in descriptions often enough to outrank the
+  // delivery the title itself states, turning 日抛 and 直充 offers into stock accounts.
+  { mode: "finished_account", patterns: [/成品号|成号|账号\s*[-—|、\/]*\s*密码|账密|独享账号|普号|普通号|空号/i] },
+  { mode: "redeem_code", patterns: [/卡密|兑换码|兑换链接|激活码|礼品卡|\bcdk\b/i] },
   { mode: "team_seat", patterns: [/team\s*席位|团队席位|business\s*席位/i] },
   { mode: "shared_account", patterns: [/拼车|合租|共享账号|共享会员|家庭组|家庭版|家庭车位/i] },
   { mode: "web_mirror", patterns: [/镜像|网页共享|仅网页|共享站/i] },
