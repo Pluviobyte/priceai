@@ -120,7 +120,10 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // offer behind it. A price a tenth of its product's median is a placeholder or a
   // misfiled item, never a real floor, so it is kept out of the minimum.
   // An offer whose delivery is undetermined never sets a price, fallback included.
-  const termed = `available and duration_days>0 and offer_mode<>'unknown' and raw_title !~* '补差价|定金|预付'`;
+  // A term is asked of a subscription and never of a resource: a mailbox has no term,
+  // which is exactly why resources merge on a key that ignores one. Demanding it here
+  // contradicted that and left seven of the ten resource products unpriceable for good.
+  const termed = `available and (is_resource or duration_days>0) and offer_mode<>'unknown' and raw_title !~* '补差价|定金|预付'`;
   const comparable = `${termed} and offer_mode in ('recharge','finished_account','redeem_code','team_seat')`;
   // A product whose entire market is sold one way — Ultra only as family seats, say —
   // has no offer in the strict set, and a blank price reads as a broken page rather

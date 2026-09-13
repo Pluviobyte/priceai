@@ -198,6 +198,19 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(resources.total,1);assert.equal(resources.rows[0]?.price,null);
       assert.equal(parseChannelFilters({catalog:'resources'}).catalog,'resources');
     });
+    await t.test("a resource is priced without a term, since it merges on a key that has none", async () => {
+      await db.query("insert into canonical_products values ('pr3','resource-tool','账号工具 / 助手','OpenAI','active')");
+      // A mailbox or a helper tool carries no subscription term. Asking one of them
+      // anyway left seven of the ten resource products blank with stock on the shelf.
+      await offer('toolA', 5, { product: 'pr3', mode: 'redeem_code', days: null });
+      await offer('toolB', 9, { product: 'pr3', mode: 'finished_account', days: null, source: 's2' });
+      const resources = await getChannelCatalog(parseChannelFilters({ catalog: 'resources', q: 'tool' }), read);
+      const tool = resources.rows.find(row => row.product_slug === 'resource-tool');
+      assert.equal(Number(tool?.price), 5, 'a termless resource still has a floor');
+      assert.equal(tool?.duration_days, null, 'and the merged row still states no term');
+      await db.query("delete from offers where id in ('toolA','toolB')");
+      await db.query("delete from canonical_products where id='pr3'");
+    });
     await t.test("bare accounts keep their own heading, and a product with no outright sale still shows a floor", async () => {
       await db.query(`insert into canonical_products values ('pa','chatgpt-account','ChatGPT 普通账号','OpenAI','active'),
         ('pu','google-ai-ultra','Google AI Ultra','Google','active')`);
