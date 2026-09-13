@@ -71,7 +71,7 @@ function ChannelSort({ filters }: { filters: ChannelFilters }) {
 
 function ChannelFilterFields({ filters, includeSort = false }: { filters: ChannelFilters; includeSort?: boolean }) {
   return <div className={styles.filterRow}>
-    <label>商品范围<select name="catalog" defaultValue={filters.catalog ?? "subscriptions"}><option value="subscriptions">AI 订阅与账号</option><option value="resources">周边与使用服务</option></select></label>
+    <label>商品范围<select name="catalog" defaultValue={filters.catalog ?? "subscriptions"}><option value="subscriptions">AI 订阅档位</option><option value="accounts">未定档账号</option><option value="resources">周边与使用服务</option></select></label>
     <label>模型<select name="platform" defaultValue={filters.platform}>{CHANNEL_PLATFORMS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label>交付<select name="mode" defaultValue={filters.mode}><option value="">全部方式</option>{Object.entries(CHANNEL_MODES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label>期限<select name="duration" defaultValue={filters.duration}><option value="">全部期限</option>{[7, 30, 90, 180, 365].map(days => <option key={days} value={days}>{days} 天</option>)}</select></label>

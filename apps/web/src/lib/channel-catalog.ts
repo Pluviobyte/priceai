@@ -97,7 +97,12 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
     const pattern = parameter(`%${filters.q.replace(/[\\%_]/g, "\\$&")}%`);
     conditions.push(`concat_ws(' ',product_name,platform,raw_title,merchant_name,merchant_host) ilike ${pattern} escape '\\'`);
   }
-  conditions.push(filters.catalog === 'resources' ? "is_resource=true" : "is_resource=false");
+  // Bare accounts carry no tier, so they sit beside the tier they are not: a ¥0.7
+  // registered account under ChatGPT Plus reads as a second Plus row at an impossible
+  // price. They stay in the catalogue, under their own heading.
+  conditions.push(filters.catalog === 'resources' ? "is_resource=true"
+    : filters.catalog === 'accounts' ? "is_resource=false and product_slug like '%-account'"
+      : "is_resource=false and product_slug not like '%-account'");
   if (filters.platform) conditions.push(`platform=${parameter(filters.platform)}`);
   if (filters.mode) conditions.push(`offer_mode=${parameter(filters.mode)}`);
   if (filters.duration) conditions.push(`duration_days=${parameter(Number(filters.duration))}`);
@@ -110,15 +115,25 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // row by it lets one product occupy one row while the number stays traceable to the
   // offer behind it. A price a tenth of its product's median is a placeholder or a
   // misfiled item, never a real floor, so it is kept out of the minimum.
-  const comparable = `available and duration_days>0 and offer_mode in ('recharge','finished_account','redeem_code','team_seat')
-    and raw_title !~* '补差价|定金|预付'`;
+  // An offer whose delivery is undetermined never sets a price, fallback included.
+  const termed = `available and duration_days>0 and offer_mode<>'unknown' and raw_title !~* '补差价|定金|预付'`;
+  const comparable = `${termed} and offer_mode in ('recharge','finished_account','redeem_code','team_seat')`;
+  // A product whose entire market is sold one way — Ultra only as family seats, say —
+  // has no offer in the strict set, and a blank price reads as a broken page rather
+  // than as the honest "nobody sells this outright". So the fallback compares that
+  // product against itself, and the row still names the delivery it priced.
   const filtered = `${BASE}, filtered as (select * from catalog${conditions.length ? ` where ${conditions.join(" and ")}` : ""})
-    , priced as (select *, case when ${comparable} then price end cmp from filtered)
-    , medians as (select product_slug, currency, percentile_cont(0.5) within group (order by cmp) med
-        from priced where cmp is not null group by product_slug, currency)
-    , ranked as (select p.*, case when p.cmp is not null
-        and (m.med is null or p.is_resource or p.cmp > m.med*0.1) then p.cmp end cmp_ok
-        from priced p left join medians m using (product_slug, currency))`;
+    , priced as (select *, case when ${comparable} then price end cmp,
+        case when ${termed} then price end alt from filtered)
+    , medians as (select product_slug, currency, count(cmp) strict_n,
+        percentile_cont(0.5) within group (order by cmp) med_cmp,
+        percentile_cont(0.5) within group (order by alt) med_alt
+        from priced group by product_slug, currency)
+    , chosen as (select p.*, case when m.strict_n>0 then p.cmp else p.alt end pick,
+        case when m.strict_n>0 then m.med_cmp else m.med_alt end med
+        from priced p left join medians m using (product_slug, currency))
+    , ranked as (select *, case when pick is not null
+        and (med is null or is_resource or pick > med*0.1) then pick end cmp_ok from chosen)`;
   // spec_key already encodes every boundary that makes two offers comparable, so the
   // grouping follows it. Subscriptions keep delivery, duration and warranty apart and an
   // unknown duration still stands alone; resources merge, having no term or tier.

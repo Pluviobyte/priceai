@@ -61,6 +61,8 @@ test("every narrowing is offered back as a removable chip", () => {
   assert.equal(withoutMode.has("mode"), false);
   assert.equal(withoutMode.get("q"), "plus", "clearing one chip keeps the others");
   assert.equal(activeChannelChips(parseChannelFilters({})).length, 0);
+  assert.equal(activeChannelChips(parseChannelFilters({ catalog: "accounts" }))[0]?.label, "未定档账号");
+  assert.equal(parseChannelFilters({ catalog: "accounts" }).catalog, "accounts");
 });
 
 test("published channel catalog queries against PostgreSQL", { skip: !process.env.CHANNEL_TEST_DATABASE_URL }, async (t) => {
@@ -193,6 +195,25 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       const resources=await getChannelCatalog(parseChannelFilters({catalog:'resources',q:'mail'}),read);
       assert.equal(resources.total,1);assert.equal(resources.rows[0]?.price,null);
       assert.equal(parseChannelFilters({catalog:'resources'}).catalog,'resources');
+    });
+    await t.test("bare accounts keep their own heading, and a product with no outright sale still shows a floor", async () => {
+      await db.query(`insert into canonical_products values ('pa','chatgpt-account','ChatGPT 普通账号','OpenAI','active'),
+        ('pu','google-ai-ultra','Google AI Ultra','Google','active')`);
+      await offer('bare', 0.7, { product: 'pa', mode: 'finished_account' });
+      // Ultra reaches this market only as family seats, so its strict comparable set is empty.
+      await offer('seatA', 300, { product: 'pu', mode: 'shared_account' });
+      await offer('seatB', 260, { product: 'pu', mode: 'shared_account', source: 's2' });
+      const subs = await getChannelCatalog(parseChannelFilters({}), read);
+      assert.equal(subs.rows.some(row => row.product_slug === 'chatgpt-account'), false,
+        'a tierless account must not sit beside the tier it is not');
+      const accounts = await getChannelCatalog(parseChannelFilters({ catalog: 'accounts' }), read);
+      assert.deepEqual(accounts.rows.map(row => row.product_slug), ['chatgpt-account']);
+      assert.equal(Number(accounts.rows[0]?.price), 0.7);
+      const ultra = subs.rows.find(row => row.product_slug === 'google-ai-ultra');
+      assert.equal(Number(ultra?.price), 260, 'the product is compared against itself rather than left blank');
+      assert.equal(ultra?.offer_mode, 'shared_account', 'and the row names the delivery that produced the price');
+      await db.query("delete from offers where id in ('bare','seatA','seatB')");
+      await db.query("delete from canonical_products where id in ('pa','pu')");
     });
     await t.test("resource listings merge instead of standing alone per offer", async () => {
       await db.query("insert into canonical_products values ('pr2','resource-outlook','Outlook 邮箱','Microsoft','active')");

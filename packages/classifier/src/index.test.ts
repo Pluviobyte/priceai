@@ -24,6 +24,17 @@ test('explicit period and region, no inference from warranty or multiple regions
   assert.equal(classify('Claude Pro 美区/日区').attributes.region,undefined);
 });
 
+test('shops write the term in words as often as in digits',()=>{
+  // Production titles. A seat billed monthly, a monthly fee and a plan sold by the half year.
+  assert.equal(classify('Codex Team 月权益【车位/成品号】（正规车位）——每月需续费').attributes.durationDays,30);
+  assert.equal(classify('【质保30天】ChatGPT plus 菲区官充 自助卡密 月费 秒冲').attributes.durationDays,30);
+  assert.equal(classify('Claude Pro 包年 独享').attributes.durationDays,365);
+  assert.equal(classify('GPT Plus 半年 官方直充').attributes.durationDays,180);
+  // A warranty spelled out is still a warranty, and an unstated term stays unstated.
+  assert.equal(classify('Claude Pro 质保半年 成品号').attributes.durationDays,undefined);
+  assert.equal(classify('【美区IOS】Pro 5X 官方充值 质保30天订阅直充').attributes.durationDays,undefined);
+});
+
 test('resource categories do not replace a recognized subscription',()=>{
   assert.equal(classify('ChatGPT Plus 成品号 自带gmail邮箱').canonicalProductSlug,'chatgpt-plus');
   assert.equal(classify('谷歌邮箱 美区').canonicalProductSlug,'resource-gmail');

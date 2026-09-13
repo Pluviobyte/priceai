@@ -348,10 +348,13 @@ function matchOfferMode(text: string): {
 }
 
 function extractDurationDays(text: string): number | undefined {
-  text = text.replace(/质保\s*\d+\s*(?:小时|天|个月|月|年)/g, " ");
-  if (/年卡|年订阅|年付|一年|一整年/.test(text)) return 365;
-  if (/季卡|季付|三个月/.test(text)) return 90;
-  if (/月卡|月订阅|月付|一个月|一月/.test(text)) return 30;
+  // A warranty is a promise about the goods, never their term, so it is dropped first.
+  // Shops write it with digits and with characters alike ("质保30天", "质保半年").
+  text = text.replace(/质保\s*(?:\d+|半|一|二|两|三|六)\s*(?:小时|天|个月|月|年)/g, " ");
+  if (/半年/.test(text)) return 180;
+  if (/年卡|年订阅|年付|年费|包年|一年|一整年/.test(text)) return 365;
+  if (/季卡|季付|包季|季度|三个月/.test(text)) return 90;
+  if (/月卡|月订阅|月付|月费|月权益|月度|包月|一个月|一月/.test(text)) return 30;
   const monthMatch = text.match(/(\d{1,2})\s*(?:个)?月/);
   if (monthMatch?.[1]) {
     return Number(monthMatch[1]) * 30;

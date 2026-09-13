@@ -30,7 +30,7 @@ export type ChannelGroup = "merged" | "expanded";
 export type ChannelFilters = {
   q: string; platform: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
-  catalog?: "subscriptions" | "resources"; page: number; spec: string; product: string; layout: "cards" | "table";
+  catalog?: "subscriptions" | "resources" | "accounts"; page: number; spec: string; product: string; layout: "cards" | "table";
 };
 
 /** A specification is what makes two offers comparable; it is the unit `merged` groups by. */
@@ -82,7 +82,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     : first("group") === "expanded" || legacy === "offers" ? "expanded"
       : "merged";
   return {
-    catalog: choice("catalog", ["subscriptions", "resources"], "subscriptions") as "subscriptions" | "resources",
+    catalog: choice("catalog", ["subscriptions", "resources", "accounts"], "subscriptions") as "subscriptions" | "resources" | "accounts",
     q: first("q").slice(0, 160),
     spec: /^[a-f0-9]{32}$/.test(first("spec")) ? first("spec") : "",
     product: /^[a-z0-9][a-z0-9-]{1,59}$/.test(first("product")) ? first("product") : "",
@@ -128,6 +128,7 @@ export function activeChannelChips(filters: ChannelFilters): ChannelChip[] {
     chips.push({ key, label, clearHref: channelHref(filters, { [key]: cleared } as Partial<ChannelFilters>) });
   };
   if (filters.catalog === "resources") add("catalog", "周边与使用服务", "subscriptions");
+  if (filters.catalog === "accounts") add("catalog", "未定档账号", "subscriptions");
   if (filters.q) add("q", `搜索“${filters.q}”`, "");
   if (filters.platform) add("platform", CHANNEL_PLATFORMS.find(([value]) => value === filters.platform)?.[1] ?? filters.platform, "");
   if (filters.mode) add("mode", channelMode(filters.mode), "");
