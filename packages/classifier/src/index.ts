@@ -190,10 +190,10 @@ const additionalRules: ProductRule[] = [
 
 const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
   { mode: "recharge", patterns: [/代充|直充|充值到.*账号|自己账号|原号/i] },
-  { mode: "finished_account", patterns: [/成品号|成号|账号密码|账密|独享账号/i] },
+  { mode: "finished_account", patterns: [/成品号|成号|账号密码|账密|独享账号|普号|普通号|空号/i] },
   { mode: "redeem_code", patterns: [/卡密|兑换码|礼品卡|\bcdk\b/i] },
   { mode: "team_seat", patterns: [/team\s*席位|团队席位|business\s*席位/i] },
-  { mode: "shared_account", patterns: [/拼车|合租|共享账号|共享会员/i] },
+  { mode: "shared_account", patterns: [/拼车|合租|共享账号|共享会员|家庭组|家庭版|家庭车位/i] },
   { mode: "web_mirror", patterns: [/镜像|网页共享|仅网页|共享站/i] },
   { mode: "reverse_proxy", patterns: [/反代|号池|逆向/i] },
   { mode: "api_credit", patterns: [/\bapi\b|额度包|token/i] },
@@ -217,7 +217,9 @@ function normalizeBrandAliases(text: string): string {
     .replace(/\bcla\s+ude\b/gi, "claude")
     .replace(/\bgro\s+k\b/gi, "grok")
     .replace(/\bsuper\s*gr[o0](?!k)\b/gi, "supergrok")
-    .replace(/\boai\b/gi, "openai");
+    .replace(/\boai\b/gi, "openai")
+    // Merchants write 帐密/帐号 as often as 账密/账号; one normalisation serves every rule.
+    .replace(/帐/g, "账");
 }
 
 function normalizedText(offer: RawOfferInput): string {
@@ -284,6 +286,34 @@ function matchProduct(text: string): {
   };
 }
 
+// Shops describe one sale twice: "官方直充" beside "自助卡密续费", or "成品号" beside
+// "日抛". Treating that as a conflict and voiding the delivery left 82% of subscription
+// offers with no delivery, and therefore no comparable price at all. Rank them instead:
+// what the buyer receives outranks how it ships, which outranks how long it lasts.
+const MODE_PRIORITY: OfferMode[] = [
+  "team_seat", "shared_account", "web_mirror",
+  "finished_account", "recharge", "redeem_code",
+  "api_credit", "reverse_proxy", "short_term",
+];
+
+// A listing that states it cannot be logged into is a proxy, whatever else it mentions.
+const PROXY_ONLY = /仅反代|无账密|只能反代|不支持登录/i;
+
+// A shelf name listing several categories ("其他（Team，K12，镜像，拼车等）") says nothing
+// about this item's delivery, yet its stray words win the match: it turned 额度充值 into
+// 拼车 and a 镜像站 into a shared account. A category naming one form still counts.
+const SHELF_CATEGORY = /其他|等[）)]/;
+
+function deliveryText(offer: RawOfferInput, fullText: string): string {
+  if (!offer.rawCategory || !SHELF_CATEGORY.test(offer.rawCategory)) return fullText;
+  return normalizeBrandAliases([offer.rawTitle, offer.rawDescription]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim());
+}
+
 function matchOfferMode(text: string): {
   mode: OfferMode;
   matchedRules: string[];
@@ -298,10 +328,17 @@ function matchOfferMode(text: string): {
     return { mode: "unknown", matchedRules: [], conflicts: [] };
   }
 
+  const proxyOnly = PROXY_ONLY.test(text)
+    ? matches.find((match) => match.mode === "reverse_proxy")
+    : undefined;
+  const chosen = proxyOnly ?? [...matches].sort(
+    (left, right) => MODE_PRIORITY.indexOf(left.mode) - MODE_PRIORITY.indexOf(right.mode),
+  )[0] ?? first;
+
   return {
-    mode: first.mode,
-    matchedRules: [`mode:${first.mode}`],
-    conflicts: matches.slice(1).map((match) => `also_mode:${match.mode}`),
+    mode: chosen.mode,
+    matchedRules: [`mode:${chosen.mode}`],
+    conflicts: matches.filter((match) => match.mode !== chosen.mode).map((match) => `also_mode:${match.mode}`),
   };
 }
 
@@ -407,7 +444,7 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const titleIsPrecise = titleMatch.slug !== null
     && (!/-account$/.test(titleMatch.slug) || /free|普号|空号|普通号|半成品/i.test(titleText));
   const product = titleIsPrecise ? titleMatch : matchProduct(normalizedProductText(offer));
-  const mode = matchOfferMode(text);
+  const mode = matchOfferMode(deliveryText(offer, text));
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];
   const attributes = extractAttributes(text, mode.mode);
@@ -419,7 +456,10 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   // Product confidence is independent of delivery metadata. Mixed product
   // identities remain quarantined; unknown/mixed modes cannot win default ranking.
   const confidence = !product.slug ? 0.2 : product.conflicts.length ? 0.6 : 0.9;
-  if (mode.conflicts.length || product.slug?.endsWith('-account')) attributes.offerMode = "unknown";
+  // Neither an overlapping description nor an unconfirmed plan erases the delivery. A
+  // "普通账号" product is a finished account by definition, so its delivery is the most
+  // certain part of it; voiding it left all 450 account-class offers uncomparable.
+  // requiresReview still carries any conflict forward.
 
   return {
     canonicalProductSlug: product.slug,

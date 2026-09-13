@@ -8,7 +8,8 @@ test('real merchant spelling variants retain explicit plan identity', () => {
 test('unknown delivery does not lower product confidence, mixed delivery stays unknown',()=>{
   assert.equal(classify('Claude 5x').confidence,0.9);
   assert.equal(classify('Claude 5x').attributes.offerMode,'unknown');
-  const r=classify('ChatGPT Plus 代充 CDK'); assert.equal(r.confidence,0.9);assert.equal(r.attributes.offerMode,'unknown');assert.ok(r.requiresReview);
+  // Overlapping wording keeps the stronger delivery and still asks for review.
+  const r=classify('ChatGPT Plus 代充 CDK'); assert.equal(r.confidence,0.9);assert.equal(r.attributes.offerMode,'recharge');assert.ok(r.requiresReview);
 });
 test('conflicting plans and unrelated goods are not made eligible',()=>{
   assert.ok(classify('ChatGPT Plus Claude Pro 成品号').confidence<0.75);
@@ -38,7 +39,8 @@ test('explicit Pro tiers stay separate and unspecified accounts cannot set a pla
  assert.equal(classify('GPT-PRO-5X CDK').canonicalProductSlug,'chatgpt-pro-5x');
  assert.equal(classify('GPT Pro20x 拼车').canonicalProductSlug,'chatgpt-pro-20x');
  assert.ok(classify('GPT Pro5x Pro20x 成品').confidence<0.75);
- const r=classify('Gemini三个月成品号');assert.equal(r.canonicalProductSlug,'gemini-account');assert.equal(r.attributes.offerMode,'unknown');
+ // An unconfirmed plan no longer hides the delivery: 成品号 is what the buyer receives.
+ const r=classify('Gemini三个月成品号');assert.equal(r.canonicalProductSlug,'gemini-account');assert.equal(r.attributes.offerMode,'finished_account');
 });
 
 test('brandless plan wording from real shop catalogs resolves to the right plan', () => {
@@ -236,4 +238,40 @@ test('guides and helper tools are goods in their own right, not dropped', () => 
   // Courses about running a Douyin or YouTube account are somebody else's catalogue.
   assert.equal(classify('youtube海外运营教程').canonicalProductSlug, null);
   assert.equal(classify('2026抖音DSO搜索流量实操手册 抖音运营获客教程 选词图文复盘').canonicalProductSlug, null);
+});
+
+test('overlapping delivery wording keeps the goods, not the shipping method', () => {
+  // One sale described twice: the buyer tops up their own account, the card is how it ships.
+  assert.equal(classify('Claude Pro会员官方直充 【正规IOS保障】 24H自助卡密续费').attributes.offerMode, 'recharge');
+  // The account is the goods; a daily lifetime is an attribute of it.
+  assert.equal(classify('微软邮箱Plus 成品号 未接马 日抛').attributes.offerMode, 'finished_account');
+  // Merchants write 帐密 as often as 账密; the goods are still a finished account.
+  assert.equal(classify('Grok-free 普号 | 帐密+SSO | 可用Grok4.6 | 可网页').attributes.offerMode, 'finished_account');
+  // 普号 is the commonest word for a finished account; a stray api mention must not outrank it.
+  assert.equal(classify('G-Free普号 | codex未接phone | AT | 长效邮箱 支持api调用').attributes.offerMode, 'finished_account');
+  // A family seat is a shared account; a "可反代" note in the description must not take it.
+  assert.equal(classify('【质保30天】Gemini Ultra 20x 家庭组席位 可用反重力').attributes.offerMode, 'shared_account');
+  // Credit top-ups state no delivery of their own, and guessing one would invent a price.
+  assert.equal(classify('老徐Codex中转站1刀额度').attributes.offerMode, 'unknown');
+  assert.equal(classify('codex邀请好友').attributes.offerMode, 'unknown');
+  assert.equal(classify('plus(momo渠道成品号，直接反代，带账密2FA)').attributes.offerMode, 'finished_account');
+  // Unless the listing says it cannot be logged into at all.
+  assert.equal(classify('【仅反代无账密】PLUS已接马 发货json格式').attributes.offerMode, 'reverse_proxy');
+  // No delivery wording at all still means unknown.
+  assert.equal(classify('Claude 5x').attributes.offerMode, 'unknown');
+});
+
+test('a shelf name listing many categories does not decide this item\'s delivery', () => {
+  const withCategory = (rawTitle: string, rawCategory: string) => classifyOffer({
+    sourceItemId: 'test', rawTitle, rawCategory, price: '99', rawPriceText: '99', currency: 'CNY',
+    stockState: 'in_stock', productUrl: 'https://example.com/item/1',
+    capturedAt: new Date().toISOString(), rawPayloadHash: '1234567890abcdef',
+  });
+  // 拼车 belongs to the shelf, not to a credit top-up or a mirror site.
+  assert.notEqual(withCategory('【官方充值】Codex 250额度 非Api', '🐔PT-其他（Team，K12，镜像，拼车等）').attributes.offerMode, 'shared_account');
+  assert.equal(withCategory('G PLUS 镜像站(天卡)', '🐔PT-其他（Team，K12，镜像，拼车等）').attributes.offerMode, 'web_mirror');
+  // A family seat is shared, whatever the shelf calls it.
+  assert.equal(withCategory('Gemini Ultra 20x 家庭组席位', 'Gemini 充值/成品号').attributes.offerMode, 'shared_account');
+  // A category naming one delivery form still counts when the title names none.
+  assert.equal(withCategory('Gemini Ultra 20x 权益', 'Gemini 充值/成品号').attributes.offerMode, 'finished_account');
 });
