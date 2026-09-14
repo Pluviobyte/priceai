@@ -148,7 +148,16 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
 
   const moreId = `${baseId}-more`;
   const drawerId = `${baseId}-drawer`;
-  const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
+  const [accountName, setAccountName] = useState<string | null>(null);
+  const loginHref = accountName ? "/account" : `/login?next=${encodeURIComponent(pathname || "/")}`;
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/auth/session", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setAccountName(typeof data?.user?.name === "string" ? data.user.name : null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
   const themeToggleLabel = dark ? "切换到浅色模式" : "切换到深色模式";
 
   // 读取已保存的深浅色偏好，并同步页面与控件状态。
@@ -303,15 +312,12 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                 <a className="site-icon-button site-social-button" href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer" aria-label="通过 Telegram 联系" title="Telegram">
                   <img src="/social-icons/telegram.svg" alt="" />
                 </a>
-                <a className="site-icon-button site-social-button site-github-button" href="https://github.com/Pluviobyte/priceai" target="_blank" rel="noopener noreferrer" aria-label="打开 PriceAI GitHub 仓库" title="GitHub">
-                  <Icon name="github" size={18} />
-                </a>
               </div>
               <button className="site-icon-button site-social-button site-theme-toggle" type="button" onClick={toggleTheme} aria-label={themeToggleLabel} title={themeToggleLabel} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={17} />
               </button>
-              <Link className="site-icon-button site-social-button site-account-button site-desktop-account" href={loginHref} aria-label="登录个人账户" title="登录个人账户">
-                <Icon name="user" size={17} />
+              <Link className="site-icon-button site-social-button site-account-button site-login-entry" href={loginHref} aria-label={accountName ? "查看个人账户" : "登录个人账户"} title={accountName ?? "登录个人账户"}>
+                <Icon name="user" size={17} /><span>{accountName ? "账户" : "登录"}</span>
               </Link>
               <button ref={menuToggleRef} className="site-icon-button site-menu-toggle" type="button" aria-expanded={drawerOpen} aria-controls={drawerId} aria-label="打开站点菜单" onClick={() => setDrawerOpen(true)}>
                 <Icon name="menu" size={18} />
@@ -353,7 +359,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
             <div className="site-drawer-foot">
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("qq")}>QQ 交流群</button>
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("wechat")}>微信交流群</button>
-              <Link className="site-outline-link" href={loginHref}>登录</Link>
+              <Link className="site-outline-link" href={loginHref}>{accountName ? "个人账户" : "登录"}</Link>
               <button className="site-outline-link" type="button" onClick={toggleTheme} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={16} />
                 {dark ? "浅色模式" : "深色模式"}
