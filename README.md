@@ -1,11 +1,20 @@
-# <img src="./docs/images/icon.png" alt="" height="30"> PriceAI · AI 订阅价格情报平台
+<p align="center">
+  <img src="./docs/images/icon.png" width="112" height="112" alt="PriceAI" />
+</p>
 
-**简体中文** · [English](./README.en.md)
+<h1 align="center">PriceAI——AI底价比价雷达</h1>
 
-> 持续采集公开渠道的真实售价，把零散商品标准化成**可比较**的权益产品，并保留来源、时间、库存与风险事实。
-> 目标不是"找到最便宜的一个数字"，而是让每一条报价都能被追溯和复核。
+<p align="center">
+  <strong>持续采集公开渠道的真实售价，把零散商品标准化成可比较的权益产品。</strong><br/>
+  官方价作基准，渠道报价按交付方式、期限与质保分组；目标不是"找到最便宜的一个数字"，<br/>
+  而是让每一条报价都保留来源、时间、库存与风险事实，能被追溯和复核。
+</p>
 
-线上地址：<https://priceai.io>
+<p align="center">
+  <a href="https://priceai.io">在线访问</a> ·
+  <strong>简体中文</strong> ·
+  <a href="./README.en.md">English</a>
+</p>
 
 ![AI 底价一目了然](./docs/images/home-lowest-price.png)
 

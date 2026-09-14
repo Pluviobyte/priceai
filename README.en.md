@@ -1,12 +1,20 @@
-# <img src="./docs/images/icon.png" alt="" height="30"> PriceAI · Price Intelligence for AI Subscriptions
+<p align="center">
+  <img src="./docs/images/icon.png" width="112" height="112" alt="PriceAI" />
+</p>
 
-[简体中文](./README.md) · **English**
+<h1 align="center">PriceAI — AI Subscription Price Radar</h1>
 
-> Continuously collects real listed prices from public channels, normalises scattered listings into
-> **comparable** entitlement products, and keeps the source, timestamp, stock and risk facts attached.
-> The goal is not "one cheapest number" — it is that every quote can be traced and re-checked.
+<p align="center">
+  <strong>Continuously collects real listed prices from public channels and normalises scattered listings into comparable entitlement products.</strong><br/>
+  Official prices are the baseline; reseller quotes are grouped by delivery method, duration and warranty.<br/>
+  The goal is not "one cheapest number" — every quote keeps its source, timestamp, stock and risk facts, so it can be traced and re-checked.
+</p>
 
-Live site: <https://priceai.io>
+<p align="center">
+  <a href="https://priceai.io">Live site</a> ·
+  <a href="./README.md">简体中文</a> ·
+  <strong>English</strong>
+</p>
 
 ![AI prices at a glance](./docs/images/home-lowest-price.png)
 
