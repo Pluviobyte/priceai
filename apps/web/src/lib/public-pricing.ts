@@ -1,3 +1,4 @@
+import { createOfficialSnapshotCache } from "./official-snapshot-cache";
 import { query } from "./database";
 
 export interface OfficialSubscriptionPrice {
@@ -391,7 +392,7 @@ export async function getOfficialSubscriptionChecks(read: typeof query = query):
 }
 
 /** Share one checks request with price classification and the page's evidence table. */
-export async function getOfficialSubscriptionSnapshot(read: typeof query = query) {
+async function loadOfficialSubscriptionSnapshot(read: typeof query) {
   const checksPromise = getOfficialSubscriptionChecks(read);
   const [prices, checks] = await Promise.allSettled([
     getOfficialSubscriptionPrices(checksPromise, read), checksPromise,
@@ -401,4 +402,10 @@ export async function getOfficialSubscriptionSnapshot(read: typeof query = query
     checks: checks.status === "fulfilled" ? checks.value : null,
     available: prices.status === "fulfilled",
   };
+}
+
+const cachedOfficialSnapshot = createOfficialSnapshotCache(() => loadOfficialSubscriptionSnapshot(query));
+
+export function getOfficialSubscriptionSnapshot(read: typeof query = query) {
+  return read === query ? cachedOfficialSnapshot() : loadOfficialSubscriptionSnapshot(read);
 }

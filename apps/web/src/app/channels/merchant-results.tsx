@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MerchantIcon } from "./merchant-icon";
 import type { ChannelCatalog, ChannelRow } from "@/lib/channel-catalog";
 import { CHANNEL_PLATFORMS, channelTime } from "@/lib/channel-filters";
 import styles from "./channels.module.css";
@@ -12,7 +13,7 @@ function shopUrl(value: string | null) {
 
 function Identity({ row }: { row: ChannelRow }) {
   const url = shopUrl(row.merchant_host);
-  return <div className={styles.product}><span className={styles.mark} aria-hidden="true">{Array.from(row.merchant_name)[0]}</span><div>
+  return <div className={styles.product}><MerchantIcon source={row.merchant_host} name={row.merchant_name} /><div>
     <Link href={`/merchants/${row.merchant_slug}`}><b>{row.merchant_name}</b></Link>
     <small>{url ? `${url.host}${url.pathname === "/" ? "" : url.pathname}` : "来源待确认"}</small>
   </div></div>;
