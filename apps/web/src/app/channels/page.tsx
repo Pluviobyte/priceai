@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getChannelCatalog, type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
-import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PAGE_SIZES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
+import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PAGE_SIZES, CHANNEL_CATEGORIES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
 import styles from "./channels.module.css";
@@ -72,6 +72,7 @@ function ChannelSort({ filters }: { filters: ChannelFilters }) {
 function ChannelFilterFields({ filters, includeSort = false }: { filters: ChannelFilters; includeSort?: boolean }) {
   return <div className={styles.filterRow}>
     <label>商品范围<select name="catalog" defaultValue={filters.catalog ?? "subscriptions"}><option value="subscriptions">AI 订阅档位</option><option value="accounts">未定档账号</option><option value="resources">周边与使用服务</option></select></label>
+    <label>品类<select name="category" defaultValue={filters.category}>{CHANNEL_CATEGORIES.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label>模型<select name="platform" defaultValue={filters.platform}>{CHANNEL_PLATFORMS.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label>交付<select name="mode" defaultValue={filters.mode}><option value="">全部方式</option>{Object.entries(CHANNEL_MODES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label>期限<select name="duration" defaultValue={filters.duration}><option value="">全部期限</option>{[7, 30, 90, 180, 365].map(days => <option key={days} value={days}>{days} 天</option>)}</select></label>
@@ -124,6 +125,9 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
       <Link scroll={false} href={channelHref(filters, { view: "compare" })} aria-current={filters.view === "compare" ? "page" : undefined}>比价</Link>
       <Link scroll={false} href={channelHref(filters, { view: "merchants" })} aria-current={filters.view === "merchants" ? "page" : undefined}>卡网商家</Link>
     </nav><Link className={styles.textLink} href="/submit">提交店铺 ＋</Link></div>
+    {/* The category is the first question a shopper asks, so it is a visible strip
+        rather than one more select buried among the narrowing controls. */}
+    {filters.view !== "merchants" && <nav className={styles.platformTabs} aria-label="按品类查看报价">{CHANNEL_CATEGORIES.map(([value, label]) => <Link scroll={false} key={value} href={channelHref(filters, { category: value })} aria-current={filters.category === value ? "true" : undefined}>{label}</Link>)}</nav>}
     {view === "merchants" && <div className={styles.merchantToolbar}>
       <nav className={styles.platformTabs} aria-label="按模型查看商家">{CHANNEL_PLATFORMS.map(([value, label]) => <Link scroll={false} key={value} href={channelHref(filters, { platform: value })} aria-current={filters.platform === value ? "true" : undefined}>{value ? label : "全部模型"}</Link>)}</nav>
       <div className={styles.groupToggle} role="group" aria-label="商家显示方式"><Link scroll={false} href={channelHref(filters, { layout: "cards", page: data.page })} aria-current={filters.layout === "cards" ? "true" : undefined}>卡片</Link><Link scroll={false} href={channelHref(filters, { layout: "table", page: data.page })} aria-current={filters.layout === "table" ? "true" : undefined}>表格</Link></div>

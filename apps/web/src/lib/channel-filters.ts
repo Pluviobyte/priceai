@@ -6,6 +6,17 @@ export const CHANNEL_PLATFORMS = [
   ["Perplexity", "Perplexity"],
 ] as const;
 
+/**
+ * What a shopper is actually looking for. Brand alone cannot express it: a Gmail inbox
+ * and Google AI Pro are both Google, and a 接码 service for OpenAI is not ChatGPT. The
+ * category is derived from the product, and it cuts across the catalogue headings, so
+ * choosing one looks past the subscriptions/accounts/resources split.
+ */
+export const CHANNEL_CATEGORIES = [
+  ["", "全部品类"], ["chatgpt", "ChatGPT"], ["claude", "Claude"], ["gemini", "Gemini"],
+  ["grok", "Grok"], ["mail", "邮箱"], ["verification", "接码"], ["other", "其他"],
+] as const;
+
 export const CHANNEL_MODES = {
   api_credit: "API 额度", recharge: "自己账号代充", finished_account: "成品账号", redeem_code: "兑换码 / 卡密",
   team_seat: "团队席位", shared_account: "共享账号", web_mirror: "网页镜像",
@@ -30,7 +41,7 @@ export type ChannelView = "compare" | "merchants";
 export type ChannelGroup = "merged" | "expanded";
 
 export type ChannelFilters = {
-  q: string; platform: string; mode: string; duration: string; warranty: string;
+  q: string; platform: string; category: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
   catalog?: "subscriptions" | "resources" | "accounts"; page: number; pageSize: number; spec: string; product: string; layout: "cards" | "table";
 };
@@ -89,6 +100,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     spec: /^[a-f0-9]{32}$/.test(first("spec")) ? first("spec") : "",
     product: /^[a-z0-9][a-z0-9-]{1,59}$/.test(first("product")) ? first("product") : "",
     platform: choice("platform", CHANNEL_PLATFORMS.map(([value]) => value)),
+    category: choice("category", CHANNEL_CATEGORIES.map(([value]) => value)),
     mode: choice("mode", Object.keys(CHANNEL_MODES)),
     duration: choice("duration", ["7", "30", "90", "180", "365"]),
     warranty: choice("warranty", Object.keys(CHANNEL_WARRANTIES)),
@@ -132,6 +144,7 @@ export function activeChannelChips(filters: ChannelFilters): ChannelChip[] {
   };
   if (filters.catalog === "resources") add("catalog", "周边与使用服务", "subscriptions");
   if (filters.catalog === "accounts") add("catalog", "未定档账号", "subscriptions");
+  if (filters.category) add("category", CHANNEL_CATEGORIES.find(([value]) => value === filters.category)?.[1] ?? filters.category, "");
   if (filters.q) add("q", `搜索“${filters.q}”`, "");
   if (filters.platform) add("platform", CHANNEL_PLATFORMS.find(([value]) => value === filters.platform)?.[1] ?? filters.platform, "");
   if (filters.mode) add("mode", channelMode(filters.mode), "");

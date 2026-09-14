@@ -104,7 +104,21 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // Bare accounts carry no tier, so they sit beside the tier they are not: a ¥0.7
   // registered account under ChatGPT Plus reads as a second Plus row at an impossible
   // price. They stay in the catalogue, under their own heading.
-  conditions.push(filters.catalog === 'resources' ? "is_resource=true"
+  // A category is what the shopper came for, and it cuts across the catalogue headings:
+  // 邮箱 and 接码 are resources while ChatGPT is a subscription, so a category that also
+  // had to satisfy the heading would return nothing. Choosing one therefore replaces it.
+  const categories: Record<string, string> = {
+    mail: "product_slug in ('resource-gmail','resource-outlook','resource-icloud','resource-education-email')",
+    verification: "product_slug like '%-verification'",
+    chatgpt: "platform='OpenAI' and product_slug not like '%-verification'",
+    claude: "platform='Anthropic'",
+    gemini: "platform='Google' and product_slug not like '%-verification' and product_slug<>'resource-gmail'",
+    grok: "platform in ('xAI','X')",
+    other: `platform not in ('OpenAI','Anthropic','Google','xAI','X') and product_slug not like '%-verification'
+      and product_slug not in ('resource-gmail','resource-outlook','resource-icloud','resource-education-email')`,
+  };
+  if (filters.category && categories[filters.category]) conditions.push(categories[filters.category]!);
+  else conditions.push(filters.catalog === 'resources' ? "is_resource=true"
     : filters.catalog === 'accounts' ? "is_resource=false and product_slug like '%-account'"
       : "is_resource=false and product_slug not like '%-account'");
   if (filters.platform) conditions.push(`platform=${parameter(filters.platform)}`);

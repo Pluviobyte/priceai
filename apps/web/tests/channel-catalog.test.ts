@@ -63,6 +63,14 @@ test("every narrowing is offered back as a removable chip", () => {
   assert.equal(activeChannelChips(parseChannelFilters({})).length, 0);
   assert.equal(activeChannelChips(parseChannelFilters({ catalog: "accounts" }))[0]?.label, "未定档账号");
   assert.equal(parseChannelFilters({ catalog: "accounts" }).catalog, "accounts");
+  // A category is a shopper's question, not a brand: it is offered back as its own chip.
+  assert.equal(activeChannelChips(parseChannelFilters({ category: "verification" }))[0]?.label, "接码");
+  assert.equal(parseChannelFilters({ category: "mail" }).category, "mail");
+  assert.equal(parseChannelFilters({ category: "nonsense" }).category, "");
+  const byCategory = new URL(channelHref(parseChannelFilters({ q: "plus" }), { category: "mail" }), "http://localhost").searchParams;
+  assert.equal(byCategory.get("category"), "mail", "the category strip keeps the rest of the narrowing");
+  assert.equal(byCategory.get("q"), "plus");
+  assert.equal(new URL(channelHref(parseChannelFilters({ category: "mail" }), { category: "" }), "http://localhost").searchParams.has("category"), false);
 });
 
 test("published channel catalog queries against PostgreSQL", { skip: !process.env.CHANNEL_TEST_DATABASE_URL }, async (t) => {
@@ -261,6 +269,22 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(ultra?.offer_mode, 'shared_account', 'and the row names the delivery that produced the price');
       await db.query("delete from offers where id in ('bare','seatA','seatB')");
       await db.query("delete from canonical_products where id in ('pa','pu')");
+    });
+    await t.test("a category crosses the catalogue headings instead of being trapped by one", async () => {
+      await db.query("insert into canonical_products values ('pmail','resource-icloud','iCloud 邮箱','Apple','active')");
+      await offer('mailbox', 3, { product: 'pmail', mode: 'finished_account', days: null });
+      // The default heading is subscriptions, yet 邮箱 is a resource. A category that had
+      // to satisfy the heading as well would return nothing at all, so it replaces it.
+      const mail = await getChannelCatalog(parseChannelFilters({ category: 'mail' }), read);
+      assert.ok(mail.rows.some(row => row.product_slug === 'resource-icloud'),
+        'a mailbox is reachable without first switching the catalogue heading');
+      assert.ok(mail.rows.every(row => ['resource-gmail', 'resource-outlook', 'resource-icloud', 'resource-education-email'].includes(row.product_slug)),
+        'and nothing that is not a mailbox comes with it');
+      const chatgpt = await getChannelCatalog(parseChannelFilters({ category: 'chatgpt' }), read);
+      assert.ok(chatgpt.rows.length > 0 && chatgpt.rows.every(row => row.platform === 'OpenAI'),
+        'ChatGPT keeps to OpenAI products');
+      await db.query("delete from offers where id='mailbox'");
+      await db.query("delete from canonical_products where id='pmail'");
     });
     await t.test("resource listings merge instead of standing alone per offer", async () => {
       await db.query("insert into canonical_products values ('pr2','resource-outlook','Outlook 邮箱','Microsoft','active')");
