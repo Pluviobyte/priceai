@@ -27,5 +27,12 @@ class ManifestValidation(unittest.TestCase):
             with self.assertRaises(ValueError):
                 gateway.validate({**self.manifest(), field: "';DROP TABLE application;--"})
 
+    def test_registry_token_formats(self):
+        for token in ['ghs_' + 'a' * 40, 'header.payload-signature_' + 'b' * 40 + '=', 'v1:' + 'a' * 40 + '/+']:
+            gateway.validate_registry_token(token)
+        for token in ['short', 'a' * 40 + '$(id)', 'a' * 40 + '`id`', 'a' * 40 + '"', 'a' * 40 + '\n']:
+            with self.assertRaises(ValueError):
+                gateway.validate_registry_token(token)
+
 if __name__ == '__main__':
     unittest.main()

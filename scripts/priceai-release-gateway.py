@@ -64,6 +64,14 @@ def validate(payload):
             raise ValueError('Only immutable PriceAI images are accepted')
 
 
+def validate_registry_token(token):
+    # GitHub can issue JWT/base64 tokens as well as the older ghs_ format.
+    # Dokploy interpolates this into a quoted shell argument: exclude quotes,
+    # substitutions, whitespace and control characters, not safe JWT punctuation.
+    if not isinstance(token, str) or not re.fullmatch(r'[A-Za-z0-9_./+=:-]{20,8192}', token):
+        raise ValueError('A short-lived registry token is required')
+
+
 def capacity():
     disk = shutil.disk_usage('/var/lib/docker')
     stat = os.statvfs('/var/lib/docker')
@@ -202,8 +210,7 @@ def main():
     if action not in ('deploy', 'rollback'):
         raise ValueError('Unsupported action')
     registry_token = incoming.get('registryToken', '')
-    if not re.fullmatch(r'[A-Za-z0-9_]{20,4096}', registry_token):
-        raise ValueError('A short-lived registry token is required')
+    validate_registry_token(registry_token)
     with open(STATE / 'release.lock', 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if action == 'rollback':
