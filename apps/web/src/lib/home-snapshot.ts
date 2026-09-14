@@ -2,7 +2,7 @@ import type { OfferMode } from "@price-radar/schema";
 
 import { query } from "./database";
 import { getPublicCatalog, getPublicMarketChanges } from "./public-catalog";
-import { getOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
+import { getCachedOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
 
 /** 把 10 种 offerMode 归成 4 类“账号最后归谁”，这是首页解释差价用的口径。 */
 export type DeliveryFamily = "official" | "own-account" | "handed-over" | "usage-only";
@@ -134,7 +134,7 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
 
 export async function getHomeSnapshot(): Promise<HomeSnapshot> {
   const results = await Promise.allSettled([
-    getOfficialSubscriptionPrices(),
+    getCachedOfficialSubscriptionPrices(),
     query<HomeOffer>(`select distinct o.id,cp.slug,o.price,o.currency,o.offer_mode mode,m.id merchant_id,m.name merchant_name,
         coalesce(oa.warranty_type,'unknown') warranty_type,o.offer_verified_at verified_at
       from offers o join canonical_products cp on cp.id=o.canonical_product_id

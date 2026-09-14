@@ -409,3 +409,10 @@ const cachedOfficialSnapshot = createOfficialSnapshotCache(() => loadOfficialSub
 export function getOfficialSubscriptionSnapshot(read: typeof query = query) {
   return read === query ? cachedOfficialSnapshot() : loadOfficialSubscriptionSnapshot(read);
 }
+
+/** Reuse the public snapshot while retaining the caller's existing error handling. */
+export async function getCachedOfficialSubscriptionPrices(): Promise<OfficialSubscriptionPrice[]> {
+  const snapshot = await getOfficialSubscriptionSnapshot();
+  if (!snapshot.available) throw new Error("Official subscription prices unavailable");
+  return snapshot.prices;
+}

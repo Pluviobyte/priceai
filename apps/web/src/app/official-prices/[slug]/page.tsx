@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
-import { getOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, sortCollectedSubscriptionPrices, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
+import { getCachedOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, sortCollectedSubscriptionPrices, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../../site-footer";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
   let databaseAvailable = true;
   let allRows: OfficialSubscriptionPrice[] = [];
   try {
-    allRows = await getOfficialSubscriptionPrices();
+    allRows = await getCachedOfficialSubscriptionPrices();
   } catch {
     databaseAvailable = false;
   }
