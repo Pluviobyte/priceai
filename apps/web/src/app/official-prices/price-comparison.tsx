@@ -103,8 +103,14 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
       const key = keyOf({ ...plan, channel, countryCode: region.code });
       return { region, row: index.get(key), check: checkIndex.get(key) };
     });
-    const comparable = cells.flatMap(cell => cell.row && cell.row.priceKind === "exact" && hasCurrentCnyEstimate(cell.row) && isFreshOfficialSubscriptionPrice(cell.row) ? [Number(cell.row.cnyEstimate)] : []);
-    return { plan, channel, cells, minimum: comparable.length > 1 ? Math.min(...comparable) : null };
+    const priced = cells.filter(cell => cell.row && cell.row.priceKind === "exact" && hasCurrentCnyEstimate(cell.row) && isFreshOfficialSubscriptionPrice(cell.row));
+    const comparable = priced.map(cell => Number(cell.row!.cnyEstimate));
+    // The cheapest region this plan is actually sold at, kept whole rather than as a
+    // number: a floor that cannot name its region is not checkable. Computed over every
+    // matching region, before the page slice, so it does not change as you page across.
+    const floor = priced.reduce<(typeof priced)[number] | null>((best, cell) =>
+      !best || Number(cell.row!.cnyEstimate) < Number(best.row!.cnyEstimate) ? cell : best, null);
+    return { plan, channel, cells, minimum: comparable.length > 1 ? Math.min(...comparable) : null, floor };
   })).filter(group => !freshOnly || group.cells.some(cell => cell.row && isFreshOfficialSubscriptionPrice(cell.row) && cell.row.priceKind === "exact"))
     .map(group => ({ ...group, cells: group.cells.slice(offset, offset + pageSize) }));
   const rowPagination = comparisonPage(allGroups, first(params.compare_rows_page));
@@ -144,10 +150,15 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
     {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !groups.length ? <p role="status">当前条件下没有新核验报价，请取消勾选或重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
       <table className={styles.table}>
         <caption className="sr-only">每行一个套餐与渠道，每列一个地区，同时保留原币及人民币价格</caption>
-        <thead><tr><th scope="col" className={styles.identity}>AI / 套餐 / 渠道</th>{visibleRegions.map(item => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}</tr></thead>
-        <tbody>{groups.map(({ plan, channel, cells, minimum }, index) => <tr key={`${plan.planCode}:${channel}`} className={index === 0 || groups[index - 1]?.plan.planCode !== plan.planCode ? styles.groupStart : undefined}>
+        <thead><tr><th scope="col" className={styles.identity}>AI / 套餐 / 渠道</th>{visibleRegions.map(item => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}<th scope="col" className={styles.floor}>官方底价<small>全部地区最低</small></th></tr></thead>
+        <tbody>{groups.map(({ plan, channel, cells, minimum, floor }, index) => <tr key={`${plan.planCode}:${channel}`} className={index === 0 || groups[index - 1]?.plan.planCode !== plan.planCode ? styles.groupStart : undefined}>
           <th scope="row" className={styles.identity}><span className={styles.vendor}>{vendors[plan.vendor]}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod]}{plan.billingPeriod === "year" ? " · 整年扣款" : ""}</small><ChannelBadge channel={channel} vendor={plan.vendor} /></th>
           {cells.map(({ region, row, check }) => <td key={region.code}><Cell row={row} check={check} monthly={monthly} lowest={Boolean(row && matchingRegions.length > 1 && isFreshOfficialSubscriptionPrice(row) && hasCurrentCnyEstimate(row) && minimum !== null && Number(row.cnyEstimate) === minimum)} /></td>)}
+          <td className={styles.floor}>{floor?.row ? <div className={styles.quote}>
+            <strong>≈ ¥{amount(Number(floor.row.cnyEstimate) / (monthly && floor.row.billingPeriod === "year" && hasVerifiedSubscriptionBilling(floor.row) ? 12 : 1))}</strong>
+            <span className={styles.original}>{floor.region.name} · {floor.row.currency} {amount(Number(floor.row.amount))}</span>
+            <em className={styles.state}>{getOfficialSubscriptionPriceStatus(floor.row)}</em>
+          </div> : <span className={styles.missing}>暂无可比官方价</span>}</td>
         </tr>)}</tbody>
       </table>
     </div>}
