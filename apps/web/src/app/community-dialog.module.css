@@ -1,4 +1,4 @@
-.dialog { width: min(760px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 40px); margin: auto; padding: 0; border: 1px solid var(--color-border); border-radius: 24px; background: var(--color-panel); color: var(--color-text-body); box-shadow: 0 24px 80px oklch(15% .025 257 / 24%); overflow: auto; overscroll-behavior: contain; }
+.dialog { width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 40px); margin: auto; padding: 0; border: 1px solid var(--color-border); border-radius: 24px; background: var(--color-panel); color: var(--color-text-body); box-shadow: 0 24px 80px oklch(15% .025 257 / 24%); overflow: auto; overscroll-behavior: contain; }
 .dialog::backdrop { background: oklch(16% .025 257 / 55%); }
 .content { position: relative; padding: 38px 32px 32px; }
 .close { position: absolute; right: 12px; top: 12px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--color-text-muted); cursor: pointer; }
@@ -8,7 +8,7 @@
 .platform img { width: 20px; height: 20px; }
 .heading h2 { margin: 15px 0 12px; color: var(--color-text-primary); font-size: 26px; line-height: 1.5; font-weight: 650; }
 .heading p { margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.8; }
-.groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 30px; }
+.groups { display: grid; grid-template-columns: 1fr; margin-top: 30px; }
 .group { padding: 0 22px; text-align: center; }
 .group + .group { border-left: 1px solid var(--color-border); }
 .group h3 { margin: 0; color: var(--color-text-primary); font-size: 16px; font-weight: 600; line-height: 1.6; }
@@ -28,4 +28,12 @@
   .group { padding: 0; }
   .group + .group { padding-top: 26px; border-left: 0; border-top: 1px solid var(--color-border); }
   .group > p { min-height: 0; }
+}
+
+.allPlatforms { width: min(960px, calc(100vw - 32px)); }
+.allPlatforms .groups { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.groupIcon { width: 30px; height: 30px; object-fit: contain; margin-bottom: 12px; }
+@media (max-width: 700px) {
+  .allPlatforms .groups { grid-template-columns: 1fr; gap: 26px; }
+  .allPlatforms .group + .group { padding-top: 26px; border-left: 0; border-top: 1px solid var(--color-border); }
 }

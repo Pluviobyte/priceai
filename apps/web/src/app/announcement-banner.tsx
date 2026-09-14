@@ -1,5 +1,6 @@
 "use client";
 
+import { CommunityDialog } from "./community-dialog";
 import { useEffect, useState } from "react";
 import { API_SECTIONS_ENABLED, isApiSectionPath } from "@/lib/site-features";
 import {
@@ -21,6 +22,7 @@ function AnnouncementIcon({ kind }: { kind: AnnouncementKind }) {
 export function AnnouncementBanner() {
   const [config, setConfig] = useState<SiteAnnouncementConfig>(DEFAULT_ANNOUNCEMENT_CONFIG);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [communityOpen, setCommunityOpen] = useState(false);
   const [paused, setPaused] = useState(false);
 
   const announcements = config.announcements.filter((item) => API_SECTIONS_ENABLED || !isApiSectionPath(item.destinationUrl));
@@ -41,20 +43,25 @@ export function AnnouncementBanner() {
   }, [announcements.length]);
 
   useEffect(() => {
-    if (!config.rotationEnabled || paused || announcements.length < 2) return;
+    if (!config.rotationEnabled || paused || communityOpen || announcements.length < 2) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reducedMotion.matches) return;
     const interval = window.setInterval(() => {
       setCurrentIndex((index) => (index + 1) % announcements.length);
     }, config.rotationIntervalMs);
     return () => window.clearInterval(interval);
-  }, [config.rotationEnabled, config.rotationIntervalMs, announcements.length, paused]);
+  }, [config.rotationEnabled, config.rotationIntervalMs, announcements.length, paused, communityOpen]);
 
   if (!announcements.length) return null;
   const announcement = announcements[currentIndex] ?? announcements[0];
   if (!announcement) return null;
 
-  return (
+  const community = announcement.kind === "community" && announcement.destinationUrl === "/support?contact=community";
+  const openCommunity = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (community) { event.preventDefault(); setCommunityOpen(true); }
+  };
+
+  return (<>
     <aside
       className={`site-announcement kind-${announcement.kind}`}
       aria-label="站点公告"
@@ -68,13 +75,13 @@ export function AnnouncementBanner() {
       <div className="site-announcement-inner" key={announcement.id}>
         <div className="site-announcement-message">
           <span className="site-announcement-badge"><AnnouncementIcon kind={announcement.kind} />{announcement.badge}</span>
-          <a className="site-announcement-copy" href={announcement.destinationUrl}>
+          <a className="site-announcement-copy" href={announcement.destinationUrl} onClick={openCommunity} aria-haspopup={community ? "dialog" : undefined}>
             <strong>{announcement.title}</strong>
             {announcement.description && <span>{announcement.description}</span>}
           </a>
         </div>
         <div className="site-announcement-controls">
-          <a className="site-announcement-cta" href={announcement.destinationUrl}>{announcement.actionLabel}<span aria-hidden="true">→</span></a>
+          <a className="site-announcement-cta" href={announcement.destinationUrl} onClick={openCommunity} aria-haspopup={community ? "dialog" : undefined}>{announcement.actionLabel}<span aria-hidden="true">→</span></a>
           {announcements.length > 1 && (
             <div className="site-announcement-pages" role="group" aria-label="切换站点公告">
               {announcements.map((item, index) => (
@@ -92,5 +99,6 @@ export function AnnouncementBanner() {
         </div>
       </div>
     </aside>
-  );
+    <CommunityDialog platform={communityOpen ? "all" : null} onClose={() => setCommunityOpen(false)} />
+  </>);
 }

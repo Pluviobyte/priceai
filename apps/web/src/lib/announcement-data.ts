@@ -2,6 +2,7 @@ import "server-only";
 import { query } from "./database";
 import {
   DEFAULT_ANNOUNCEMENT_CONFIG,
+  communityAnnouncementTitle,
   type AnnouncementKind,
   type SiteAnnouncement,
   type SiteAnnouncementConfig,
@@ -38,7 +39,7 @@ export async function getPublicAnnouncementConfig(): Promise<SiteAnnouncementCon
       announcements: announcements.map((row): SiteAnnouncement => ({
         id: row.id,
         badge: row.badge,
-        title: row.title,
+        title: row.kind === "community" ? communityAnnouncementTitle(row.title) : row.title,
         description: row.description,
         actionLabel: row.action_label,
         destinationUrl: row.destination_url,

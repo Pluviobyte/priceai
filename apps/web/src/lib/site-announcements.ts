@@ -21,7 +21,7 @@ export const DEFAULT_ANNOUNCEMENT_CONFIG: SiteAnnouncementConfig = {
     {
       id: "9968526a-bc8a-4bd6-8723-5da43aad4b11",
       badge: "社区开放",
-      title: "QQ 和微信交流群已开启",
+      title: "QQ、微信和TG交流群已开启",
       description: "交流比价信息与使用经验",
       actionLabel: "加入交流群",
       destinationUrl: "/support?contact=community",
@@ -40,3 +40,8 @@ export const DEFAULT_ANNOUNCEMENT_CONFIG: SiteAnnouncementConfig = {
   rotationEnabled: true,
   rotationIntervalMs: 4_000,
 };
+
+/** Keep the original seeded community announcement current without replacing custom copy. */
+export function communityAnnouncementTitle(title: string): string {
+  return title === "QQ 和微信交流群已开启" ? "QQ、微信和TG交流群已开启" : title;
+}
