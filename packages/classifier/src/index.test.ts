@@ -76,6 +76,19 @@ test('video generation is priced by tier, and Kuaishou wording does not erase it
     .includes(String(classify('Adobe Firefly 2W积分号-可用满血seedance2.0即梦/Image/视频生成/图片生成').canonicalProductSlug)));
 });
 
+test('design tools are recognised by the wording the shops use',()=>{
+  // Production titles. Canva is written 可画 as often as Canva; Figma reaches this
+  // market as an education verification; Notion is sold as Notion AI 商业版.
+  assert.equal(classify('Canva可画国内高级版会员直充半年卡180天卡').canonicalProductSlug,'design-canva');
+  assert.equal(classify('CANVA PRO SLOT年费会员代开通（质保1年）').canonicalProductSlug,'design-canva');
+  assert.equal(classify('Figma教育版成品号 一年会员').canonicalProductSlug,'design-figma');
+  assert.equal(classify('NotionAI商业版-年卡').canonicalProductSlug,'design-notion');
+  assert.equal(classify('【Claude平替】Notion AI 商业版12个月（代充），质保订阅90天').canonicalProductSlug,'design-notion');
+  // Firefly generates images and video and says so, so it sits with video, not design.
+  assert.equal(classify('Adobe Firefly 2W积分号-可用满血seedance2.0即梦/Image/视频生成/图片生成').canonicalProductSlug,'video-firefly');
+  assert.equal(classify('【Adobe】 Firefly 普号 固定10积分').canonicalProductSlug,'video-firefly');
+});
+
 test('resource categories do not replace a recognized subscription',()=>{
   assert.equal(classify('ChatGPT Plus 成品号 自带gmail邮箱').canonicalProductSlug,'chatgpt-plus');
   assert.equal(classify('谷歌邮箱 美区').canonicalProductSlug,'resource-gmail');

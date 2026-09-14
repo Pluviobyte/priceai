@@ -39,6 +39,11 @@ const ADDITIONAL_PRODUCTS = [
   ['Runway','video-runway-max','视频生成 · Runway Max','video','subscription'],
   ['Runway','video-runway-pro','视频生成 · Runway Pro','video','subscription'],
   ['Kuaishou','video-kling','视频生成 · 可灵 Kling','video','subscription'],
+  ['Adobe','video-firefly','视频生成 · Adobe Firefly','video','account'],
+  // Design and office tools the shops resell alongside the AI plans.
+  ['Canva','design-canva','设计办公 · Canva 可画','design','subscription'],
+  ['Figma','design-figma','设计办公 · Figma','design','account'],
+  ['Notion','design-notion','设计办公 · Notion AI','design','subscription'],
   ['Google','resource-gmail','Gmail / Google 邮箱','mail','email'],
   ['Microsoft','resource-outlook','Outlook / Hotmail 邮箱','mail','email'],
   ['Apple','resource-icloud','iCloud 邮箱','mail','email'],

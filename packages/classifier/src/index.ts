@@ -22,7 +22,7 @@ const PURCHASE_CONTEXT = /充值|代充|直充|成品|普号|空号|账号|月�
 // Other vendors' plans, and unrelated memberships that also use "plus"/"team".
 // Only the brandless rules below consult these; branded rules keep reporting
 // cross-vendor matches as conflicts.
-const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora|runway|kling|可灵/i;
+const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora|runway|kling|可灵|canva|可画|figma|notion|firefly/i;
 const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱奇艺|优酷|芒果|酷狗|网易云|喜马拉雅|剪映|网盘|文库|影视|视频会员|音乐|打车|外卖|粉丝|抖音|快手|美团|饿了么|迅雷|夸克|steam|netflix|spotify|youtube|disney|office|wps/i;
 
 // Another vendor's assistant, often shelved under an OpenAI category by mistake.
@@ -151,6 +151,29 @@ const productRules: ProductRule[] = [
   {
     slug: "video-kling",
     include: [/\bkling\b|可灵/i],
+  },
+  // Firefly is Adobe's image and video generator, and its own listings advertise
+  // 视频生成/图片生成, so it belongs on the video shelf rather than with design tools.
+  {
+    slug: "video-firefly",
+    include: [/\bfirefly\b/i],
+  },
+  // Design and office tools the shops resell. Canva is written 可画 as often as Canva,
+  // Figma reaches this market as an education verification, and Notion is sold as
+  // Notion AI 商业版 rather than as plain Notion.
+  {
+    slug: "design-canva",
+    include: [/\bcanva\b|可画/i],
+  },
+  {
+    slug: "design-figma",
+    include: [/\bfigma\b/i],
+  },
+  {
+    // No trailing \b: the commonest listing is "NotionAI商业版", where the next character
+    // is a word character and \bnotion\b therefore never matches.
+    slug: "design-notion",
+    include: [/notion/i],
   },
   // Shops routinely drop the brand entirely ("PRO 20X 官方充值月卡", "5X TEAM 轮转号").
   // These sit last so any branded rule wins, and they only fire inside card-shop
