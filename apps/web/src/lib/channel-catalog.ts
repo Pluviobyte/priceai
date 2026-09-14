@@ -207,23 +207,36 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
          from filtered left join merchant_scores ms using (merchant_slug)
          group by merchant_slug,merchant_name`
       : `select *,1::int offer_count,available::int available_count,1::int merchant_count from ranked`;
-  const cte = `${filtered}${merchantRanking}, results as (${selection})`;
-  const [summary] = await read<{
-    total: number; offer_count: number; merchant_count: number; available_count: number; latest: Date | null;
-  }>(`${cte} select (select count(*)::int from results) total,
-      count(*)::int offer_count,count(distinct merchant_slug)::int merchant_count,
-      count(*) filter (where available)::int available_count,max(verified_at) latest from ranked`, values);
+  const cte = `${filtered}${merchantRanking}, results as materialized (${selection})`;
   const pageSize = filters.pageSize;
-  const total = summary?.total ?? 0;
-  const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));
   const order = filters.sort === "low_price" && view === "merchants"
     ? "lowest_count desc,top_five_count desc,comparable_count desc,available_count desc,verified_at desc nulls last"
     : filters.sort === "price" && view !== "merchants"
     ? "currency asc,price asc nulls last,verified_at desc nulls last"
     : filters.sort === "offers" ? "offer_count desc,verified_at desc nulls last"
       : "verified_at desc nulls last,available_count desc";
-  const rows = await read<ChannelRow>(`${cte} select * from results order by ${order},id
-    limit ${parameter(pageSize)} offset ${parameter((page - 1) * pageSize)}`, values);
+  // Reuse the same materialized results for the count and the page. The lateral
+  // query clamps the offset in SQL, including empty and out-of-range requests.
+  const limitParam = parameter(pageSize);
+  const pageParam = parameter(filters.page);
+  const result = await read<ChannelRow & {
+    result_total: number; result_offer_count: number; result_merchant_count: number;
+    result_available_count: number; result_latest: Date | null;
+  }>(`${cte}, summary as (
+    select (select count(*)::int from results) result_total,
+      count(*)::int result_offer_count, count(distinct merchant_slug)::int result_merchant_count,
+      count(*) filter (where available)::int result_available_count, max(verified_at) result_latest
+    from ranked
+  ) select page_rows.*, summary.* from summary left join lateral (
+    select * from results order by ${order},id
+    limit ${limitParam} offset ((least(${pageParam}::int,
+      greatest(1,ceil(summary.result_total::numeric/${limitParam})::int))-1)*${limitParam})
+  ) page_rows on true`, values);
+  const summary = result[0];
+  const total = summary?.result_total ?? 0;
+  const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));
+  const rows = result.filter(row => row.id != null).map(({ result_total, result_offer_count,
+    result_merchant_count, result_available_count, result_latest, ...row }) => row);
   // Resolved from the specification alone, so the lock stays legible even when the
   // other filters return nothing and on the merchant tab, where rows carry no spec.
   const [spec] = filters.spec
@@ -231,7 +244,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
         region,account_ownership,warranty_type,warranty_hours,currency
        from catalog where spec_key=$2 limit 1`, [Object.keys(CHANNEL_MODES), filters.spec])
     : [];
-  return { rows, total, page, pageSize, offerCount: summary?.offer_count ?? 0,
-    merchantCount: summary?.merchant_count ?? 0, availableCount: summary?.available_count ?? 0,
-    latest: summary?.latest ?? null, spec: spec ?? null };
+  return { rows, total, page, pageSize, offerCount: summary?.result_offer_count ?? 0,
+    merchantCount: summary?.result_merchant_count ?? 0, availableCount: summary?.result_available_count ?? 0,
+    latest: summary?.result_latest ?? null, spec: spec ?? null };
 }

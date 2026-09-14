@@ -180,6 +180,23 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(tied.rows.find(row => row.merchant_slug === "shop-b")?.lowest_count, 1);
       await db.query("delete from offers where id in ('tied','duplicate')");
     });
+    await t.test("summary and merchant page share one query, including empty pages", async () => {
+      let queries = 0;
+      const counted = async <Row extends QueryResultRow>(sql: string, values: readonly unknown[] = []) => {
+        queries++;
+        return read<Row>(sql, values);
+      };
+      const merchants = await getChannelCatalog(parseChannelFilters({ view: "merchants" }), counted);
+      assert.equal(queries, 1);
+      assert.ok(merchants.rows.length > 0);
+      assert.ok(merchants.rows[0]?.verified_at instanceof Date);
+      queries = 0;
+      const empty = await getChannelCatalog(parseChannelFilters({ q: "no-matching-shop-xyz", page: "99" }), counted);
+      assert.equal(queries, 1);
+      assert.equal(empty.total, 0);
+      assert.equal(empty.page, 1);
+      assert.deepEqual(empty.rows, []);
+    });
     await t.test("pagination clamps out-of-range pages and preserves zero prices", async () => {
       for (let i = 0; i < 30; i++) await offer(`extra-${i}`, i);
       const data = await getChannelCatalog(parseChannelFilters({ view: "offers", page: "999" }), read);
