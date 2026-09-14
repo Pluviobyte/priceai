@@ -1,3 +1,4 @@
+import { comparisonPage } from "@/lib/comparison-pagination";
 import Form from "next/form";
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
@@ -59,7 +60,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const visibleRegions = matchingRegions.slice(offset, offset + pageSize);
   const pageHref = (nextPage: number) => {
     const search = new URLSearchParams();
-    for (const key of ["q", "vendor", "channel", "period", "compare_vendor", "compare_period", "compare_channel", "compare_region", "compare_basis", "compare_fresh"]) {
+    for (const key of ["q", "vendor", "channel", "period", "compare_vendor", "compare_period", "compare_channel", "compare_region", "compare_basis", "compare_fresh", "compare_rows_page"]) {
       const value = first(params[key]);
       if (value) search.set(key, value);
     }
@@ -79,7 +80,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
     const key = keyOf(row), previous = index.get(key);
     if (!previous || row.verifiedAt > previous.verifiedAt) index.set(key, row);
   }
-  const groups = plans.flatMap(plan => selectedChannels.map(channel => {
+  const allGroups = plans.flatMap(plan => selectedChannels.map(channel => {
     const cells = matchingRegions.map(region => {
       const key = keyOf({ ...plan, channel, countryCode: region.code });
       return { region, row: index.get(key), check: checkIndex.get(key) };
@@ -88,6 +89,19 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
     return { plan, channel, cells, minimum: comparable.length > 1 ? Math.min(...comparable) : null };
   })).filter(group => !freshOnly || group.cells.some(cell => cell.row && isFreshOfficialSubscriptionPrice(cell.row) && cell.row.priceKind === "exact"))
     .map(group => ({ ...group, cells: group.cells.slice(offset, offset + pageSize) }));
+  const rowPagination = comparisonPage(allGroups, first(params.compare_rows_page));
+  const groups = rowPagination.rows;
+  const rowHref = (next: number) => {
+    const url = new URL(pageHref(page), "https://priceai.io");
+    if (next > 1) url.searchParams.set("compare_rows_page", String(next));
+    else url.searchParams.delete("compare_rows_page");
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+  const rowNavigation = rowPagination.pageCount > 1 && <nav className={styles.pagination} aria-label="套餐渠道分页">
+    {rowPagination.page > 1 ? <Link href={rowHref(rowPagination.page - 1)} prefetch={false}>← 上一组套餐</Link> : <span />}
+    <span>套餐与渠道 · 第 {rowPagination.page} / {rowPagination.pageCount} 页 · 共 {allGroups.length} 行</span>
+    {rowPagination.page < rowPagination.pageCount ? <Link href={rowHref(rowPagination.page + 1)} prefetch={false}>下一组套餐 →</Link> : <span />}
+  </nav>;
   const total = plans.length * selectedChannels.length * matchingRegions.length;
   const allCells = plans.flatMap(plan => selectedChannels.flatMap(channel => matchingRegions.map(region => index.get(keyOf({ ...plan, channel, countryCode: region.code })))));
   const current = allCells.filter(row => row?.priceKind === "exact" && isFreshOfficialSubscriptionPrice(row)).length;
@@ -105,7 +119,8 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
       <button type="submit">更新对照表</button><Link href="/official-prices#price-comparison">重置</Link>
     </Form>
     <div className={styles.coverage} role="status"><b>筛选范围内：{current} / {total} 项周期明确且近期核验</b><span>{historical} 项为历史或待核验金额</span><span>{total - current - historical} 项尚无精确价</span></div>
-    <p className={styles.meta}>{plans.length} 个目录套餐 · {matchingRegions.length} 个地区 · 本页 {visibleRegions.length} 个地区 · {groups.length} 行<span>较低价标记按筛选范围内全部地区计算，不因翻页改变；未统一税费与购买资格</span></p>
+    <p className={styles.meta}>{plans.length} 个目录套餐 · {matchingRegions.length} 个地区 · 本页 {visibleRegions.length} 个地区 · 本页 {groups.length} 行<span>较低价标记按筛选范围内全部地区计算，不因翻页改变；未统一税费与购买资格</span></p>
+    {rowNavigation}
     {pagination}
     {checks === null && <p role="status">采集状态暂不可用，已保存的价格仍可查看。</p>}
     {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !groups.length ? <p role="status">当前条件下没有新核验报价，请取消勾选或重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
@@ -118,6 +133,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
         </tr>)}</tbody>
       </table>
     </div>}
+    {rowNavigation}
     {pagination}
     <p className={styles.note}>年付“每月折算”仅用于预算比较，付款仍收取整年费用。人民币金额使用记录对应的汇率，未另加税费和跨境支付费；“公告参考价”及待核验记录不参与较低价标记。缺少价格不代表该地区或渠道不支持订阅，购买资格请在官方结算页确认。</p>
   </section>;
