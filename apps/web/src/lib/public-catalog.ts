@@ -738,3 +738,29 @@ export async function getPublicProductListing(slug: string, filters: OfferFilter
     planFamily: product.plan_family, billingPeriod: product.billing_period,
     overview: stats[0] ?? { total: 0, available: 0, latest: null } };
 }
+
+export const getMerchantIdentity = cache(async (slug: string) => {
+  const [merchant] = await query<MerchantRow>(
+    `select m.id,m.slug,m.name,m.website_url,m.commercial_relation,
+            min(s.first_seen_at) first_seen_at,max(s.last_success_at) last_success_at,
+            min(s.health_status::text) health_status,min(s.collector_kind) collector_kind
+       from merchants m join sources s on s.merchant_id=m.id
+      where m.slug=$1 and m.status='active'
+      group by m.id limit 1`,
+    [slug],
+  );
+  return merchant ?? null;
+});
+
+export async function getPublicMerchantListing(slug: string, page: number) {
+  const [merchant, publication] = await Promise.all([getMerchantIdentity(slug), getCurrentPublication()]);
+  if (!merchant) return null;
+  const listing = await readOfferPage(`${offerDetailSelect()}
+    where o.publish_generation_id=$1 and m.id=$2 and o.availability_state <> 'quarantined'`,
+    "case o.availability_state when 'purchasable' then 1 else 2 end,o.price asc",
+    [publication?.generation_id ?? null, merchant.id], page);
+  return { ...listing, id: merchant.id, slug: merchant.slug, name: merchant.name,
+    websiteUrl: merchant.website_url, commercialRelation: merchant.commercial_relation,
+    firstSeenAt: merchant.first_seen_at, lastSuccessAt: merchant.last_success_at,
+    healthStatus: merchant.health_status, collectorKind: merchant.collector_kind };
+}
