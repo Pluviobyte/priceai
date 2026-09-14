@@ -20,7 +20,7 @@ const render = async (params: Record<string, string> = {}, rows: OfficialSubscri
 
 test("official comparison bounds initial HTML and cells even when all regions are selected", async () => {
   const html = await render();
-  assert.ok((html.match(/<td/g) ?? []).length <= 390, "render at most 10 regions, not the entire world matrix");
+  assert.ok((html.match(/<td/g) ?? []).length <= 120, "render at most 12 combinations and 10 regions");
   assert.ok(Buffer.byteLength(html) < 1_000_000, "empty matrix must stay under 1 MB");
   assert.match(html, /下一组地区/);
 });
@@ -32,7 +32,18 @@ test("region pagination preserves filters and explicit region stays directly acc
   assert.match(html, /compare_basis=month/);
   assert.match(html, /q=Plus/);
   const single = await render({ compare_region: "US", compare_page: "999" });
-  assert.equal((single.match(/<td/g) ?? []).length, 39);
+  assert.equal((single.match(/<td/g) ?? []).length, 12);
+  let cells = 0;
+  for (let page = 1; page <= 4; page++) {
+    const part = await render({ compare_region: "US", compare_rows_page: String(page) });
+    cells += (part.match(/<td/g) ?? []).length;
+    assert.match(part, /compare_region=US/);
+  }
+  assert.equal(cells, 39, "all combinations remain reachable across row pages");
+  const later = await render({ compare_page: "2", compare_rows_page: "2", compare_basis: "month" });
+  assert.match(later, /compare_rows_page=2/);
+  assert.match(later, /compare_page=2/);
+  assert.match(later, /compare_basis=month/);
   assert.doesNotMatch(single, /下一组地区/);
 });
 
