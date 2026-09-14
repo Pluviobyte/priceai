@@ -8,6 +8,10 @@
 
 Live site: <https://priceai.io>
 
+![AI prices at a glance](./docs/images/home-lowest-price.png)
+
+*AI prices at a glance: the official list price, the official floor and the cheapest reseller quote side by side, each labelled with delivery method, source merchant and verification time.*
+
 ---
 
 ## What this is
@@ -45,11 +49,19 @@ PriceAI does three things:
 - 5 warranty tiers: full subscription period, fixed hours, first login only, none, undetermined
 - Filter by duration, currency, stock and warranty, with the ranking rules published
 
+![Reseller subscription floor prices](./docs/images/channels.png)
+
+*Reseller subscription floor prices: like is compared with like — grouped by delivery, duration, region, account ownership, warranty and currency; unknown stock, out-of-stock and quotes unverified for over 24 hours are excluded from the in-stock floor.*
+
 **Official subscription prices** `/official-prices`
 - Public listed prices from Apple's regional stores, Google, and OpenAI's regional sites
 - A 13-plan × 174-region matrix with a permanently pinned "official floor" column on the right
 - CNY conversions carry the exchange-rate date and source; annual plans can be shown as a monthly equivalent
 - Amounts whose billing period is unverified never take part in the lowest-price marker
+
+![Official subscription floor prices](./docs/images/official-prices.png)
+
+*Official subscription floor prices: the public reference price and the cross-region converted floor for all 13 catalogue plans, with the reference region, purchase channel, record count and exchange-rate date.*
 
 **Autonomous source discovery and vetting**
 - Candidates found from public shop directories, the 16688 wholesale board, public Telegram channels, GitHub topic pages, and outbound links inside already-collected catalogues
