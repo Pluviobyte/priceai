@@ -1,6 +1,9 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+import io
+import json
 
 spec = importlib.util.spec_from_file_location('gateway', Path(__file__).with_name('priceai-release-gateway.py'))
 gateway = importlib.util.module_from_spec(spec)
@@ -33,6 +36,15 @@ class ManifestValidation(unittest.TestCase):
         for token in ['short', 'a' * 40 + '$(id)', 'a' * 40 + '`id`', 'a' * 40 + '"', 'a' * 40 + '\n']:
             with self.assertRaises(ValueError):
                 gateway.validate_registry_token(token)
+
+    def test_public_readiness_identifies_itself_and_checks_version(self):
+        def response(request, timeout):
+            self.assertEqual(request.get_header('User-agent'), 'PriceAI-Release-Health/1.0')
+            return io.StringIO(json.dumps({'release': 'b' * 64, 'database': 'ok', 'status': 'ok'}))
+        with patch.object(gateway.urllib.request, 'urlopen', side_effect=response):
+            gateway.wait_public_health('b' * 64)
+        with self.assertRaises(RuntimeError):
+            gateway.wait_public_health('b' * 64, timeout=0)
 
 if __name__ == '__main__':
     unittest.main()

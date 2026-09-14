@@ -114,6 +114,23 @@ def wait_service(service, image, timeout=360):
     raise RuntimeError('Service readiness timed out: ' + service)
 
 
+def wait_public_health(release, timeout=90):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            request = urllib.request.Request('https://priceai.io/api/health', headers={
+                'User-Agent': 'PriceAI-Release-Health/1.0', 'Cache-Control': 'no-cache',
+            })
+            with urllib.request.urlopen(request, timeout=10) as response:
+                health = json.load(response)
+            if health.get('release') == release and health.get('database') == 'ok' and health.get('status') == 'ok':
+                return
+        except (OSError, ValueError):
+            pass
+        time.sleep(5)
+    raise RuntimeError('Public readiness did not match release within timeout')
+
+
 def deploy(payload, registry_token):
     validate(payload)
     usage = capacity()
@@ -174,10 +191,7 @@ def deploy(payload, registry_token):
                 raise RuntimeError('Dokploy deployment timed out: ' + service)
             wait_service(service, payload[kind])
             print(service + ': exact image healthy', flush=True)
-        with urllib.request.urlopen('https://priceai.io/api/health', timeout=10) as response:
-            health = json.load(response)
-        if health.get('release') != payload['release'] or health.get('database') != 'ok':
-            raise RuntimeError('Public readiness does not match release')
+        wait_public_health(payload['release'])
         if previous and previous != payload:
             save(STATE / 'previous.json', previous)
         save(STATE / 'current.json', payload)
