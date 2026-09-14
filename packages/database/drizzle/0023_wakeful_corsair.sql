@@ -1,0 +1,1 @@
+ALTER TABLE "canonical_products" ADD COLUMN "category" text DEFAULT 'other' NOT NULL;

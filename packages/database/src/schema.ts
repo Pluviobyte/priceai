@@ -292,6 +292,13 @@ export const canonicalProducts = pgTable(
     slug: text("slug").notNull(),
     displayName: text("display_name").notNull(),
     planFamily: text("plan_family").notNull(),
+    /**
+     * Which shelf the product sits on. Declared per product rather than inferred from
+     * brand and slug: the inference needed one negative rule ("everything that is not
+     * …"), and a newly collected mailbox would have fallen through it into 其他 without
+     * any error being raised.
+     */
+    category: text("category").notNull().default("other"),
     billingPeriod: text("billing_period"),
     baseDurationDays: integer("base_duration_days"),
     status: text("status").notNull().default("active"),

@@ -82,7 +82,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
     // Session-local tables: tests never write application tables or publish fixtures.
     await db.query(`
       create temp table publication_channels(channel text,current_generation_id text);
-      create temp table canonical_products(id text,slug text,display_name text,brand text,status text);
+      create temp table canonical_products(id text,slug text,display_name text,brand text,status text,category text);
       create temp table sources(id text,merchant_id text,enabled boolean,health_status text,canonical_entry_url text);
       create temp table merchants(id text,slug text,name text,status text);
       create temp table raw_offer_snapshots(id text,raw_title text);
@@ -92,7 +92,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
         offer_mode text,currency text,price numeric,stock_state text,stock_count int,offer_verified_at timestamptz,
         availability_state text,risk_facts jsonb,publish_generation_id text);
       insert into publication_channels values ('card_prices','live');
-      insert into canonical_products values ('p1','chatgpt-plus','ChatGPT Plus','OpenAI','active'),('p2','claude-pro','Claude Pro','Anthropic','active');
+      insert into canonical_products values ('p1','chatgpt-plus','ChatGPT Plus','OpenAI','active','chatgpt'),('p2','claude-pro','Claude Pro','Anthropic','active','claude');
       insert into merchants values ('m1','shop-a','卡网 A','active'),('m2','shop-b','卡网 B','active');
       insert into sources values ('s1','m1',true,'healthy','https://shop-a.example/shop/A'),('s2','m2',true,'healthy','https://shop-b.example/shop/B'),('disabled','m1',false,'healthy','https://shop-a.example/shop/X');
     `);
@@ -228,7 +228,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(Number(cheapest.rows[0]?.price), 0);
     });
     await t.test("resources stay separate and unknown delivery cannot set a minimum", async () => {
-      await db.query("insert into canonical_products values ('pr','resource-gmail','Gmail 邮箱','Google','active')");
+      await db.query("insert into canonical_products values ('pr','resource-gmail','Gmail 邮箱','Google','active','mail')");
       await offer('mail',1,{product:'pr',mode:'unknown'});
       const ordinary=await getChannelCatalog(parseChannelFilters({group:'expanded',q:'mail'}),read);
       assert.equal(ordinary.total,0);
@@ -237,7 +237,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       assert.equal(parseChannelFilters({catalog:'resources'}).catalog,'resources');
     });
     await t.test("a resource is priced without a term, since it merges on a key that has none", async () => {
-      await db.query("insert into canonical_products values ('pr3','resource-tool','账号工具 / 助手','OpenAI','active')");
+      await db.query("insert into canonical_products values ('pr3','resource-tool','账号工具 / 助手','OpenAI','active','other')");
       // A mailbox or a helper tool carries no subscription term. Asking one of them
       // anyway left seven of the ten resource products blank with stock on the shelf.
       await offer('toolA', 5, { product: 'pr3', mode: 'redeem_code', days: null });
@@ -253,8 +253,8 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       await db.query("delete from canonical_products where id='pr3'");
     });
     await t.test("bare accounts keep their own heading, and a product with no outright sale still shows a floor", async () => {
-      await db.query(`insert into canonical_products values ('pa','chatgpt-account','ChatGPT 普通账号','OpenAI','active'),
-        ('pu','google-ai-ultra','Google AI Ultra','Google','active')`);
+      await db.query(`insert into canonical_products values ('pa','chatgpt-account','ChatGPT 普通账号','OpenAI','active','chatgpt'),
+        ('pu','google-ai-ultra','Google AI Ultra','Google','active','gemini')`);
       await offer('bare', 0.7, { product: 'pa', mode: 'finished_account' });
       // Ultra reaches this market only as family seats, so its strict comparable set is empty.
       await offer('seatA', 300, { product: 'pu', mode: 'shared_account' });
@@ -272,7 +272,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       await db.query("delete from canonical_products where id in ('pa','pu')");
     });
     await t.test("a category crosses the catalogue headings instead of being trapped by one", async () => {
-      await db.query("insert into canonical_products values ('pmail','resource-icloud','iCloud 邮箱','Apple','active')");
+      await db.query("insert into canonical_products values ('pmail','resource-icloud','iCloud 邮箱','Apple','active','mail')");
       await offer('mailbox', 3, { product: 'pmail', mode: 'finished_account', days: null });
       // The default heading is subscriptions, yet 邮箱 is a resource. A category that had
       // to satisfy the heading as well would return nothing at all, so it replaces it.
@@ -288,7 +288,7 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       await db.query("delete from canonical_products where id='pmail'");
     });
     await t.test("resource listings merge instead of standing alone per offer", async () => {
-      await db.query("insert into canonical_products values ('pr2','resource-outlook','Outlook 邮箱','Microsoft','active')");
+      await db.query("insert into canonical_products values ('pr2','resource-outlook','Outlook 邮箱','Microsoft','active','mail')");
       // A mailbox has no term and no delivery tier, so these three belong on one row.
       await offer('mailA',2,{product:'pr2',mode:'unknown',days:null});
       await offer('mailB',3,{product:'pr2',mode:'redeem_code',days:null,source:'s2'});

@@ -59,7 +59,7 @@ export interface ChannelCatalog {
 const BASE = `with published as (
   select current_generation_id from publication_channels where channel='card_prices'
 ), catalog as (
-  select o.id::text, cp.slug product_slug, cp.display_name product_name, cp.brand platform,
+  select o.id::text, cp.slug product_slug, cp.display_name product_name, cp.brand platform, cp.category,
     -- Which catalogue a product belongs to is a fact about the product, not about how
     -- one shop happens to deliver one of its offers. Tabbing on the delivery put nine
     -- products in two catalogues at once: ChatGPT Plus sat under 周边 because a shop
@@ -107,19 +107,13 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   // A category is what the shopper came for, and it cuts across the catalogue headings:
   // 邮箱 and 接码 are resources while ChatGPT is a subscription, so a category that also
   // had to satisfy the heading would return nothing. Choosing one therefore replaces it.
-  const categories: Record<string, string> = {
-    mail: "product_slug in ('resource-gmail','resource-outlook','resource-icloud','resource-education-email')",
-    verification: "product_slug like '%-verification'",
-    chatgpt: "platform='OpenAI' and product_slug not like '%-verification'",
-    claude: "platform='Anthropic'",
-    gemini: "platform='Google' and product_slug not like '%-verification' and product_slug<>'resource-gmail'",
-    grok: "platform in ('xAI','X')",
-    video: "product_slug like 'video-%' or product_slug='dreamina-account'",
-    other: `platform not in ('OpenAI','Anthropic','Google','xAI','X') and product_slug not like '%-verification'
-      and product_slug not like 'video-%' and product_slug<>'dreamina-account'
-      and product_slug not in ('resource-gmail','resource-outlook','resource-icloud','resource-education-email')`,
-  };
-  if (filters.category && categories[filters.category]) conditions.push(categories[filters.category]!);
+  // The shelf a product sits on is stored with the product, so choosing a category is one
+  // column test. It used to be eight rules over brand and slug, and 其他 among them was a
+  // negative one — "everything that is not OpenAI, not a mailbox, not …" — which a newly
+  // collected mailbox would have fallen through into 其他 without raising anything.
+  // It still replaces the catalogue heading rather than narrowing it: 邮箱 and 接码 are
+  // resources while ChatGPT is a subscription, so requiring both would return nothing.
+  if (filters.category) conditions.push(`category=${parameter(filters.category)}`);
   else conditions.push(filters.catalog === 'resources' ? "is_resource=true"
     : filters.catalog === 'accounts' ? "is_resource=false and product_slug like '%-account'"
       : "is_resource=false and product_slug not like '%-account'");
