@@ -10,7 +10,15 @@
 .filters button:hover { filter: brightness(.92); }
 .filters > a { font-size: 13px; padding: 10px 4px; color: var(--muted); }
 .meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
-.scroll { overflow: auto; max-height: 720px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); }
+/* The horizontal bar is how you read across regions, so it is always drawn. Left to the
+   platform it auto-hides on macOS, which is why the table looked as though paging were
+   the only way across. */
+.scroll { overflow: auto; max-height: 720px; border: 1px solid var(--line); border-radius: 8px; background: var(--white);
+  scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; overscroll-behavior-x: contain; }
+.scroll::-webkit-scrollbar { height: 13px; width: 13px; }
+.scroll::-webkit-scrollbar-track { background: var(--color-surface); border-radius: 7px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 7px; border: 3px solid var(--white); }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 .scroll:focus-visible { outline: 3px solid var(--accent-deep); outline-offset: 3px; }
 .table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
 .table th, .table td { min-width: 176px; padding: 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); }
@@ -50,7 +58,11 @@
 .section .channel { display: inline-flex; align-items: center; gap: 5px; margin-top: 9px; padding: 3px 7px; border-radius: 5px; background: var(--color-surface); color: var(--color-text-body); font-size: 11px; }
 .section .channel img { width: 13px; height: 13px; flex-shrink: 0; }
 /* The floor summarises every region, so it is held apart from the region columns. */
-.section .table .floor { background: var(--color-panel); border-left: 2px solid var(--color-border); }
+/* The floor summarises every region, so it is pinned to the right edge the way the plan
+   is pinned to the left. Before this it sat past the last region column, which on a table
+   this wide meant it was always off-screen — the one number a reader most wants. */
+.section .table .floor { position: sticky; right: 0; z-index: 1; min-width: 168px; background: var(--color-panel); border-left: 2px solid var(--color-border); }
+.section .table thead .floor { z-index: 3; background: var(--paper); }
 .section .table tbody .floor strong { font-size: 16px; color: var(--accent-deep); }
 .original { white-space: nowrap; }
 .original small { display: inline; }

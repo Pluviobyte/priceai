@@ -20,15 +20,15 @@ const render = async (params: Record<string, string> = {}, rows: OfficialSubscri
 
 test("official comparison bounds initial HTML and cells even when all regions are selected", async () => {
   const html = await render();
-  // 12 combinations, 10 regions each, plus the one 官方底价 cell that summarises them.
-  assert.ok((html.match(/<td/g) ?? []).length <= 132, "render at most 12 combinations and 10 regions");
+  // 12 combinations, 30 regions each, plus the one 官方底价 cell that summarises them.
+  assert.ok((html.match(/<td/g) ?? []).length <= 372, "render at most 12 combinations and 30 regions");
   assert.ok(Buffer.byteLength(html) < 1_000_000, "empty matrix must stay under 1 MB");
-  assert.match(html, /下一组地区/);
+  assert.match(html, /继续看后/);
 });
 
 test("region pagination preserves filters and explicit region stays directly accessible", async () => {
   const html = await render({ compare_page: "2", compare_vendor: "openai", compare_basis: "month", q: "Plus" });
-  assert.match(html, /上一组地区/);
+  assert.match(html, /回到前/);
   assert.match(html, /compare_vendor=openai/);
   assert.match(html, /compare_basis=month/);
   assert.match(html, /q=Plus/);
@@ -45,7 +45,7 @@ test("region pagination preserves filters and explicit region stays directly acc
   assert.match(later, /compare_rows_page=2/);
   assert.match(later, /compare_page=2/);
   assert.match(later, /compare_basis=month/);
-  assert.doesNotMatch(single, /下一组地区/);
+  assert.doesNotMatch(single, /继续看后/);
 });
 
 
@@ -57,12 +57,19 @@ test("cross-region lowest label does not change when the cheaper region is on an
     verifiedAt: new Date(), exchangeRateDate: new Date().toISOString().slice(0,10), exchangeRateUrl: null, historyCount: 1,
     evidence: { billingPeriod: "month", billingEvidenceUrl: "https://example.com" },
   };
-  const rows = [price, {...price, id: "ph", countryCode: "PH", cnyEstimate: "100"}];
+  // Pick a region the first group cannot show, whatever the page size happens to be, so
+  // this keeps testing the property rather than a page boundary: the cheapest region is
+  // chosen across every matching region, and paging must not promote a dearer one.
+  const headRegions = (html: string) => new Set([...(/<thead>([\s\S]*?)<\/thead>/.exec(html)?.[1] ?? "").matchAll(/<small>([A-Z]{2})<\/small>/g)].map(match => match[1]!));
+  const onFirst = headRegions(await render());
+  const offFirst = [...headRegions(await render({ compare_page: "999999" }))].filter(code => !onFirst.has(code));
+  assert.ok(offFirst.length > 0, "the region pager must hold regions the first group omits");
+  const rows = [price, { ...price, id: "cheap", countryCode: offFirst[0]!, cnyEstimate: "100" }];
   const firstPage = await render({}, rows);
-  assert.ok(!firstPage.includes("同渠道跨地区标价折算较低"), "US must not become lowest just because PH is on page two");
-  const secondPage = await render({compare_page: "2"}, rows);
-  assert.ok(secondPage.includes("同渠道跨地区标价折算较低"));
-  const last = await render({ compare_page: "999999" });
-  assert.ok(!last.includes("下一组地区"));
+  assert.ok(!firstPage.includes("同渠道跨地区标价折算较低"), "US must not become lowest just because the cheaper region is in another group");
+  assert.ok(firstPage.includes("100.00"), "官方底价 reports the cheaper region even while its column is elsewhere");
+  const lastPage = await render({ compare_page: "999999" }, rows);
+  assert.ok(lastPage.includes("同渠道跨地区标价折算较低"));
+  assert.ok(!lastPage.includes("继续看后"));
   assert.equal(await render({compare_page:"-1"}), await render());
 });

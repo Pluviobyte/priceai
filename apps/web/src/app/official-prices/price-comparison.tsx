@@ -70,7 +70,12 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const regions = [...regionCatalog.map(item => ({ code: item.countryCode, name: item.displayName })), ...otherCodes.map(code => ({ code, name: regionDisplayName(code) })).sort((a, b) => a.name.localeCompare(b.name, "zh-CN"))];
   const region = regions.some(item => item.code === requestedRegion) ? requestedRegion : "";
   const matchingRegions = regions.filter(item => !region || item.code === region);
-  const pageSize = 10;
+  // Reading across regions is scrolling, not clicking: the table scrolls sideways and the
+  // floor column stays pinned to the right edge. The pager underneath only reaches the tail.
+  // Measured against production, one region column is ~35KB of markup (~1.2KB gzipped) —
+  // streaming serialises every cell twice — so all 174 at once would be a 6.2MB document.
+  // Thirty holds a page near 1.2MB (~59KB gzipped) and turns 18 groups into 6.
+  const pageSize = 30;
   const pageCount = Math.max(1, Math.ceil(matchingRegions.length / pageSize));
   const requestedPage = Number(first(params.compare_page));
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
@@ -85,10 +90,11 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
     if (nextPage > 1) search.set("compare_page", String(nextPage));
     return `/official-prices${search.size ? `?${search}` : ""}#price-comparison`;
   };
+  const shown = Math.min(offset + pageSize, matchingRegions.length);
   const pagination = pageCount > 1 && <nav className={styles.pagination} aria-label="地区分页">
-    {page > 1 ? <Link href={pageHref(page - 1)} prefetch={false}>← 上一组地区</Link> : <span />}
-    <span>第 {page} / {pageCount} 页 · 地区 {offset + 1}–{Math.min(offset + pageSize, matchingRegions.length)} / {matchingRegions.length}</span>
-    {page < pageCount ? <Link href={pageHref(page + 1)} prefetch={false}>下一组地区 →</Link> : <span />}
+    {page > 1 ? <Link href={pageHref(page - 1)} prefetch={false}>← 回到前 {Math.min(pageSize, offset)} 个地区</Link> : <span />}
+    <span>表格内左右拖动比较这 {visibleRegions.length} 个地区 · 已显示 {offset + 1}–{shown} / {matchingRegions.length}</span>
+    {page < pageCount ? <Link href={pageHref(page + 1)} prefetch={false}>继续看后 {Math.min(pageSize, matchingRegions.length - shown)} 个地区 →</Link> : <span />}
   </nav>;
   const plans = catalog.filter(plan => plan.planCode !== "claude-pro-annual" && (!vendor || plan.vendor === vendor) && (!period || plan.billingPeriod === period));
   const selectedChannels = Object.keys(channels).filter(value => !channel || channel === value);
@@ -145,7 +151,6 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
     <div className={styles.coverage} role="status"><b>筛选范围内：{current} / {total} 项周期明确且近期核验</b><span>{historical} 项为历史或待核验金额</span><span>{total - current - historical} 项尚无精确价</span></div>
     <p className={styles.meta}>{plans.length} 个目录套餐 · {matchingRegions.length} 个地区 · 本页 {visibleRegions.length} 个地区 · 本页 {groups.length} 行<span>较低价标记按筛选范围内全部地区计算，不因翻页改变；未统一税费与购买资格</span></p>
     {rowNavigation}
-    {pagination}
     {checks === null && <p role="status">采集状态暂不可用，已保存的价格仍可查看。</p>}
     {!available ? <p role="status">暂时无法读取价格数据，请稍后刷新重试。</p> : !groups.length ? <p role="status">当前条件下没有新核验报价，请取消勾选或重置筛选。</p> : <div className={styles.scroll} tabIndex={0} role="region" aria-label="订阅价格对照表，可左右滚动">
       <table className={styles.table}>
