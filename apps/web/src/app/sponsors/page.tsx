@@ -95,7 +95,7 @@ export default function SponsorsPage() {
           <p>如果你正在做 AI 服务、开发者工具或基础设施，<br />欢迎带着产品与资料来聊聊，找到适合你的展示方式。</p>
           <ul className={styles.benefits}><li>品牌展示</li><li>活动入口</li><li>资料直达</li><li>长期合作</li></ul>
           <Link className={styles.button} href="/commercial">了解赞助合作 <span aria-hidden="true">↗</span></Link>
-          <a className={styles.contact} href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer">通过 Telegram 联系 <span aria-hidden="true">↗</span></a>
+          <span className={styles.contact}>Telegram 联系方式准备中</span>
           <p className={styles.joinNote}>赞助支持平台持续维护，但不会改变比价的独立性。</p>
         </section>
       </main>

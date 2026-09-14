@@ -309,9 +309,9 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                 <button className="site-icon-button site-social-button" type="button" onClick={() => setCommunityPlatform("wechat")} aria-haspopup="dialog" aria-label="加入微信交流群" title="微信交流群">
                   <img src="/social-icons/wechat.svg" alt="" />
                 </button>
-                <a className="site-icon-button site-social-button" href="https://t.me/dimthink" target="_blank" rel="noopener noreferrer" aria-label="通过 Telegram 联系" title="Telegram">
+                <button className="site-icon-button site-social-button" type="button" onClick={() => setCommunityPlatform("telegram")} aria-haspopup="dialog" aria-label="加入 Telegram 交流群" title="Telegram 交流群">
                   <img src="/social-icons/telegram.svg" alt="" />
-                </a>
+                </button>
               </div>
               <button className="site-icon-button site-social-button site-theme-toggle" type="button" onClick={toggleTheme} aria-label={themeToggleLabel} title={themeToggleLabel} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={17} />

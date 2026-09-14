@@ -225,6 +225,12 @@ on an external cron endpoint.
 | [Official price collection](./docs/research/official-price-collection-automation-2026-09-07.md) | Collection rules and evidence requirements for official prices |
 | `docs/research/` | 22 research and measurement records |
 
+## Acknowledgement
+
+This project's product thinking and information structure owe a debt to [dimthink/PriceAI](https://github.com/dimthink/PriceAI) (priceai.cc), which established that reseller-channel quotes deserve to be compared systematically against an official-price baseline, and shaped how we think about grouping by comparable spec and keeping sources traceable. Thank you.
+
+To be clear about the boundary: this repository contains none of that project's code and does not hotlink its site resources; its sources, comparison rules and implementation are independent.
+
 ## Licence
 
 Private repository with no open-source licence attached; not for redistribution or reuse without permission.
