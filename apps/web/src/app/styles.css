@@ -1893,3 +1893,13 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 @media (max-width: 480px) { .priceai-login-page { padding: 20px; } .priceai-login-page > section { padding: 28px 22px; } }
 
 .site-header.is-stuck .site-login-entry { width: auto; }
+
+/* Distinguish an authenticated account from the sign-in action. */
+.site-login-entry.is-signed-in { gap: 6px; padding-inline: 4px 10px; }
+.site-account-avatar { display: inline-grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; color: var(--color-text-on-primary); background: var(--color-primary); font-size: 11px; font-weight: 700; }
+.site-account-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.site-account-status { color: var(--color-text-muted); font-size: 10px; }
+@media (max-width: 480px) {
+  .site-account-name { max-width: 60px; }
+  .site-account-status { display: none; }
+}

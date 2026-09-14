@@ -112,7 +112,7 @@ function Icon({ name, size = 18 }: { name: "search" | "moon" | "sun" | "menu" | 
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
     close: <path d="m6 6 12 12M18 6 6 18" />,
     message: <path d="M2.99 16.34a2 2 0 0 1 .1 1.17l-1.07 3.29a1 1 0 0 0 1.24 1.17l3.41-1a2 2 0 0 1 1.1.09 10 10 0 1 0-4.78-4.72Z" />,
-    user: <><path d="M2 21a8 8 0 0 1 13.29-6" /><circle cx="10" cy="8" r="5" /><path d="M19 16v6M22 19h-6" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,
     github: <path fill="currentColor" stroke="none" d="M12 .7a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.56v-2.24c-3.22.7-3.9-1.36-3.9-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.16.08 1.78 1.19 1.78 1.19 1.04 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.57-.29-5.27-1.29-5.27-5.68 0-1.25.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.16 1.18a10.98 10.98 0 0 1 5.75 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.59.23 2.76.11 3.05.73.81 1.18 1.84 1.18 3.09 0 4.4-2.71 5.38-5.29 5.67.42.36.78 1.06.78 2.14v3.18c0 .31.21.68.8.56A11.5 11.5 0 0 0 12 .7Z" />,
   };
   return (
@@ -148,16 +148,38 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
 
   const moreId = `${baseId}-more`;
   const drawerId = `${baseId}-drawer`;
-  const [accountName, setAccountName] = useState<string | null>(null);
-  const loginHref = accountName ? "/account" : `/login?next=${encodeURIComponent(pathname || "/")}`;
+  const [accountName, setAccountName] = useState<string | null | undefined>(undefined);
+  const loginHref = accountName !== null ? "/account" : `/login?next=${encodeURIComponent(pathname || "/")}`;
   useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/auth/session", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data) => setAccountName(typeof data?.user?.name === "string" ? data.user.name : null))
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
+    let controller: AbortController | undefined;
+    const refreshSession = () => {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      fetch("/api/auth/session", { cache: "no-store", signal })
+        .then((response) => {
+          if (!response.ok) throw new Error("Session unavailable");
+          return response.json();
+        })
+        .then((data) => {
+          if (!signal.aborted) setAccountName(typeof data?.user?.name === "string" ? data.user.name.trim() || "我的账户" : null);
+        })
+        .catch(() => {});
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshSession();
+    };
+    refreshSession();
+    window.addEventListener("focus", refreshSession);
+    window.addEventListener("pageshow", refreshSession);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      controller?.abort();
+      window.removeEventListener("focus", refreshSession);
+      window.removeEventListener("pageshow", refreshSession);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [pathname]);
   const themeToggleLabel = dark ? "切换到浅色模式" : "切换到深色模式";
 
   // 读取已保存的深浅色偏好，并同步页面与控件状态。
@@ -316,8 +338,14 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
               <button className="site-icon-button site-social-button site-theme-toggle" type="button" onClick={toggleTheme} aria-label={themeToggleLabel} title={themeToggleLabel} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={17} />
               </button>
-              <Link className="site-icon-button site-social-button site-account-button site-login-entry" href={loginHref} aria-label={accountName ? "查看个人账户" : "登录个人账户"} title={accountName ?? "登录个人账户"}>
-                <Icon name="user" size={17} /><span>{accountName ? "账户" : "登录"}</span>
+              <Link className={`site-icon-button site-social-button site-account-button site-login-entry${accountName ? " is-signed-in" : ""}`} href={loginHref} aria-label={accountName ? `${accountName}，已登录，查看个人账户` : accountName === null ? "登录个人账户" : "查看个人账户"} title={accountName ? `${accountName} · 已登录` : "个人账户"}>
+                {accountName ? (
+                  <>
+                    <span className="site-account-avatar" aria-hidden="true">{(Array.from(accountName)[0] ?? "我").toLocaleUpperCase()}</span>
+                    <span className="site-account-name">{accountName}</span>
+                    <span className="site-account-status">已登录</span>
+                  </>
+                ) : <><Icon name="user" size={17} /><span>{accountName === null ? "登录" : "账户"}</span></>}
               </Link>
               <button ref={menuToggleRef} className="site-icon-button site-menu-toggle" type="button" aria-expanded={drawerOpen} aria-controls={drawerId} aria-label="打开站点菜单" onClick={() => setDrawerOpen(true)}>
                 <Icon name="menu" size={18} />
@@ -359,7 +387,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
             <div className="site-drawer-foot">
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("qq")}>QQ 交流群</button>
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("wechat")}>微信交流群</button>
-              <Link className="site-outline-link" href={loginHref}>{accountName ? "个人账户" : "登录"}</Link>
+              <Link className="site-outline-link" href={loginHref}>{accountName ? `${accountName} · 已登录` : accountName === null ? "登录" : "个人账户"}</Link>
               <button className="site-outline-link" type="button" onClick={toggleTheme} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={16} />
                 {dark ? "浅色模式" : "深色模式"}
