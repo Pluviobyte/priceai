@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 import io
 import json
+import tempfile
 
 spec = importlib.util.spec_from_file_location('gateway', Path(__file__).with_name('priceai-release-gateway.py'))
 gateway = importlib.util.module_from_spec(spec)
@@ -45,6 +46,13 @@ class ManifestValidation(unittest.TestCase):
             gateway.wait_public_health('b' * 64)
         with self.assertRaises(RuntimeError):
             gateway.wait_public_health('b' * 64, timeout=0)
+
+    def test_failed_deployment_rolls_back_to_last_good_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory)
+            self.assertEqual(gateway.rollback_manifest_path(state), state / 'previous.json')
+            (state / 'pending.json').write_text('{}')
+            self.assertEqual(gateway.rollback_manifest_path(state), state / 'current.json')
 
 if __name__ == '__main__':
     unittest.main()

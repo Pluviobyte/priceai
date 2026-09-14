@@ -55,6 +55,12 @@ def save(path, value):
     os.replace(temporary, path)
 
 
+def rollback_manifest_path(state=STATE):
+    # An interrupted/failed deployment has not advanced current.json. Restore
+    # that last good release; after a successful deployment restore previous.
+    return state / ('current.json' if (state / 'pending.json').exists() else 'previous.json')
+
+
 def validate(payload):
     for field, length in [('sha', 40), ('release', 64)]:
         if not re.fullmatch('[a-f0-9]{' + str(length) + '}', payload.get(field, '')):
@@ -228,7 +234,7 @@ def main():
     with open(STATE / 'release.lock', 'w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if action == 'rollback':
-            payload = json.loads((STATE / 'previous.json').read_text())
+            payload = json.loads(rollback_manifest_path().read_text())
         else:
             payload = {key: incoming[key] for key in ['sha', 'release', 'web', 'worker']}
         deploy(payload, registry_token)

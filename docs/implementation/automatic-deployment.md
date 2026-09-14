@@ -32,7 +32,7 @@ CI 检查类型、单元测试、临时 PostgreSQL 迁移与 SQL 集成、生产
 
 生产按 Web、Official、Channel 顺序部署，逐个等待 Dokploy done、运行镜像一致、Docker health=healthy。最后检查公网 readiness、数据库和源码版本，再由 Actions 验证首页及卡网页面。失败即停止推进，保留 pending 清单和配置备份；不自动回退数据库。
 
-`/etc/priceai-release/current.json`、`previous.json` 保存已验证版本的两种 digest；不含 registry token。Actions 手动运行勾选 `rollback`，可直接恢复上一个已验证镜像版本，不重新构建，不撤销数据库迁移。首次镜像迁移尚无 previous.json，旧的本地命名镜像与迁移前配置备份保留用于管理员恢复；后续两次成功版本后具备镜像自动回滚入口。普通修复仍通过 main 提交发布。
+`/etc/priceai-release/current.json`、`previous.json` 保存已验证版本的两种 digest；不含 registry token。Actions 手动运行勾选 `rollback`，可直接恢复上一个已验证镜像版本，不重新构建，不撤销数据库迁移。如果存在失败/中断的 pending.json，则恢复 current.json（最近成功版本），而不是跳过它去恢复更老的 previous.json。首次镜像迁移尚无 previous.json，旧的本地命名镜像与迁移前配置备份保留用于管理员恢复；后续两次成功版本后具备镜像自动回滚入口。普通修复仍通过 main 提交发布。
 
 ## 容量和告警
 
