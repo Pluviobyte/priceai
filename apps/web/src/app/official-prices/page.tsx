@@ -1,3 +1,4 @@
+import Form from "next/form";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -179,7 +180,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
       </div>
 
       <div className="priceai-catalog-toolbar priceai-official-toolbar">
-        <form action="/official-prices">
+        <Form action="/official-prices">
           <label className="sr-only" htmlFor="official-query">搜索官方订阅</label>
           <input id="official-query" name="q" defaultValue={q} placeholder="搜索 ChatGPT、Claude、Gemini 或 Grok" />
           {vendor && <input type="hidden" name="vendor" value={vendor} />}
@@ -189,7 +190,7 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
           </div><div className="official-filter-field"><label htmlFor="official-period">结算周期</label>
           <select id="official-period" name="period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select>
           </div><button type="submit" className="official-filter-submit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M4 7h16M7 12h10M10 17h4" /></svg>筛选</button></fieldset>
-        </form>
+        </Form>
         <nav aria-label="官方价格相关页面"><Link className="active" href="/official-prices">套餐总览</Link><a href="#price-comparison">订阅价格对照表</a><Link href="/official-prices/regions">地区对照</Link>{API_SECTIONS_ENABLED && <Link href="/official-api">官方 API</Link>}</nav>
       </div>
       <div className="priceai-catalog-status"><span>{plans.length} 个匹配套餐</span>{(q || vendor || channel || period) && <Link href="/official-prices">清空全部条件</Link>}</div>

@@ -1,3 +1,4 @@
+import Form from "next/form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { API_SECTIONS_ENABLED } from "@/lib/site-features";
@@ -139,7 +140,7 @@ export default async function OfficialPriceRegionsPage({
       </section>
 
       <div className="priceai-catalog-toolbar priceai-region-toolbar">
-        <form action="/official-prices/regions">
+        <Form action="/official-prices/regions">
           <label htmlFor="region-plan">选择要对照的订阅套餐</label>
           <select id="region-plan" name="plan" defaultValue={selectedPlan.planCode}>
             {groupedPlans.map((group) => <optgroup label={vendorNames[group.vendor] ?? group.vendor} key={group.vendor}>
@@ -147,7 +148,7 @@ export default async function OfficialPriceRegionsPage({
             </optgroup>)}
           </select>
           <button type="submit">查看地区价格</button>
-        </form>
+        </Form>
         <a className="priceai-region-official-link" href={selectedPlan.officialUrl} target="_blank" rel="noopener noreferrer nofollow">打开厂商页面　↗</a>
       </div>
 

@@ -1,3 +1,4 @@
+import Form from "next/form";
 import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
@@ -93,7 +94,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   const historical = allCells.filter(row => row?.priceKind === "exact" && !isFreshOfficialSubscriptionPrice(row)).length;
   return <section id="price-comparison" className={styles.section} aria-labelledby="comparison-heading">
     <header className={styles.heading}><div><p className="priceai-kicker">各 AI · 各档位 · 各地区</p><h2 id="comparison-heading">订阅价格对照表</h2><p>一行一个套餐与购买渠道，横向比较地区。原币金额在上，人民币估算在下。</p></div><Link href="/official-prices/regions">单套餐详情 ↗</Link></header>
-    <form action="/official-prices#price-comparison" className={styles.filters}>
+    <Form action="/official-prices#price-comparison" className={styles.filters}>
       {["q", "vendor", "channel", "period"].map(key => first(params[key]) ? <input key={key} type="hidden" name={key} value={first(params[key])} /> : null)}
       <label htmlFor="compare-vendor">AI 产品<select id="compare-vendor" name="compare_vendor" defaultValue={vendor}><option value="">全部 AI</option>{Object.entries(vendors).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label htmlFor="compare-period">付费周期<select id="compare-period" name="compare_period" defaultValue={period}><option value="">全部周期</option><option value="month">月付</option><option value="year">年付</option></select></label>
@@ -102,7 +103,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
       <label htmlFor="compare-basis">金额口径<select id="compare-basis" name="compare_basis" defaultValue={monthly ? "month" : "cycle"}><option value="cycle">每期总价</option><option value="month">每月折算</option></select></label>
       <label className={styles.checkbox}><input type="checkbox" name="compare_fresh" value="1" defaultChecked={freshOnly} />只看周期明确且近期核验的行</label>
       <button type="submit">更新对照表</button><Link href="/official-prices#price-comparison">重置</Link>
-    </form>
+    </Form>
     <div className={styles.coverage} role="status"><b>筛选范围内：{current} / {total} 项周期明确且近期核验</b><span>{historical} 项为历史或待核验金额</span><span>{total - current - historical} 项尚无精确价</span></div>
     <p className={styles.meta}>{plans.length} 个目录套餐 · {matchingRegions.length} 个地区 · 本页 {visibleRegions.length} 个地区 · {groups.length} 行<span>较低价标记按筛选范围内全部地区计算，不因翻页改变；未统一税费与购买资格</span></p>
     {pagination}
