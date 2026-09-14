@@ -47,7 +47,8 @@
 .section .table tbody tr:first-child > * { border-top: 0; }
 .section .quote { white-space: normal; gap: 5px; min-height: 72px; }
 .section .quote strong { font-size: 16px; }
-.section .channel { display: inline-block; margin-top: 9px; padding: 3px 7px; border-radius: 5px; background: var(--color-surface); color: var(--color-text-body); font-size: 11px; }
+.section .channel { display: inline-flex; align-items: center; gap: 5px; margin-top: 9px; padding: 3px 7px; border-radius: 5px; background: var(--color-surface); color: var(--color-text-body); font-size: 11px; }
+.section .channel img { width: 13px; height: 13px; flex-shrink: 0; }
 .original { white-space: nowrap; }
 .original small { display: inline; }
 .state, .best { font-size: 10px; font-style: normal; line-height: 1.5; }

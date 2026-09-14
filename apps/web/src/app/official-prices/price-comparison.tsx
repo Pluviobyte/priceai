@@ -4,9 +4,12 @@ import Link from "next/link";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG as catalog, OFFICIAL_SUBSCRIPTION_REGION_CATALOG as regionCatalog } from "@price-radar/price-channels/subscription-catalog";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, type OfficialSubscriptionPrice as Price, type OfficialSubscriptionCheck as Check } from "@/lib/public-pricing";
+import { ModelIcon, type ModelIconName } from "../model-icons";
+import { ChannelIcon } from "../channel-icons";
 import styles from "./price-comparison.module.css";
 
 const vendors: Record<string, string> = { openai: "ChatGPT", anthropic: "Claude", google: "Gemini", xai: "Grok" };
+const vendorIcons: Record<string, ModelIconName> = { openai: "openai", anthropic: "claude", google: "gemini", xai: "grok" };
 const channels: Record<string, string> = { web: "官网直购", app_store: "iOS Store", google_play: "Google Play" };
 const periods: Record<string, string> = { month: "月付", year: "年付", one_time: "一次性" };
 const statuses: Record<string, string> = { price_anomaly: "源站金额异常 · 待核验", fetch_failed: "来源暂不可读", regional_checkout_required: "需登录或应用商店核验", price_not_public: "未公开精确价", ambiguous_sku: "套餐周期待核验", billing_unverified: "公开内购金额 · 周期待核验", sku_not_listed: "公开列表未列出", not_available: "来源未提供地区页面", storefront_redirected: "商店重定向 · 未采集", country_fallback: "页面回落到其他地区 · 未采集", currency_mismatch: "币种不一致 · 未入库", currency_unknown: "币种无法确认 · 未入库", parser_drift: "页面结构变化 · 待修复", range_only: "仅公开价格区间" };
@@ -17,6 +20,21 @@ const first = (value: Params[string]) => (Array.isArray(value) ? value[0] : valu
 const amount = (value: string | number) => Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const keyOf = (row: { vendor: string; planCode: string; channel: string; countryCode: string }) => `${row.vendor}:${row.planCode}:${row.channel}:${row.countryCode}`;
 const date = (value: Date) => value.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
+
+/**
+ * Two prices for the same plan are not the same offer if they were read at different
+ * stores, so the row states where it came from. Buying direct carries the vendor's own
+ * mark; the two app stores carry theirs.
+ */
+function ChannelBadge({ channel, vendor }: { channel: string; vendor: string }) {
+  const vendorIcon = vendorIcons[vendor];
+  return <span className={styles.channel}>
+    {channel === "app_store" ? <ChannelIcon name="apple" label="Apple" />
+      : channel === "google_play" ? <ChannelIcon name="google" label="Google" />
+        : vendorIcon ? <ModelIcon name={vendorIcon} label={vendors[vendor] ?? vendor} /> : null}
+    {channels[channel] ?? channel}
+  </span>;
+}
 
 function Cell({ row, check, monthly, lowest }: { row: Price | undefined; check: Check | undefined; monthly: boolean; lowest: boolean }) {
   const exact = row?.priceKind === "exact" && row.amount !== null && check?.status !== "price_anomaly";
@@ -128,7 +146,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
         <caption className="sr-only">每行一个套餐与渠道，每列一个地区，同时保留原币及人民币价格</caption>
         <thead><tr><th scope="col" className={styles.identity}>AI / 套餐 / 渠道</th>{visibleRegions.map(item => <th scope="col" key={item.code}>{item.name}<small>{item.code}</small></th>)}</tr></thead>
         <tbody>{groups.map(({ plan, channel, cells, minimum }, index) => <tr key={`${plan.planCode}:${channel}`} className={index === 0 || groups[index - 1]?.plan.planCode !== plan.planCode ? styles.groupStart : undefined}>
-          <th scope="row" className={styles.identity}><span className={styles.vendor}>{vendors[plan.vendor]}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod]}{plan.billingPeriod === "year" ? " · 整年扣款" : ""}</small><span className={styles.channel}>{channels[channel]}</span></th>
+          <th scope="row" className={styles.identity}><span className={styles.vendor}>{vendors[plan.vendor]}</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(plan.planCode)}`}>{plan.displayName}</Link><small>{periods[plan.billingPeriod]}{plan.billingPeriod === "year" ? " · 整年扣款" : ""}</small><ChannelBadge channel={channel} vendor={plan.vendor} /></th>
           {cells.map(({ region, row, check }) => <td key={region.code}><Cell row={row} check={check} monthly={monthly} lowest={Boolean(row && matchingRegions.length > 1 && isFreshOfficialSubscriptionPrice(row) && hasCurrentCnyEstimate(row) && minimum !== null && Number(row.cnyEstimate) === minimum)} /></td>)}
         </tr>)}</tbody>
       </table>
