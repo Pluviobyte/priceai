@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getChannelCatalog, type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
-import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
+import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PAGE_SIZES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
 import styles from "./channels.module.css";
@@ -87,7 +87,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   const filters = parseChannelFilters(raw);
   const view = catalogView(filters);
   let failed = false;
-  let data: ChannelCatalog = { rows: [], total: 0, page: 1, pageSize: 24, offerCount: 0, merchantCount: 0, availableCount: 0, latest: null, spec: null };
+  let data: ChannelCatalog = { rows: [], total: 0, page: 1, pageSize: filters.pageSize, offerCount: 0, merchantCount: 0, availableCount: 0, latest: null, spec: null };
   try { data = await getChannelCatalog(filters); } catch (error) { failed = true; console.error("Channel catalog unavailable", error instanceof Error ? error.message : "unknown error"); }
   const chips = activeChannelChips(filters);
   const hasFilters = chips.length > 0 || Boolean(filters.spec);
@@ -95,7 +95,9 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   // Never repeat the headline count in the breakdown beside it.
   const detail = [view !== "offers" && `${data.offerCount} 条报价`, view !== "merchants" && `${data.merchantCount} 家商家`, `${data.availableCount} 条已确认有货`].filter(Boolean).join(" · ");
   const sortDropped = raw.sort === "price" && filters.view === "merchants";
-  const cleared = channelHref(parseChannelFilters({ view: filters.view, group: filters.group, layout: filters.layout }));
+  const cleared = channelHref(parseChannelFilters({ view: filters.view, group: filters.group, layout: filters.layout, pageSize: String(filters.pageSize) }));
+  const pageSizeParams = new URLSearchParams(channelHref(filters).split("?")[1]);
+  pageSizeParams.delete("pageSize");
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   return <div className={`priceai-page ${styles.page}`}><main className={styles.shell}>
     <nav className={styles.breadcrumb} aria-label="面包屑"><Link href="/">首页</Link><span aria-hidden="true">/</span><span>卡网订阅</span></nav>
@@ -138,6 +140,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
       {chips.length > 0 && <p className={styles.chips}>{chips.map(chip => <Link scroll={false} className={styles.chip} key={chip.key} href={chip.clearHref}>{chip.label}<span aria-hidden="true">✕</span></Link>)}<Link scroll={false} className={styles.textLink} href={cleared}>清空全部</Link></p>}
     </div>}
     <ChannelFilterForm className={styles.filters} key={channelHref(filters)}>
+      <input type="hidden" name="pageSize" value={filters.pageSize} />
       <input type="hidden" name="layout" value={filters.layout} /><input type="hidden" name="view" value={filters.view} /><input type="hidden" name="group" value={filters.group} />
       {filters.spec && <input type="hidden" name="spec" value={filters.spec} />}
       <div className={styles.searchRow}><label className={styles.search}><span className="sr-only">搜索商品或商家</span><span aria-hidden="true">⌕</span><input name="q" defaultValue={filters.q} placeholder={view === "merchants" ? "搜索店铺名、域名或商品" : "搜索商品、原始商品名或商家"} maxLength={160} /></label><button type="submit" className={styles.primary}>应用筛选</button></div>
@@ -154,7 +157,11 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         : "同规格才比较：按交付、期限、地区、账号归属、质保与币种分组。未知库存、缺货及超过 24 小时未核验的报价不计入有货最低价。"}</p>
     {view === "merchants" && <details className={styles.rankingNote}><summary>低价表现如何计算？</summary><p>以当前发布数据为准，仅统计 24 小时内核验有货、期限明确且至少有两家商家可比的规格。交付、期限、地区、账号归属、质保和币种必须一致。同一商家每个规格取最低价；并列同价同名次。分母是当前筛选范围内的可比规格数，分子是其中最低价或价格排名前五的规格数。搜索店铺不会缩小竞价商家范围。按低价规格最多排序时，依次比较最低价、前五价、可比规格和有货报价数量；这些数据不代表商家信誉。</p></details>}
     {data.rows.length ? <Results data={data} filters={filters} view={view} /> : <section className={styles.empty} aria-labelledby="empty-title"><span className={styles.emptySymbol} aria-hidden="true">⌕</span><h2 id="empty-title">{failed ? "暂时无法读取渠道报价" : hasFilters ? (view === "merchants" ? "没有符合条件的商家" : "还没有符合这些条件的报价") : "渠道报价正在接入"}</h2><p>{failed ? "价格服务暂时不可用，请稍后重试。你也可以先查看官方订阅和购买指南。" : hasFilters ? "尝试放宽交付方式、期限或库存条件，也可以提交你希望收录的店铺链接。" : "审核并发布后，这里会展示可追溯的商品、商家、库存和核验时间。暂不展示未经核验的价格。"}</p><div className={styles.emptyActions}>{failed ? <a className={styles.button} href={channelHref(filters)}>重新加载</a> : hasFilters ? <Link scroll={false} className={styles.button} href={cleared}>清空全部筛选</Link> : <Link className={styles.button} href="/submit">提交店铺 ＋</Link>}<Link className={styles.textLink} href="/official-prices">查看官方订阅 →</Link></div></section>}
-    {pages > 1 && <nav className={styles.pagination} aria-label="结果分页">{data.page > 1 ? <Link scroll={false} className={styles.button} href={channelHref(filters, { page: data.page - 1 })}>← 上一页</Link> : <span />}<span>第 {data.page} / {pages} 页 · 每页最多 {data.pageSize} 条</span>{data.page < pages ? <Link scroll={false} className={styles.button} href={channelHref(filters, { page: data.page + 1 })}>下一页 →</Link> : <span />}</nav>}
+    {!failed && <nav className={styles.pagination} aria-label="结果分页">{data.page > 1 ? <Link scroll={false} className={styles.button} href={channelHref(filters, { page: data.page - 1 })}>← 上一页</Link> : <span />}<ChannelFilterForm className={styles.pageSizeForm} key={`page-size-${channelHref(filters)}`}>
+      {[...pageSizeParams].map(([name, value]) => <input type="hidden" name={name} value={value} key={name} />)}
+      <span>第 {data.page} / {pages} 页</span>
+      <label>每页最多 <select name="pageSize" aria-label="每页条数" defaultValue={filters.pageSize}>{CHANNEL_PAGE_SIZES.map(size => <option key={size} value={size}>{size} 条</option>)}</select></label>
+    </ChannelFilterForm>{data.page < pages ? <Link scroll={false} className={styles.button} href={channelHref(filters, { page: data.page + 1 })}>下一页 →</Link> : <span />}</nav>}
     </section>
     <aside className={styles.guide}><div><p className={styles.eyebrow}>买前核对</p><h2>便宜之外，确认你实际拿到什么</h2></div><ol><li><b>账号归谁</b><span>自己的账号、成品账号和团队席位，控制权与使用边界不同。</span></li><li><b>质保多久</b><span>仅保首登不等于订阅期质保，付款前保存商品说明。</span></li><li><b>报价何时确认</b><span>库存和价格可能变化，最终以原店铺结算页面为准。</span></li></ol><Link className={styles.textLink} href="/guides">阅读购买指南 →</Link></aside>
     <p className={styles.disclaimer}>PriceAI 不销售、不代收款、不替渠道背书。交易与售后在原平台完成。</p>

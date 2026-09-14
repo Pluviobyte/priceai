@@ -302,3 +302,7 @@
 @media (prefers-reduced-motion: reduce) {
   .page *, .page *::before, .page *::after { transition: none; }
 }
+
+.pageSizeForm { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.pageSizeForm label { display: flex; align-items: center; gap: 6px; }
+.pageSizeForm select { min-height: 36px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text-primary); font: inherit; }

@@ -213,7 +213,7 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
   }>(`${cte} select (select count(*)::int from results) total,
       count(*)::int offer_count,count(distinct merchant_slug)::int merchant_count,
       count(*) filter (where available)::int available_count,max(verified_at) latest from ranked`, values);
-  const pageSize = 24;
+  const pageSize = filters.pageSize;
   const total = summary?.total ?? 0;
   const page = Math.min(filters.page, Math.max(1, Math.ceil(total / pageSize)));
   const order = filters.sort === "low_price" && view === "merchants"

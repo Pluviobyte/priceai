@@ -1,3 +1,5 @@
+export const CHANNEL_PAGE_SIZES = [20, 50, 100] as const;
+
 export const CHANNEL_PLATFORMS = [
   ["", "全部模型"], ["OpenAI", "ChatGPT"], ["Anthropic", "Claude"],
   ["Google", "Gemini"], ["xAI", "Grok"], ["Anysphere", "Cursor"],
@@ -30,7 +32,7 @@ export type ChannelGroup = "merged" | "expanded";
 export type ChannelFilters = {
   q: string; platform: string; mode: string; duration: string; warranty: string;
   stock: string; currency: string; sort: string; view: ChannelView; group: ChannelGroup;
-  catalog?: "subscriptions" | "resources" | "accounts"; page: number; spec: string; product: string; layout: "cards" | "table";
+  catalog?: "subscriptions" | "resources" | "accounts"; page: number; pageSize: number; spec: string; product: string; layout: "cards" | "table";
 };
 
 /** A specification is what makes two offers comparable; it is the unit `merged` groups by. */
@@ -96,6 +98,7 @@ export function parseChannelFilters(raw: Record<string, string | string[] | unde
     layout: choice("layout", ["cards", "table"], "cards") as "cards" | "table",
     view,
     group,
+    pageSize: Number(choice("pageSize", CHANNEL_PAGE_SIZES.map(String), "20")),
     page: Number.isSafeInteger(page) && page > 0 ? Math.min(page, 10000) : 1,
   };
 }
@@ -106,7 +109,7 @@ export function channelHref(filters: ChannelFilters, changes: Partial<ChannelFil
   if (next.view === "merchants" && next.sort === "price") next.sort = "freshness";
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(next)) {
-    if (!value || (key === "catalog" && value === "subscriptions") || (key === "page" && value === 1) || (key === "view" && value === "compare")
+    if (!value || (key === "pageSize" && value === 20) || (key === "catalog" && value === "subscriptions") || (key === "page" && value === 1) || (key === "view" && value === "compare")
       || (key === "group" && (value === "merged" || next.view === "merchants"))
       || (key === "layout" && (value === "cards" || next.view !== "merchants"))
       || (key === "sort" && value === "freshness") || (key === "stock" && value === "all")) continue;

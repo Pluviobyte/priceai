@@ -184,8 +184,20 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       for (let i = 0; i < 30; i++) await offer(`extra-${i}`, i);
       const data = await getChannelCatalog(parseChannelFilters({ view: "offers", page: "999" }), read);
       assert.equal(data.total, 43);
-      assert.equal(data.page, 2);
-      assert.equal(data.rows.length, 19);
+      assert.equal(data.pageSize, 20);
+      assert.equal(data.page, 3);
+      assert.equal(data.rows.length, 3);
+      const first = await getChannelCatalog(parseChannelFilters({ view: "offers" }), read);
+      const second = await getChannelCatalog(parseChannelFilters({ view: "offers", page: "2" }), read);
+      assert.equal(first.rows.length, 20);
+      assert.equal(second.rows.length, 20);
+      assert.equal(second.rows.some(row => first.rows.some(other => other.id === row.id)), false);
+      for (const pageSize of ["50", "100"]) {
+        const larger = await getChannelCatalog(parseChannelFilters({ view: "offers", page: "999", pageSize }), read);
+        assert.equal(larger.pageSize, Number(pageSize));
+        assert.equal(larger.page, 1);
+        assert.equal(larger.rows.length, 43);
+      }
       const cheapest = await getChannelCatalog(parseChannelFilters({ view: "offers", stock: "available", currency: "CNY", sort: "price" }), read);
       assert.equal(Number(cheapest.rows[0]?.price), 0);
     });
@@ -254,4 +266,23 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
         'a product occupies exactly one row per currency');
     });
   } finally { await db.end(); }
+});
+
+
+test("page sizes are bounded and survive navigation while changes reset the page", () => {
+  for (const pageSize of [undefined, "24", "0", "-1", "1000", "bad"]) {
+    assert.equal(parseChannelFilters({ pageSize }).pageSize, 20);
+  }
+  for (const pageSize of ["20", "50", "100"]) {
+    const filters = parseChannelFilters({ pageSize, page: "4", q: "plus", stock: "available", view: "merchants", layout: "table" });
+    assert.equal(filters.pageSize, Number(pageSize));
+    const next = new URL(channelHref(filters, { page: 5 }), "http://localhost");
+    assert.equal(parseChannelFilters(Object.fromEntries(next.searchParams)).pageSize, Number(pageSize));
+    assert.equal(next.searchParams.get("page"), "5");
+    const changed = new URL(channelHref(filters, { pageSize: 100 }), "http://localhost");
+    assert.equal(changed.searchParams.has("page"), false);
+    assert.equal(changed.searchParams.get("q"), "plus");
+    assert.equal(changed.searchParams.get("stock"), "available");
+    assert.equal(changed.searchParams.get("layout"), "table");
+  }
 });
