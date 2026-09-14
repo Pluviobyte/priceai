@@ -5,6 +5,7 @@ import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { getCachedOfficialSubscriptionPrices, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, sortCollectedSubscriptionPrices, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../../site-footer";
+import { ChannelMark } from "../../channel-mark";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +89,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
         <thead><tr><th>地区</th><th>渠道</th><th>原币标价与周期</th><th>人民币估算</th><th>证据状态</th><th>官方证据</th></tr></thead>
         <tbody>{sorted.map((row) => <tr key={row.id}>
           <td><b>{countryNames[row.countryCode] ?? regionDisplayName(row.countryCode)}</b><small>{row.countryCode}</small></td>
-          <td>{channelNames[row.channel] ?? row.channel}</td>
+          <td><ChannelMark channel={row.channel} vendor={vendor} />{channelNames[row.channel] ?? row.channel}</td>
           <td><b>{originalPrice(row)}</b><small>{hasVerifiedSubscriptionBilling(row) ? periodNames[row.billingPeriod] ?? row.billingPeriod : "周期待核验"}</small></td>
           <td><strong>{row.cnyEstimate !== null ? `≈ ¥${Number(row.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "换算待补"}</strong><small>{row.exchangeRateDate ? row.exchangeRateUrl ? <a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate}　↗</a> : `汇率日期 ${row.exchangeRateDate}` : "汇率日期待补"}</small></td>
           <td><em>{getOfficialSubscriptionPriceStatus(row)}</em><small>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? "公告日期" : "价格日期"} {priceDate(row.verifiedAt)}</small></td>

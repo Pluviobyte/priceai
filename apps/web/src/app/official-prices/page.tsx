@@ -6,6 +6,7 @@ import { API_SECTIONS_ENABLED } from "@/lib/site-features";
 import { OFFICIAL_SUBSCRIPTION_PLAN_CATALOG } from "@price-radar/price-channels/subscription-catalog";
 import { getOfficialSubscriptionSnapshot, getOfficialSubscriptionPriceStatus, selectOfficialSubscriptionReference, selectCollectedSubscriptionMinimum, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../model-icons";
+import { ChannelMark } from "../channel-mark";
 import { SiteFooter } from "../site-footer";
 import { PriceComparison } from "./price-comparison";
 
@@ -210,10 +211,10 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
               <td>{minimum ? <a href={minimum.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">
                 <strong>≈ ¥{Number(minimum.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ↗</strong>
                 <small>{minimum.currency} {Number(minimum.amount).toLocaleString("zh-CN", { maximumFractionDigits: 2 })} · {regionDisplayName(minimum.countryCode)}</small>
-                <small>{channelNames[minimum.channel] ?? minimum.channel}</small>
+                <small><ChannelMark channel={minimum.channel} vendor={plan.vendor} />{channelNames[minimum.channel] ?? minimum.channel}</small>
                 <em>{getOfficialSubscriptionPriceStatus(minimum)}</em>
               </a> : <span>暂无可换算的采集报价</span>}</td>
-              <td><b>{reference ? countryNames[reference.countryCode] ?? reference.countryCode : "—"}</b><small>{reference ? channelNames[reference.channel] : "尚无周期明确的当前标价"}</small></td>
+              <td><b>{reference ? countryNames[reference.countryCode] ?? reference.countryCode : "—"}</b><small>{reference ? <><ChannelMark channel={reference.channel} vendor={plan.vendor} />{channelNames[reference.channel]}</> : "尚无周期明确的当前标价"}</small></td>
               <td><b>{plan.rows.length || "—"}</b><small>{plan.rows.length ? "公开地区报价" : "等待价格入库"}</small></td>
               <td><span>{reference ? reference.verifiedAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }) : "—"}</span>{reference?.exchangeRateDate && <small>汇率 {reference.exchangeRateDate}</small>}<Link className="priceai-row-button" href={planHref(plan)}>查看　›</Link></td>
             </tr>;

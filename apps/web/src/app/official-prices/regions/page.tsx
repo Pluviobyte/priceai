@@ -9,6 +9,7 @@ import {
 import { findAppleStorefront, regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import { getOfficialSubscriptionSnapshot, getOfficialSubscriptionPriceStatus, hasVerifiedSubscriptionBilling, isFreshOfficialSubscriptionPrice, type OfficialSubscriptionCheck, type OfficialSubscriptionPrice } from "@/lib/public-pricing";
 import { ModelIcon, type ModelIconName } from "../../model-icons";
+import { ChannelMark } from "../../channel-mark";
 import { SiteFooter } from "../../site-footer";
 
 export const dynamic = "force-dynamic";
@@ -156,7 +157,11 @@ export default async function OfficialPriceRegionsPage({
 
       <div className="priceai-region-table-wrap">
         <table className="priceai-region-table">
-          <thead><tr><th>地区</th><th>官网</th><th>iOS Store</th><th>Google Play</th><th>最新价格日期</th></tr></thead>
+          <thead><tr><th>地区</th>
+            <th><ChannelMark channel="web" vendor={selectedPlan.vendor} />官网</th>
+            <th><ChannelMark channel="app_store" />iOS Store</th>
+            <th><ChannelMark channel="google_play" />Google Play</th>
+            <th>最新价格日期</th></tr></thead>
           <tbody>{regionRows.map(({ region, byChannel, latest: regionLatest }) => <tr key={region.countryCode}>
             <td data-label="地区"><b>{region.displayName}</b><small>{region.countryCode}</small></td>
             {channels.map((channel) => {
