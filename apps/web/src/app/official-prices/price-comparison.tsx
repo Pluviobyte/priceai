@@ -74,7 +74,7 @@ export function PriceComparison({ rows, checks, params, available }: { rows: Pri
   // floor column stays pinned to the right edge. The pager underneath only reaches the tail.
   // Measured against production, one region column is ~35KB of markup (~1.2KB gzipped) —
   // streaming serialises every cell twice — so all 174 at once would be a 6.2MB document.
-  // Thirty holds a page near 1.2MB (~59KB gzipped) and turns 18 groups into 6.
+  // Thirty measures 1.12MB, 55KB gzipped, and turns 18 groups into 6.
   const pageSize = 30;
   const pageCount = Math.max(1, Math.ceil(matchingRegions.length / pageSize));
   const requestedPage = Number(first(params.compare_page));
