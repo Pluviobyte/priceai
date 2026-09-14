@@ -1,4 +1,4 @@
-# PriceAI · Price Intelligence for AI Subscriptions
+# <img src="./docs/images/icon.png" alt="" height="30"> PriceAI · Price Intelligence for AI Subscriptions
 
 [简体中文](./README.md) · **English**
 

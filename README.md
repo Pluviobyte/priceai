@@ -1,4 +1,4 @@
-# PriceAI · AI 订阅价格情报平台
+# <img src="./docs/images/icon.png" alt="" height="30"> PriceAI · AI 订阅价格情报平台
 
 **简体中文** · [English](./README.en.md)
 
