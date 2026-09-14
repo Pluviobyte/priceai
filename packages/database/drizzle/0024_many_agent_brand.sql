@@ -1,0 +1,1 @@
+ALTER TABLE "canonical_products" ADD COLUMN "family" text DEFAULT 'subscription' NOT NULL;

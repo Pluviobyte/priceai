@@ -299,6 +299,13 @@ export const canonicalProducts = pgTable(
      * any error being raised.
      */
     category: text("category").notNull().default("other"),
+    /**
+     * What kind of good this is — a subscription, a stock account, a mailbox, a
+     * verification service, a helper tool, a credit pack. Separate from `category`,
+     * which is the shelf: ChatGPT Plus and ChatGPT 普通账号 share a shelf and are
+     * different kinds. Separate from `plan_family`, which groups tiers of one plan.
+     */
+    family: text("family").notNull().default("subscription"),
     billingPeriod: text("billing_period"),
     baseDurationDays: integer("base_duration_days"),
     status: text("status").notNull().default("active"),

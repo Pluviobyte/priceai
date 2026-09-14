@@ -50,6 +50,24 @@ test('seeding names the catalogue, and a rename reaches rows that already exist'
       assert.equal(main.rows[0]?.category, 'chatgpt', 'a long-existing product is moved onto its shelf too');
     });
 
+    await t.test('every product says what kind of good it is', async () => {
+      // The product page labels this. It used to read plan_family, which groups tiers of
+      // one plan ("Claude Max") and was never a key of that table, so the label fell
+      // through to the plan's own name and the page printed the name twice.
+      const kinds = ['subscription', 'account', 'email', 'phone', 'tool', 'api'];
+      const rows = await db.execute(sql`select family, count(*)::int n from canonical_products group by family`);
+      assert.deepEqual(rows.rows.map(r => String(r.family)).filter(f => !kinds.includes(f)), [],
+        'no product carries a kind the page cannot name');
+      const expect: Array<[string, string]> = [
+        ['chatgpt-plus', 'subscription'], ['chatgpt-account', 'account'], ['resource-gmail', 'email'],
+        ['resource-openai-verification', 'phone'], ['resource-tool', 'tool'], ['codex-credits', 'api'],
+      ];
+      for (const [slug, family] of expect) {
+        const row = await db.execute(sql`select family from canonical_products where slug=${slug}`);
+        assert.equal(row.rows[0]?.family, family, `${slug} is a ${family}`);
+      }
+    });
+
     await t.test('a drifted name is brought back, which is what the catalogue could not do before', async () => {
       // This is the whole point of the upsert. Under onConflictDoNothing a product that
       // already existed kept its old name for ever, so 即梦 would have stayed

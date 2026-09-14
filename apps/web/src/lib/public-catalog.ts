@@ -60,6 +60,8 @@ export interface PublicProductDetail {
   name: string;
   brand: string;
   planFamily: string;
+  /** What kind of good it is, as the product page labels it. */
+  family: string;
   billingPeriod: string | null;
   baseDurationDays: number | null;
   publishedAt: Date | null;
@@ -186,6 +188,7 @@ interface ProductRow {
   name: string;
   brand: string;
   plan_family: string;
+  family: string;
   billing_period: string | null;
   base_duration_days: number | null;
 }
@@ -521,7 +524,7 @@ export async function getPublicProduct(
 ): Promise<PublicProductDetail | null> {
   const publication = await getCurrentPublication();
   const [product] = await query<ProductRow>(
-    `select id,slug,display_name name,brand,plan_family,billing_period,base_duration_days
+    `select id,slug,display_name name,brand,plan_family,family,billing_period,base_duration_days
        from canonical_products where slug=$1 and status='active' limit 1`,
     [slug],
   );
@@ -552,6 +555,7 @@ export async function getPublicProduct(
     name: product.name,
     brand: product.brand,
     planFamily: product.plan_family,
+    family: product.family,
     billingPeriod: product.billing_period,
     baseDurationDays: product.base_duration_days,
     publishedAt: publication?.published_at ?? null,
@@ -697,7 +701,7 @@ export async function getPublicMarketChanges(days: 1 | 7 | 30): Promise<PublicMa
 
 
 export const getProductIdentity = cache(async (slug: string) => {
-  const [row] = await query<ProductRow>(`select id,slug,display_name name,brand,plan_family,billing_period,base_duration_days
+  const [row] = await query<ProductRow>(`select id,slug,display_name name,brand,plan_family,family,billing_period,base_duration_days
     from canonical_products where slug=$1 and status='active' limit 1`, [slug]);
   return row ?? null;
 });
@@ -735,7 +739,7 @@ export async function getPublicProductListing(slug: string, filters: OfferFilter
       [publication?.generation_id ?? null, product.id]),
   ]);
   return { ...listing, id: product.id, slug: product.slug, name: product.name, brand: product.brand,
-    planFamily: product.plan_family, billingPeriod: product.billing_period,
+    planFamily: product.plan_family, family: product.family, billingPeriod: product.billing_period,
     overview: stats[0] ?? { total: 0, available: 0, latest: null } };
 }
 
