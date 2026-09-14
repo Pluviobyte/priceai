@@ -45,3 +45,18 @@ CI 检查类型、单元测试、临时 PostgreSQL 迁移与 SQL 集成、生产
 ## 运维状态
 
 本次初始状态：三个应用和 PriceAI 数据库均停止；磁盘 92%、约13GB可用。已关闭三个应用旧自动构建，安全备份配置；清理可再生成的构建缓存和无标签旧镜像后，磁盘约62%、58GB可用，数据库卷和当前命名镜像保留。最终提交、CI、恢复运行和生产指纹以交接记录中的最终验收为准。
+
+
+## 最终验收（2026-09-14）
+
+功能版本 `c7ebf4d`，CI [34832838863](https://github.com/Pluviobyte/priceai/actions/runs/34832838863) 全部成功。PostgreSQL/Web/两个Worker均恢复，源码指纹 `6a70ec8382310bbca3cac050c7efeb8236c54d0ce662b9980b79774c3241a672`；公网数据库readiness及首页/卡网页面通过。
+
+Web digest：`d71bb110dd5638cae97b01c18ea3241216fde0964e273a50bc8c581e4fce2197`。共享Worker digest：`c3c99bb7e97f32bb6111a8ecfdc2eae6a9bf26c308daeeae0b6bf0d48fe66493`。current/previous清单均已保存，临时registry密码已清理。
+
+CI实测Chromium、数据库停机503、源码变更后npm与Chromium缓存复用全部通过。两轮部署后生产Build Cache仍为22条/3.567GB；磁盘由92%/13GB可用改善至约64%/55GB可用（已保留新旧镜像）。巡检 [34832854260](https://github.com/Pluviobyte/priceai/actions/runs/34832854260) 成功，定时巡检已启用。
+
+初次运行34831224342的镜像测试通过，但部署校验经历GitHub新令牌格式和Cloudflare拒绝Python默认UA两处失败；现已修正并添加回归测试，不能把原失败运行称为成功。中间两次修正运行在镜像构建前取消，最终以c7ebf4d的完整绿色运行为准。初始7853c31镜像经服务器独立验证后保留为上一版本。
+
+恢复后已观察到实际采集与发布事件；16688货源广场仍有“未开启货源商品列表”的平台反馈，本次不改采集业务规则。
+
+本节的纯文档提交也用于验证路径过滤：预期只运行changes，检查/镜像/部署任务全部跳过；实际结果以该提交的Actions记录为准。
