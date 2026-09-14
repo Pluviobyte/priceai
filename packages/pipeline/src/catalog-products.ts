@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { canonicalProducts, type Database } from "@price-radar/database";
 
 const PRODUCTS = [
@@ -29,8 +30,8 @@ const ADDITIONAL_PRODUCTS = [
   ['Amazon','kiro-pro','Kiro Pro / 额度'],
   ['Amazon','kiro-account','Kiro 普通账号'],
   ['Suno','suno-account','Suno 账号（套餐待确认）'],
-  ['ByteDance','dreamina-account','即梦 / Dreamina 账号与积分'],
   // Video generation names the category, the model names the product.
+  ['ByteDance','dreamina-account','视频生成 · 即梦 Dreamina'],
   ['Runway','video-runway-max','视频生成 · Runway Max'],
   ['Runway','video-runway-pro','视频生成 · Runway Pro'],
   ['Kuaishou','video-kling','视频生成 · 可灵 Kling'],
@@ -62,8 +63,15 @@ export async function seedCanonicalProducts(db: Database): Promise<number> {
       })),
     )
     .onConflictDoNothing({ target: canonicalProducts.slug });
+  // This list is the naming authority. Renaming here has to reach a catalogue that
+  // already holds the row, or 即梦 keeps its old name while the siblings created beside
+  // it carry the category prefix. Checked before switching: every published display name
+  // already matched this list exactly, so updating overwrites nothing anyone chose.
   await db.insert(canonicalProducts).values(ADDITIONAL_PRODUCTS.map(([brand,slug,displayName]) => ({
     brand,slug,displayName,planFamily:displayName,
-  }))).onConflictDoNothing({target:canonicalProducts.slug});
+  }))).onConflictDoUpdate({
+    target: canonicalProducts.slug,
+    set: { displayName: sql`excluded.display_name`, planFamily: sql`excluded.plan_family` },
+  });
   return PRODUCTS.length + ADDITIONAL_PRODUCTS.length;
 }
