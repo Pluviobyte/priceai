@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { query } from "./database";
 
 export interface PublicOffer {
@@ -692,4 +693,48 @@ export async function getPublicMarketChanges(days: 1 | 7 | 30): Promise<PublicMa
     previousStockState: row.previous_stock_state,
     observedAt: row.observed_at,
   }));
+}
+
+
+export const getProductIdentity = cache(async (slug: string) => {
+  const [row] = await query<ProductRow>(`select id,slug,display_name name,brand,plan_family,billing_period,base_duration_days
+    from canonical_products where slug=$1 and status='active' limit 1`, [slug]);
+  return row ?? null;
+});
+
+/** Only the current page crosses the database boundary; counts cover all matches. */
+export async function readOfferPage(sql: string, order: string, values: unknown[], requestedPage: number, read: typeof query = query) {
+  const pageSize = 30;
+  const requested = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 10000) : 1;
+  const pageParam = `$${values.length + 1}`;
+  const rankedSql = sql.replace(/^select /, `select row_number() over(order by ${order},o.id) page_rank, `);
+  const result = await read<OfferDetailRow & { result_total: number }>(`with matched as materialized (${rankedSql}),
+    summary as (select count(*)::int result_total from matched)
+    select rows.*,summary.result_total from summary left join lateral (
+      select * from matched where page_rank > (least(${pageParam}::int,greatest(1,ceil(result_total::numeric/${pageSize})::int))-1)*${pageSize}
+      order by page_rank limit ${pageSize}
+    ) rows on true`, [...values, requested]);
+  const total = result[0]?.result_total ?? 0;
+  return { offers: result.filter(row => row.id != null).map(mapOfferDetail), total, pageSize,
+    page: Math.min(requested, Math.max(1, Math.ceil(total / pageSize))) };
+}
+
+export async function getPublicProductListing(slug: string, filters: OfferFilters, page: number) {
+  const [product, publication] = await Promise.all([getProductIdentity(slug), getCurrentPublication()]);
+  if (!product) return null;
+  const values: unknown[] = [publication?.generation_id ?? null, product.id];
+  const filtered = filterOfferSql(filters, values);
+  const [listing, stats] = await Promise.all([
+    readOfferPage(`${offerDetailSelect()} where o.publish_generation_id=$1 and o.canonical_product_id=$2
+      and ${filtered.conditions.join(" and ")}`, filtered.orderBy, values, page),
+    query<{ total: number; available: number; latest: Date | null }>(`select count(*)::int total,
+      count(*) filter (where availability_state='purchasable' and stock_state in ('in_stock','low_stock')
+        and (stock_count is null or stock_count>0) and offer_verified_at>now()-interval '24 hours')::int available,
+      max(offer_verified_at) latest from offers
+      where publish_generation_id=$1 and canonical_product_id=$2 and availability_state <> 'quarantined'`,
+      [publication?.generation_id ?? null, product.id]),
+  ]);
+  return { ...listing, id: product.id, slug: product.slug, name: product.name, brand: product.brand,
+    planFamily: product.plan_family, billingPeriod: product.billing_period,
+    overview: stats[0] ?? { total: 0, available: 0, latest: null } };
 }
