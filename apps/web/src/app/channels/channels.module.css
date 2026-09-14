@@ -250,8 +250,9 @@
 .filterRow label { gap: 7px; }
 .filterRow select { min-height: 40px; border-radius: 12px; background: var(--channel-surface); border-color: var(--color-border-subtle); box-shadow: 2px 2px 6px var(--channel-shadow), -2px -2px 6px var(--channel-highlight); }
 .quoteList { display: grid; gap: 14px; margin: 20px 0 0; padding: 0; list-style: none; }
-.quoteRow { display: grid; grid-template-columns: minmax(170px, 1.25fr) minmax(170px, 1.15fr) minmax(135px, .8fr) minmax(105px, .7fr) minmax(125px, .8fr) auto; gap: 18px; align-items: center; padding: 24px 20px; background: var(--color-panel-soft); border: 1px solid var(--channel-highlight); border-radius: 20px; box-shadow: 4px 5px 14px var(--channel-shadow), -3px -3px 12px var(--channel-highlight); font-size: 13px; }
-.quoteRow > div { min-width: 0; overflow-wrap: anywhere; }
+/* A fixed action track keeps every row aligned regardless of button text. */
+.quoteRow { display: grid; grid-template-columns: minmax(170px, 1.25fr) minmax(170px, 1.15fr) minmax(135px, .8fr) minmax(105px, .7fr) minmax(125px, .8fr) 144px; gap: 18px; align-items: center; padding: 24px 20px; background: var(--color-panel-soft); border: 1px solid var(--channel-highlight); border-radius: 20px; box-shadow: 4px 5px 14px var(--channel-shadow), -3px -3px 12px var(--channel-highlight); font-size: 13px; }
+.quoteRow > div { min-width: 0; overflow-wrap: anywhere; text-align: left; }
 .quoteRow small { display: block; margin-top: 6px; color: var(--color-text-muted); font-size: 12px; line-height: 1.65; }
 .quoteRow .product { align-items: flex-start; }
 .quoteRow .product b { font-size: 15px; color: var(--color-text-primary); }
