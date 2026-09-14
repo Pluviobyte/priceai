@@ -1,18 +1,40 @@
-FROM node:24-bookworm-slim AS worker
+# syntax=docker/dockerfile:1
+FROM node:24-bookworm-slim AS dependencies
 WORKDIR /app
 ENV NODE_ENV=production PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-COPY . .
 RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/*
-RUN npm ci --include=dev && npx playwright install --with-deps chromium && chmod -R a+rX /ms-playwright
+COPY package.json package-lock.json ./
+COPY apps/browser-worker/package.json apps/browser-worker/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/anomaly-detector/package.json packages/anomaly-detector/
+COPY packages/browser-collector/package.json packages/browser-collector/
+COPY packages/classifier/package.json packages/classifier/
+COPY packages/collector-sdk/package.json packages/collector-sdk/
+COPY packages/database/package.json packages/database/
+COPY packages/dujiao-collector/package.json packages/dujiao-collector/
+COPY packages/generic-html-collector/package.json packages/generic-html-collector/
+COPY packages/json-feed-collector/package.json packages/json-feed-collector/
+COPY packages/kami-collector/package.json packages/kami-collector/
+COPY packages/object-storage/package.json packages/object-storage/
+COPY packages/pipeline/package.json packages/pipeline/
+COPY packages/price-channels/package.json packages/price-channels/
+COPY packages/ranking/package.json packages/ranking/
+COPY packages/schema/package.json packages/schema/
+COPY packages/shop-api-16688-collector/package.json packages/shop-api-16688-collector/
+COPY packages/shop-api-collector/package.json packages/shop-api-collector/
+COPY packages/source-signatures/package.json packages/source-signatures/
+RUN npm ci --include=dev && npm cache clean --force
+RUN npx playwright install --with-deps chromium && chmod -R a+rX /ms-playwright && rm -rf /var/lib/apt/lists/*
+
+FROM dependencies AS worker
+COPY . .
 USER node
-# Both worker entrypoints (official subscriptions, channel worker) refresh /tmp/worker-heartbeat every 30 seconds.
 HEALTHCHECK --interval=60s --timeout=5s --start-period=90s CMD node -e "const fs=require('fs');const read=f=>{try{return Number(fs.readFileSync(f,'utf8'))}catch{return 0}};process.exit(Date.now()-Math.max(read('/tmp/worker-heartbeat'),read('/tmp/official-worker-heartbeat'),read('/tmp/channel-worker-heartbeat'))<120000?0:1)"
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["node", "--import", "tsx", "apps/worker/src/official-subscriptions.ts"]
 
-# Dokploy can select this build stage directly; no command override is required.
+# Compatibility targets for local development; CI publishes only the worker target.
 FROM worker AS channels
 CMD ["node", "--import", "tsx", "apps/worker/src/channel-worker.ts"]
-
-# Keep the default image compatible with the existing Official Worker application.
 FROM worker AS official

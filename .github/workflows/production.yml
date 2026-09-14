@@ -6,16 +6,49 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      rollback:
+        description: 'Restore the previous verified image release without rebuilding'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+# Serialize the complete release: a newer push must not cancel an active deployment.
 concurrency:
-  group: priceai-check-${{ github.ref }}
-  cancel-in-progress: true
+  group: priceai-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      required: ${{ steps.changes.outputs.required }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/release-changes.test.mjs
+      - id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            BASE=$(git merge-base "$PR_BASE" HEAD)
+          else
+            git fetch origin codex/production
+            BASE=origin/codex/production
+          fi
+          node scripts/release-changes.mjs "$BASE" HEAD
+
   check:
+    needs: changes
+    if: inputs.rollback != true && (needs.changes.outputs.required == 'true' || github.event_name == 'workflow_dispatch')
     name: Tests and production build
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -38,6 +71,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/priceai-release-gateway.test.py
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -63,17 +97,86 @@ jobs:
         id: release
         run: echo "fingerprint=$(node scripts/release-fingerprint.mjs)" >> "$GITHUB_OUTPUT"
 
-  deploy:
-    name: Promote checked commit and verify production
+  images:
+    name: Build and verify release images in CI
     needs: check
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: priceai
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: priceai_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U priceai -d priceai_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    outputs:
+      web: ${{ steps.web.outputs.digest }}
+      worker: ${{ steps.worker.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Web
+        id: web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/pluviobyte/priceai-web:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Pluviobyte/priceai
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.priceai.release=${{ needs.check.outputs.fingerprint }}
+          cache-from: type=gha,scope=priceai-web
+          cache-to: type=gha,mode=max,scope=priceai-web
+      - name: Build shared Worker once
+        id: worker
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile.worker
+          target: worker
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/pluviobyte/priceai-worker:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Pluviobyte/priceai
+            org.opencontainers.image.revision=${{ github.sha }}
+            io.priceai.release=${{ needs.check.outputs.fingerprint }}
+          cache-from: type=gha,scope=priceai-worker
+          cache-to: type=gha,mode=max,scope=priceai-worker
+      - name: Verify exact images, browser and Web database readiness
+        env:
+          WEB_IMAGE: ghcr.io/pluviobyte/priceai-web@${{ steps.web.outputs.digest }}
+          WORKER_IMAGE: ghcr.io/pluviobyte/priceai-worker@${{ steps.worker.outputs.digest }}
+          EXPECTED_RELEASE: ${{ needs.check.outputs.fingerprint }}
+          CI_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash scripts/smoke-release-images.sh
+      - name: Prove source changes reuse dependency and browser layers
+        run: bash scripts/verify-dependency-cache.sh
+
+  deploy:
+    name: Deploy verified images and verify all services
+    needs: [check, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: write
-    concurrency:
-      group: priceai-production
-      cancel-in-progress: false
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -81,32 +184,67 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - name: Advance the Dokploy release branch
-        id: promote
-        env:
-          CHECKED_SHA: ${{ github.sha }}
+      - name: Reject stale releases
+        id: current
         run: |
-          set -euo pipefail
           git fetch origin main codex/production
-          if [ "$(git rev-parse origin/main)" != "$CHECKED_SHA" ]; then
-            echo 'A newer main commit exists; its own checks must finish first.'
-            echo 'promoted=false' >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'A newer main commit exists; deployment skipped.'
           fi
-          git merge-base --is-ancestor origin/codex/production "$CHECKED_SHA"
-          git push origin "$CHECKED_SHA:refs/heads/codex/production"
-          echo 'promoted=true' >> "$GITHUB_OUTPUT"
-      - name: Verify the deployed source and public pages
-        if: steps.promote.outputs.promoted == 'true'
+      - name: Configure restricted deployment SSH key
+        if: steps.current.outputs.current == 'true'
+        env:
+          DEPLOY_KEY: ${{ secrets.PRICEAI_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRICEAI_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/priceai_deploy
+          chmod 600 ~/.ssh/priceai_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy by digest through the restricted gateway
+        if: steps.current.outputs.current == 'true'
+        env:
+          WEB_IMAGE: ghcr.io/pluviobyte/priceai-web@${{ needs.images.outputs.web }}
+          WORKER_IMAGE: ghcr.io/pluviobyte/priceai-worker@${{ needs.images.outputs.worker }}
+          EXPECTED_RELEASE: ${{ needs.check.outputs.fingerprint }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/send-release.mjs | ssh -T -i ~/.ssh/priceai_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes root@64.186.227.21
+      - name: Verify public readiness and pages
+        if: steps.current.outputs.current == 'true'
         env:
           EXPECTED_RELEASE: ${{ needs.check.outputs.fingerprint }}
         run: node scripts/verify-release.mjs
-      - name: Record deployment result
-        if: always()
-        env:
-          CHECKED_SHA: ${{ github.sha }}
-          RELEASE: ${{ needs.check.outputs.fingerprint }}
-          RESULT: ${{ job.status }}
-          PROMOTED: ${{ steps.promote.outputs.promoted }}
+      - name: Record successful release baseline
+        if: steps.current.outputs.current == 'true'
         run: |
-          printf '### PriceAI production\n\nCommit: `%s`\n\nSource fingerprint: `%s`\n\nPromoted: `%s`\n\nResult: `%s`\n\n[Open website](https://priceai.io/channels)\n' "$CHECKED_SHA" "$RELEASE" "$PROMOTED" "$RESULT" >> "$GITHUB_STEP_SUMMARY"
+          git merge-base --is-ancestor origin/codex/production "$GITHUB_SHA"
+          git push origin "$GITHUB_SHA:refs/heads/codex/production"
+      - name: Remove runner deployment key
+        if: always()
+        run: rm -f ~/.ssh/priceai_deploy
+
+  rollback:
+    name: Restore previous verified image digests
+    if: github.ref == 'refs/heads/main' && inputs.rollback == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Roll back through the restricted gateway
+        env:
+          DEPLOY_KEY: ${{ secrets.PRICEAI_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRICEAI_DEPLOY_KNOWN_HOSTS }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/priceai_deploy
+          chmod 600 ~/.ssh/priceai_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/priceai_deploy' EXIT
+          python3 -c 'import json,os; print(json.dumps({"action":"rollback","registryToken":os.environ["REGISTRY_TOKEN"]}))' | ssh -T -i ~/.ssh/priceai_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes root@64.186.227.21

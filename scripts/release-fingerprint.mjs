@@ -14,7 +14,7 @@ function visit(path) {
   }
 }
 for (const directory of ['apps', 'packages', 'deploy', 'scripts']) visit(directory);
-for (const file of ['Dockerfile', 'Dockerfile.worker', 'package.json', 'package-lock.json', 'tsconfig.base.json']) {
+for (const file of ['.dockerignore', 'Dockerfile', 'Dockerfile.worker', 'package.json', 'package-lock.json', 'tsconfig.base.json']) {
   hash.update(file).update('\0').update(readFileSync(file)).update('\0');
 }
 console.log(hash.digest('hex'));

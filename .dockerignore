@@ -11,3 +11,12 @@ coverage
 playwright-report
 test-results
 *.log
+
+# Repository-only material must not enter production images.
+.github
+.gitignore
+AGENTS.md
+CLAUDE.md
+README*
+LICENSE*
+docs

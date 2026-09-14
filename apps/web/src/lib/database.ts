@@ -15,6 +15,14 @@ export const databasePool =
     connectionTimeoutMillis: 5_000,
   });
 
+// Idle connections also emit errors when PostgreSQL restarts. Keep the HTTP
+// process alive so readiness can report the outage and the pool can reconnect.
+if (databasePool.listenerCount("error") === 0) {
+  databasePool.on("error", () => {
+    console.error("Database idle connection lost");
+  });
+}
+
 if (process.env.NODE_ENV !== "production") {
   globalForDatabase.priceRadarPool = databasePool;
 }
