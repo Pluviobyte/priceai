@@ -114,7 +114,9 @@ export async function getChannelCatalog(filters: ChannelFilters, read: typeof qu
     claude: "platform='Anthropic'",
     gemini: "platform='Google' and product_slug not like '%-verification' and product_slug<>'resource-gmail'",
     grok: "platform in ('xAI','X')",
+    video: "product_slug like 'video-%' or product_slug='dreamina-account'",
     other: `platform not in ('OpenAI','Anthropic','Google','xAI','X') and product_slug not like '%-verification'
+      and product_slug not like 'video-%' and product_slug<>'dreamina-account'
       and product_slug not in ('resource-gmail','resource-outlook','resource-icloud','resource-education-email')`,
   };
   if (filters.category && categories[filters.category]) conditions.push(categories[filters.category]!);

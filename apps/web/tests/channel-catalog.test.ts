@@ -67,6 +67,7 @@ test("every narrowing is offered back as a removable chip", () => {
   assert.equal(activeChannelChips(parseChannelFilters({ category: "verification" }))[0]?.label, "接码");
   assert.equal(parseChannelFilters({ category: "mail" }).category, "mail");
   assert.equal(parseChannelFilters({ category: "nonsense" }).category, "");
+  assert.equal(activeChannelChips(parseChannelFilters({ category: "video" }))[0]?.label, "视频生成");
   const byCategory = new URL(channelHref(parseChannelFilters({ q: "plus" }), { category: "mail" }), "http://localhost").searchParams;
   assert.equal(byCategory.get("category"), "mail", "the category strip keeps the rest of the narrowing");
   assert.equal(byCategory.get("q"), "plus");

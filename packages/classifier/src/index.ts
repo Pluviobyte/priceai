@@ -22,7 +22,7 @@ const PURCHASE_CONTEXT = /充值|代充|直充|成品|普号|空号|账号|月�
 // Other vendors' plans, and unrelated memberships that also use "plus"/"team".
 // Only the brandless rules below consult these; branded rules keep reporting
 // cross-vendor matches as conflicts.
-const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora/i;
+const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora|runway|kling|可灵/i;
 const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱奇艺|优酷|芒果|酷狗|网易云|喜马拉雅|剪映|网盘|文库|影视|视频会员|音乐|打车|外卖|粉丝|抖音|快手|美团|饿了么|迅雷|夸克|steam|netflix|spotify|youtube|disney|office|wps/i;
 
 // Another vendor's assistant, often shelved under an OpenAI category by mistake.
@@ -133,6 +133,24 @@ const productRules: ProductRule[] = [
   {
     slug: "x-premium",
     include: [/(?:x[-\s]*twitter|twitter|推特).*\bpremium\b/i],
+  },
+  // Video generation is sold by tier, and the tiers are three times apart: shops quote
+  // "RunwayML Pro…对应30美元" against "Max…对应95美元". One "Runway" product would put
+  // the cheaper tier's price under the dearer tier's name, so they stay separate.
+  {
+    slug: "video-runway-max",
+    include: [/runway(?:\s*ml)?[\s\S]{0,14}\bmax\b|\bmax\b[\s\S]{0,14}runway/i],
+  },
+  {
+    slug: "video-runway-pro",
+    include: [/runway(?:\s*ml)?[\s\S]{0,14}\bpro\b|\bpro\b[\s\S]{0,14}runway/i],
+    exclude: [/\bmax\b/i],
+  },
+  // Kling is Kuaishou's own model and its listings say so ("快手视频图像Ai"). NON_AI_BRANDS
+  // carries 快手, so guarding this rule with it would erase the product entirely.
+  {
+    slug: "video-kling",
+    include: [/\bkling\b|可灵/i],
   },
   // Shops routinely drop the brand entirely ("PRO 20X 官方充值月卡", "5X TEAM 轮转号").
   // These sit last so any branded rule wins, and they only fire inside card-shop

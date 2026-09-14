@@ -30,6 +30,10 @@ const ADDITIONAL_PRODUCTS = [
   ['Amazon','kiro-account','Kiro 普通账号'],
   ['Suno','suno-account','Suno 账号（套餐待确认）'],
   ['ByteDance','dreamina-account','即梦 / Dreamina 账号与积分'],
+  // Video generation names the category, the model names the product.
+  ['Runway','video-runway-max','视频生成 · Runway Max'],
+  ['Runway','video-runway-pro','视频生成 · Runway Pro'],
+  ['Kuaishou','video-kling','视频生成 · 可灵 Kling'],
   ['Google','resource-gmail','Gmail / Google 邮箱'],
   ['Microsoft','resource-outlook','Outlook / Hotmail 邮箱'],
   ['Apple','resource-icloud','iCloud 邮箱'],

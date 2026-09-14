@@ -59,6 +59,23 @@ test('the delivery is recognised in the wording shops actually use',()=>{
   assert.equal(classify('plus 已接 可网页可codex【质保30分钟】').attributes.offerMode,'unknown');
 });
 
+test('video generation is priced by tier, and Kuaishou wording does not erase its own model',()=>{
+  // Production titles. Shops quote the two Runway tiers three times apart, so they are
+  // separate products: a single "Runway" would price Max at the Pro rate.
+  assert.equal(classify('RunwayML Max充值码，视频AI，对应95美元一个月的Max订阅，可开发票').canonicalProductSlug,'video-runway-max');
+  assert.equal(classify('Runway Max 稳定特殊渠道月卡独享成品号（9500积分，Seedance2.5等，质保24小时）').canonicalProductSlug,'video-runway-max');
+  assert.equal(classify('【安卓IOS通用】RunwayML Pro 一个月充值').canonicalProductSlug,'video-runway-pro');
+  assert.equal(classify('runway pro年卡').canonicalProductSlug,'video-runway-pro');
+  assert.equal(classify('Kling 可灵 国际版26000积分黑金会员一个月（质保24h)').canonicalProductSlug,'video-kling');
+  // NON_AI_BRANDS carries 快手, and Kling's own listings name it. Guarding the rule with
+  // that list would erase the product, so this title must still resolve.
+  assert.equal(classify('Kling Ai Standard 稳定特殊渠道月卡独享成品号（750积分，快手视频图像Ai，质保首登）').canonicalProductSlug,'video-kling');
+  assert.equal(classify('即梦高级会员月卡').canonicalProductSlug,'dreamina-account');
+  // Another vendor's product that merely lists 即梦 among what it can drive is not 即梦.
+  assert.ok(!['dreamina-account','video-kling','video-runway-max','video-runway-pro']
+    .includes(String(classify('Adobe Firefly 2W积分号-可用满血seedance2.0即梦/Image/视频生成/图片生成').canonicalProductSlug)));
+});
+
 test('resource categories do not replace a recognized subscription',()=>{
   assert.equal(classify('ChatGPT Plus 成品号 自带gmail邮箱').canonicalProductSlug,'chatgpt-plus');
   assert.equal(classify('谷歌邮箱 美区').canonicalProductSlug,'resource-gmail');
