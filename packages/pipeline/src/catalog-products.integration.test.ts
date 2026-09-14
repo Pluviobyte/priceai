@@ -34,7 +34,7 @@ test('seeding names the catalogue, and a rename reaches rows that already exist'
     await t.test('every seeded product declares a shelf, and none is left to a fallback', async () => {
       // The point of storing the category: membership is declared once per product, so a
       // new product cannot drift into 其他 unnoticed the way the old negative rule allowed.
-      const known = ['chatgpt', 'claude', 'gemini', 'grok', 'video', 'design', 'mail', 'verification', 'other'];
+      const known = ['chatgpt', 'claude', 'gemini', 'grok', 'video', 'design', 'domestic', 'mail', 'verification', 'other'];
       const rows = await db.execute(sql`select category, count(*)::int n from canonical_products group by category order by category`);
       const seen = rows.rows.map(row => String(row.category));
       assert.deepEqual(seen.filter(c => !known.includes(c)), [], 'no product carries a category the page cannot show');

@@ -44,6 +44,9 @@ const ADDITIONAL_PRODUCTS = [
   ['Canva','design-canva','设计办公 · Canva 可画','design','subscription'],
   ['Figma','design-figma','设计办公 · Figma','design','account'],
   ['Notion','design-notion','设计办公 · Notion AI','design','subscription'],
+  // Domestic models, sold as unlimited-use day and week cards.
+  ['DeepSeek','domestic-deepseek','国产模型 · DeepSeek','domestic','subscription'],
+  ['ByteDance','domestic-doubao','国产模型 · 豆包 Doubao','domestic','subscription'],
   ['Google','resource-gmail','Gmail / Google 邮箱','mail','email'],
   ['Microsoft','resource-outlook','Outlook / Hotmail 邮箱','mail','email'],
   ['Apple','resource-icloud','iCloud 邮箱','mail','email'],

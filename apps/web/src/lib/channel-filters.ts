@@ -14,7 +14,7 @@ export const CHANNEL_PLATFORMS = [
  */
 export const CHANNEL_CATEGORIES = [
   ["", "全部品类"], ["chatgpt", "ChatGPT"], ["claude", "Claude"], ["gemini", "Gemini"],
-  ["grok", "Grok"], ["video", "视频生成"], ["design", "设计办公"],
+  ["grok", "Grok"], ["video", "视频生成"], ["design", "设计办公"], ["domestic", "国产模型"],
   ["mail", "邮箱"], ["verification", "接码"], ["other", "其他"],
 ] as const;
 

@@ -76,6 +76,19 @@ test('video generation is priced by tier, and Kuaishou wording does not erase it
     .includes(String(classify('Adobe Firefly 2W积分号-可用满血seedance2.0即梦/Image/视频生成/图片生成').canonicalProductSlug)));
 });
 
+test('domestic models get their own shelf, and a borrowed name does not',()=>{
+  // Production titles. These are sold as unlimited-use cards, not as seats.
+  assert.equal(classify('DeepSeek月卡无限用(推荐)').canonicalProductSlug,'domestic-deepseek');
+  assert.equal(classify('DeepSeek 12小时畅用卡｜支持 API 接入｜DeepSeek V4 Flash / Pro').canonicalProductSlug,'domestic-deepseek');
+  assert.equal(classify('Deepseek白号 成品号   通过微软邮箱注册 质保3天').canonicalProductSlug,'domestic-deepseek');
+  assert.equal(classify('【限时秒杀】豆包专业版一个月VIP会员，30天月卡账号直充').canonicalProductSlug,'domestic-doubao');
+  // "国际豆包dola视频生成软件" borrows the name for something else entirely.
+  assert.notEqual(classify('国际豆包dola视频生成软件-周卡').canonicalProductSlug,'domestic-doubao');
+  // A guide and a cracked build are not the subscription, and already have homes.
+  assert.equal(classify('DeepSeek Harness 插件报错修复综合教程').canonicalProductSlug,'resource-tutorial');
+  assert.equal(classify('破甲版deepseekv4（一折，官方十倍额度）周卡').canonicalProductSlug,'resource-tool');
+});
+
 test('design tools are recognised by the wording the shops use',()=>{
   // Production titles. Canva is written 可画 as often as Canva; Figma reaches this
   // market as an education verification; Notion is sold as Notion AI 商业版.

@@ -22,11 +22,14 @@ const PURCHASE_CONTEXT = /充值|代充|直充|成品|普号|空号|账号|月�
 // Other vendors' plans, and unrelated memberships that also use "plus"/"team".
 // Only the brandless rules below consult these; branded rules keep reporting
 // cross-vendor matches as conflicts.
-const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora|runway|kling|可灵|canva|可画|figma|notion|firefly/i;
+const VENDOR_OTHER = /claude|gemini|google\s*ai|grok|cursor|perplexity|kiro|suno|即梦|dreamina|midjourney|sora|runway|kling|可灵|canva|可画|figma|notion|firefly|deepseek|豆包|doubao/i;
 const NON_AI_BRANDS = /京东|淘宝|拼多多|百度|华为|小米|腾讯|爱奇艺|优酷|芒果|酷狗|网易云|喜马拉雅|剪映|网盘|文库|影视|视频会员|音乐|打车|外卖|粉丝|抖音|快手|美团|饿了么|迅雷|夸克|steam|netflix|spotify|youtube|disney|office|wps/i;
 
 // Another vendor's assistant, often shelved under an OpenAI category by mistake.
-const OTHER_ASSISTANTS = /豆包|doubao|文心|通义|讯飞|kimi|智谱|glm|混元/i;
+// 豆包 and DeepSeek are sold widely enough here to have their own products, so they are
+// no longer swept aside as somebody else's assistant. The rest still are: each reaches
+// one or two shops, too few to price, and they would otherwise land on an OpenAI shelf.
+const OTHER_ASSISTANTS = /文心|通义|讯飞|kimi|智谱|glm|混元/i;
 
 // A phone-verification service is sold per use; 马/🐎 is the common homophone for 码.
 // "已接码"/"未接马" instead describes an account that is already verified, so it is an
@@ -174,6 +177,20 @@ const productRules: ProductRule[] = [
     // is a word character and \bnotion\b therefore never matches.
     slug: "design-notion",
     include: [/notion/i],
+  },
+  // Domestic models. Sold as 无限用 day/week/month cards rather than as seats.
+  {
+    slug: "domestic-deepseek",
+    include: [/deepseek/i],
+    // 破甲版 and 教程 are a cracked tool and a guide; NOT_A_SUBSCRIPTION keeps both out of
+    // plan pricing, and they have their own homes further down.
+    exclude: [NOT_A_SUBSCRIPTION],
+  },
+  {
+    slug: "domestic-doubao",
+    include: [/豆包|doubao/i],
+    // "国际豆包dola视频生成软件" borrows the name for a different product entirely.
+    exclude: [/dola/i],
   },
   // Shops routinely drop the brand entirely ("PRO 20X 官方充值月卡", "5X TEAM 轮转号").
   // These sit last so any branded rule wins, and they only fire inside card-shop

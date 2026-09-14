@@ -23,7 +23,7 @@ const icons: Record<string, ModelIconName> = { OpenAI: "openai", Anthropic: "cla
 // three are not: 邮箱 spans Outlook, Gmail and iCloud at once, so any one vendor's logo
 // would misrepresent the rest, and 接码 and 其他 are kinds of service, not products.
 const categoryMarks: Record<string, ModelIconName> = { chatgpt: "openai", claude: "claude", gemini: "gemini", grok: "grok" };
-const categoryGlyphs: Record<string, string> = { video: "/category-icons/video.svg", design: "/category-icons/design.svg", mail: "/category-icons/mail.svg", verification: "/category-icons/verification.svg", other: "/category-icons/other.svg" };
+const categoryGlyphs: Record<string, string> = { video: "/category-icons/video.svg", design: "/category-icons/design.svg", domestic: "/category-icons/domestic.svg", mail: "/category-icons/mail.svg", verification: "/category-icons/verification.svg", other: "/category-icons/other.svg" };
 
 function CategoryMark({ value, label }: { value: string; label: string }) {
   const mark = categoryMarks[value];
