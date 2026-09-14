@@ -1,0 +1,7 @@
+.shell { min-height: 70vh; }
+.shell h1 { color: var(--color-text-primary); font-size: clamp(24px, 3vw, 34px); }
+.filters { height: 48px; margin: 28px 0; border-radius: 12px; background: var(--color-surface); }
+.rows { display: grid; gap: 16px; }
+.rows > div { display: grid; grid-template-columns: 2fr 1fr 1fr; align-items: center; gap: 24px; min-height: 116px; padding: 24px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-panel); }
+.rows span { height: 18px; border-radius: 6px; background: var(--color-surface); }
+@media (max-width: 650px) { .rows > div { grid-template-columns: 2fr 1fr; } .rows span:last-child { display: none; } }
