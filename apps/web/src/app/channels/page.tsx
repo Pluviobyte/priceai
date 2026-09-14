@@ -19,6 +19,19 @@ type CatalogView = "products" | "offers" | "merchants";
 
 const icons: Record<string, ModelIconName> = { OpenAI: "openai", Anthropic: "claude", Google: "gemini", xAI: "grok", Perplexity: "perplexity" };
 
+// Four categories are a company's product and carry that company's own mark. The other
+// three are not: 邮箱 spans Outlook, Gmail and iCloud at once, so any one vendor's logo
+// would misrepresent the rest, and 接码 and 其他 are kinds of service, not products.
+const categoryMarks: Record<string, ModelIconName> = { chatgpt: "openai", claude: "claude", gemini: "gemini", grok: "grok" };
+const categoryGlyphs: Record<string, string> = { mail: "/category-icons/mail.svg", verification: "/category-icons/verification.svg", other: "/category-icons/other.svg" };
+
+function CategoryMark({ value, label }: { value: string; label: string }) {
+  const mark = categoryMarks[value];
+  if (mark) return <ModelIcon name={mark} label={label} />;
+  const glyph = categoryGlyphs[value];
+  return glyph ? <img src={glyph} alt="" width="16" height="16" /> : null;
+}
+
 function ProductMark({ platform }: { platform: string }) {
   const name = icons[platform];
   return <span className={styles.mark} aria-hidden="true">{name ? <ModelIcon name={name} label={platform} /> : platform.slice(0, 1)}</span>;
@@ -127,7 +140,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
     </nav><Link className={styles.textLink} href="/submit">提交店铺 ＋</Link></div>
     {/* The category is the first question a shopper asks, so it is a visible strip
         rather than one more select buried among the narrowing controls. */}
-    {filters.view !== "merchants" && <nav className={styles.platformTabs} aria-label="按品类查看报价">{CHANNEL_CATEGORIES.map(([value, label]) => <Link scroll={false} key={value} href={channelHref(filters, { category: value })} aria-current={filters.category === value ? "true" : undefined}>{label}</Link>)}</nav>}
+    {filters.view !== "merchants" && <nav className={styles.platformTabs} aria-label="按品类查看报价">{CHANNEL_CATEGORIES.map(([value, label]) => <Link scroll={false} key={value} href={channelHref(filters, { category: value })} aria-current={filters.category === value ? "true" : undefined}><CategoryMark value={value} label={label} />{label}</Link>)}</nav>}
     {view === "merchants" && <div className={styles.merchantToolbar}>
       <nav className={styles.platformTabs} aria-label="按模型查看商家">{CHANNEL_PLATFORMS.map(([value, label]) => <Link scroll={false} key={value} href={channelHref(filters, { platform: value })} aria-current={filters.platform === value ? "true" : undefined}>{value ? label : "全部模型"}</Link>)}</nav>
       <div className={styles.groupToggle} role="group" aria-label="商家显示方式"><Link scroll={false} href={channelHref(filters, { layout: "cards", page: data.page })} aria-current={filters.layout === "cards" ? "true" : undefined}>卡片</Link><Link scroll={false} href={channelHref(filters, { layout: "table", page: data.page })} aria-current={filters.layout === "table" ? "true" : undefined}>表格</Link></div>
