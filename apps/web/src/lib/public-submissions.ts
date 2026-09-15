@@ -43,6 +43,7 @@ export async function createPublicSourceSubmission(input: {
   primaryProducts?: string;
   notes?: string;
   fingerprint: string;
+  accountOwnerKey?: string | null;
 }): Promise<{ id: string; status: string; duplicate: boolean }> {
   const client = await databasePool.connect();
   try {
@@ -69,8 +70,8 @@ export async function createPublicSourceSubmission(input: {
 
     const result = await client.query<{ id: string; status: string }>(
       `insert into source_submissions
-         (url,name,contact,primary_products,notes,submitter_fingerprint,status)
-       values ($1,$2,$3,$4,$5,$6,'submitted')
+         (url,name,contact,primary_products,notes,submitter_fingerprint,status,account_owner_key)
+       values ($1,$2,$3,$4,$5,$6,'submitted',$7)
        returning id,status`,
       [
         input.url,
@@ -79,6 +80,7 @@ export async function createPublicSourceSubmission(input: {
         input.primaryProducts ?? null,
         input.notes ?? null,
         input.fingerprint,
+        input.accountOwnerKey ?? null,
       ],
     );
     const created = result.rows[0];
@@ -120,6 +122,7 @@ export async function getPublicSubmissionStatus(
 export async function createMerchantFeedApplication(input: {
   merchantName: string; websiteUrl: string; feedUrl: string; schemaKind: string;
   contact: string; notes?: string; fingerprint: string;
+  accountOwnerKey?: string | null;
 }): Promise<string> {
   const client = await databasePool.connect();
   try {
@@ -133,16 +136,16 @@ export async function createMerchantFeedApplication(input: {
     const duplicate = await client.query<{ id: string }>("select id from source_submissions where url=$1 and created_at>now()-interval '30 days' order by created_at desc limit 1", [input.feedUrl]);
     if (duplicate.rows[0]) { await client.query("commit"); return duplicate.rows[0].id; }
     const submission = await client.query<{ id: string }>(
-      `insert into source_submissions(url,name,contact,primary_products,notes,submitter_fingerprint,status)
-       values($1,$2,$3,'merchant_feed',$4,$5,'submitted') returning id`,
-      [input.feedUrl, input.merchantName, input.contact, input.notes ?? null, input.fingerprint],
+      `insert into source_submissions(url,name,contact,primary_products,notes,submitter_fingerprint,status,account_owner_key)
+       values($1,$2,$3,'merchant_feed',$4,$5,'submitted',$6) returning id`,
+      [input.feedUrl, input.merchantName, input.contact, input.notes ?? null, input.fingerprint, input.accountOwnerKey ?? null],
     );
     const id = submission.rows[0]?.id;
     if (!id) throw new Error("feed_submission_insert_failed");
     await client.query(
-      `insert into merchant_feed_submissions(merchant_name,website_url,feed_url,schema_kind,contact,notes,submitter_fingerprint,status)
-       values($1,$2,$3,$4,$5,$6,$7,'submitted')`,
-      [input.merchantName, input.websiteUrl, input.feedUrl, input.schemaKind, input.contact, input.notes ?? null, input.fingerprint],
+      `insert into merchant_feed_submissions(merchant_name,website_url,feed_url,schema_kind,contact,notes,submitter_fingerprint,status,account_owner_key)
+       values($1,$2,$3,$4,$5,$6,$7,'submitted',$8)`,
+      [input.merchantName, input.websiteUrl, input.feedUrl, input.schemaKind, input.contact, input.notes ?? null, input.fingerprint, input.accountOwnerKey ?? null],
     );
     await client.query(
       `insert into source_candidates(candidate_url,merchant_name_hint,discovery_kind,submitted_by,status,review_note)

@@ -1,0 +1,66 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+
+test("account persistence isolates identities, favorites and submission ownership", { skip: !process.env.ACCOUNT_TEST_DATABASE_URL }, async () => {
+  process.env.DATABASE_URL = process.env.ACCOUNT_TEST_DATABASE_URL;
+  const { accountKey, saveNickname, displayName, setFavorite, accountFavorites, accountSubmissions, nicknameSchema } = await import("../src/lib/account");
+  const { databasePool: db } = await import("../src/lib/database");
+  const { createPublicSourceSubmission, createMerchantFeedApplication } = await import("../src/lib/public-submissions");
+  const { createPublicReport } = await import("../src/lib/public-reports");
+  const id = randomUUID();
+  const a = { provider: "google" as const, id, name: "Original", email: "same@example.com" };
+  const b = { ...a, provider: "github" as const };
+  const slug = `account-test-${id}`;
+  try {
+    assert.notEqual(accountKey(a), accountKey(b));
+    assert.equal(nicknameSchema.safeParse(" \n ").success, false);
+    assert.equal(nicknameSchema.safeParse("a\u202Eb").success, false);
+    await saveNickname(a, "新的昵称");
+    assert.equal(await displayName(a), "新的昵称");
+    assert.equal(await displayName(b), "Original");
+    const merchant = await db.query("insert into merchants(name,slug) values('Test',$1) returning id", [slug]);
+    await Promise.all([setFavorite(a, { kind: "merchant", slug }, true), setFavorite(a, { kind: "merchant", slug }, true)]);
+    assert.equal((await accountFavorites(a)).length, 1);
+    assert.equal((await accountFavorites(b)).length, 0);
+    await setFavorite(b, { kind: "merchant", slug }, false);
+    assert.equal((await accountFavorites(a)).length, 1);
+    await assert.rejects(setFavorite(a, { kind: "merchant", slug: `${slug}-missing` }, true));
+    await assert.rejects(setFavorite(a, { kind: "merchant", slug: "//evil.test" }, true));
+    await db.query("update merchants set status='inactive' where slug=$1", [slug]);
+    assert.equal((await accountFavorites(a))[0]?.available, false);
+    await setFavorite(a, { kind: "merchant", slug }, false);
+    assert.equal((await accountFavorites(a)).length, 0);
+    await db.query("insert into canonical_products(brand,slug,display_name,plan_family) values('OpenAI',$1,'Test product','plus')", [slug]);
+    await setFavorite(a, { kind: "product", slug }, true);
+    assert.equal((await accountFavorites(a))[0]?.name, "Test product");
+    await setFavorite(a, { kind: "product", slug }, false);
+    await db.query("insert into account_favorites(owner_key,kind,slug) select $1,'product','limit-'||i from generate_series(1,200) i", [accountKey(a)]);
+    await assert.rejects(setFavorite(a, { kind: "product", slug }, true), /最多收藏/);
+    await db.query("delete from account_favorites where owner_key=$1", [accountKey(a)]);
+    const input = { url: `https://${slug}.example.com/`, fingerprint: id, accountOwnerKey: accountKey(a) };
+    const submitted = await createPublicSourceSubmission(input);
+    assert.equal(submitted.duplicate, false);
+    const duplicate = await createPublicSourceSubmission({ ...input, accountOwnerKey: accountKey(b) });
+    assert.equal(duplicate.duplicate, true);
+    await createPublicReport({ targetType: "merchant", targetId: merchant.rows[0].id, reportType: "wrong_price", details: "请核对价格", fingerprint: id, accountOwnerKey: accountKey(a) });
+    assert.equal((await accountSubmissions(a, 1)).length, 2);
+    assert.equal((await accountSubmissions(b, 1)).length, 0);
+    assert.equal((await accountSubmissions(a, 2)).length, 0);
+    await createMerchantFeedApplication({ merchantName: "Test feed", websiteUrl: input.url, feedUrl: input.url + "feed.json", schemaKind: "auto", contact: "test@example.com", fingerprint: id, accountOwnerKey: accountKey(a) });
+    assert.equal((await accountSubmissions(a, 1)).length, 3);
+    const anonymous = { url: input.url + "anonymous", fingerprint: id };
+    await createPublicSourceSubmission(anonymous);
+    assert.equal((await accountSubmissions(a, 1)).length, 3);
+  } finally {
+    await db.query("delete from source_candidates where candidate_url like $1", [`https://${slug}.example.com/%`]);
+    await db.query("delete from merchant_feed_submissions where submitter_fingerprint=$1", [id]);
+    await db.query("delete from source_submissions where submitter_fingerprint=$1", [id]);
+    await db.query("delete from reports where submitter_fingerprint=$1", [id]);
+    await db.query("delete from account_favorites where owner_key=any($1)", [[accountKey(a), accountKey(b)]]);
+    await db.query("delete from account_profiles where owner_key=any($1)", [[accountKey(a), accountKey(b)]]);
+    await db.query("delete from merchants where slug=$1", [slug]);
+    await db.query("delete from canonical_products where slug=$1", [slug]);
+    await db.end();
+  }
+});

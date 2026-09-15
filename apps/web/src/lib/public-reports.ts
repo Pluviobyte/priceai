@@ -12,6 +12,7 @@ export async function createPublicReport(input: {
   details: string;
   evidenceUrl?: string;
   fingerprint: string;
+  accountOwnerKey?: string | null;
 }): Promise<string> {
   const client = await databasePool.connect();
   try {
@@ -30,8 +31,8 @@ export async function createPublicReport(input: {
     if (!targetResult.rows[0]?.exists) throw new Error("report_target_not_found");
     const result = await client.query<{ id: string }>(
       `insert into reports
-         (target_type,target_id,report_type,details,evidence_url,submitter_fingerprint,status)
-       values ($1,$2,$3,$4,$5,$6,'open') returning id`,
+         (target_type,target_id,report_type,details,evidence_url,submitter_fingerprint,status,account_owner_key)
+       values ($1,$2,$3,$4,$5,$6,'open',$7) returning id`,
       [
         input.targetType,
         input.targetId,
@@ -39,6 +40,7 @@ export async function createPublicReport(input: {
         input.details,
         input.evidenceUrl ?? null,
         input.fingerprint,
+        input.accountOwnerKey ?? null,
       ],
     );
     const id = result.rows[0]?.id;

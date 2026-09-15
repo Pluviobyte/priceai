@@ -1,0 +1,2 @@
+CREATE INDEX "reports_account_idx" ON "reports" USING btree ("account_owner_key","created_at");--> statement-breakpoint
+CREATE INDEX "source_submissions_account_idx" ON "source_submissions" USING btree ("account_owner_key","created_at");

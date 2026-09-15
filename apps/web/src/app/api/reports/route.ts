@@ -1,3 +1,4 @@
+import { accountKey, currentAccount } from "@/lib/account";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requestHasSameOrigin } from "@/lib/admin-auth";
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
   });
   if (!parsed.success) return Response.json({ error: "invalid_report" }, { status: 400 });
   try {
+    const account = await currentAccount();
     const evidenceUrl = safeEvidenceUrl(parsed.data.evidenceUrl);
     await createPublicReport({
       targetType: parsed.data.targetType,
@@ -44,7 +46,7 @@ export async function POST(request: Request) {
       reportType: parsed.data.reportType,
       details: parsed.data.details,
       ...(evidenceUrl ? { evidenceUrl } : {}),
-      fingerprint: submissionFingerprint(request),
+      accountOwnerKey: account ? accountKey(account) : null, fingerprint: submissionFingerprint(request),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "report_failed";

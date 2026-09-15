@@ -191,6 +191,7 @@ export const sourceSubmissions = pgTable(
     primaryProducts: text("primary_products"),
     notes: text("notes"),
     submitterFingerprint: text("submitter_fingerprint"),
+    accountOwnerKey: text("account_owner_key"),
     status: submissionStatusEnum("status").notNull().default("submitted"),
     detectedCollectorKind: text("detected_collector_kind"),
     sourceId: uuid("source_id").references(() => sources.id, {
@@ -205,6 +206,7 @@ export const sourceSubmissions = pgTable(
   },
   (table) => [
     index("source_submissions_status_idx").on(table.status),
+    index("source_submissions_account_idx").on(table.accountOwnerKey, table.createdAt),
     index("source_submissions_fingerprint_idx").on(
       table.submitterFingerprint,
       table.createdAt,
@@ -592,6 +594,7 @@ export const reports = pgTable(
     details: text("details"),
     evidenceUrl: text("evidence_url"),
     submitterFingerprint: text("submitter_fingerprint"),
+    accountOwnerKey: text("account_owner_key"),
     status: text("status").notNull().default("open"),
     resolution: text("resolution"),
     createdAt,
@@ -599,6 +602,7 @@ export const reports = pgTable(
   },
   (table) => [
     index("reports_status_idx").on(table.status),
+    index("reports_account_idx").on(table.accountOwnerKey, table.createdAt),
     index("reports_fingerprint_idx").on(table.submitterFingerprint, table.createdAt),
   ],
 );
@@ -1053,6 +1057,7 @@ export const merchantFeedSubmissions = pgTable(
     contact: text("contact").notNull(),
     notes: text("notes"),
     submitterFingerprint: text("submitter_fingerprint"),
+    accountOwnerKey: text("account_owner_key"),
     status: text("status").notNull().default("submitted"),
     reviewNote: text("review_note"),
     sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
@@ -1326,3 +1331,18 @@ export const sourceCatalogTypeSnapshots = pgTable('source_catalog_type_snapshots
   checkedAt: timestamp('checked_at',{withTimezone:true}).notNull(),
   itemCount: integer('item_count').notNull(),
 },table=>[uniqueIndex('source_catalog_type_uidx').on(table.sourceId,table.goodsType)]);
+
+
+// Public identities are isolated by OAuth provider and subject, never by email.
+export const accountProfiles = pgTable("account_profiles", {
+  ownerKey: text("owner_key").primaryKey(),
+  nickname: text("nickname").notNull(),
+  createdAt, updatedAt,
+});
+export const accountFavorites = pgTable("account_favorites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerKey: text("owner_key").notNull(),
+  kind: text("kind").notNull(),
+  slug: text("slug").notNull(),
+  createdAt,
+}, (table) => [uniqueIndex("account_favorites_owner_target_uidx").on(table.ownerKey, table.kind, table.slug)]);

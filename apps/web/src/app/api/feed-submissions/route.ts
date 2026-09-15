@@ -1,3 +1,4 @@
+import { accountKey, currentAccount } from "@/lib/account";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requestHasSameOrigin } from "@/lib/admin-auth";
@@ -11,8 +12,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse({ merchantName: form.get("merchantName"), websiteUrl: form.get("websiteUrl"), feedUrl: form.get("feedUrl"), schemaKind: form.get("schemaKind"), contact: form.get("contact"), notes: form.get("notes") || undefined, companySite: form.get("companySite") ?? "" });
   if (!parsed.success) return Response.json({ error: "invalid_feed_application" }, { status: 400 });
   try {
+    const account = await currentAccount();
     const { notes, companySite: _companySite, ...required } = parsed.data;
-    const id = await createMerchantFeedApplication({ ...required, ...(notes ? { notes } : {}), fingerprint: submissionFingerprint(request) });
+    const id = await createMerchantFeedApplication({ ...required, ...(notes ? { notes } : {}), accountOwnerKey: account ? accountKey(account) : null, fingerprint: submissionFingerprint(request) });
     return NextResponse.redirect(new URL(`/submit/status?id=${id}`, request.url), 303);
   }
   catch (error) { const message = error instanceof Error ? error.message : "feed_application_failed"; return Response.json({ error: message }, { status: message === "submission_rate_limited" ? 429 : 400 }); }

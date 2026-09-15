@@ -24,6 +24,7 @@ const sections: Record<string, HeaderSection> = {
   "merchant-feed": "submit",
   commercial: "home",
   support: "home",
+  account: "home",
   wholesale: "home",
 };
 

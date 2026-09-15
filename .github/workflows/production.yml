@@ -92,6 +92,11 @@ jobs:
         run: node --import tsx --test tests/channel-catalog.test.ts
         env:
           CHANNEL_TEST_DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
+      - name: Test account ownership against PostgreSQL
+        working-directory: apps/web
+        run: node --import tsx --test tests/account.test.ts
+        env:
+          ACCOUNT_TEST_DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
       - run: npm run build
       - name: Fingerprint checked source
         id: release

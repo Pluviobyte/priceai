@@ -176,6 +176,20 @@
       "when": 1789368166737,
       "tag": "0024_many_agent_brand",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789403245927,
+      "tag": "0025_nice_living_tribunal",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789403528323,
+      "tag": "0026_quick_galactus",
+      "breakpoints": true
     }
   ]
 }

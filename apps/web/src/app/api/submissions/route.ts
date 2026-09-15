@@ -1,3 +1,4 @@
+import { accountKey, currentAccount } from "@/lib/account";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requestHasSameOrigin } from "@/lib/admin-auth";
@@ -46,13 +47,14 @@ export async function POST(request: Request) {
   }
 
   try {
+    const account = await currentAccount();
     const result = await createPublicSourceSubmission({
       url: normalizeSubmissionUrl(parsed.data.url),
       ...(parsed.data.name ? { name: parsed.data.name } : {}),
       ...(parsed.data.contact ? { contact: parsed.data.contact } : {}),
       ...(parsed.data.primaryProducts ? { primaryProducts: parsed.data.primaryProducts } : {}),
       ...(parsed.data.notes ? { notes: parsed.data.notes } : {}),
-      fingerprint: submissionFingerprint(request),
+      accountOwnerKey: account ? accountKey(account) : null, fingerprint: submissionFingerprint(request),
     });
     return NextResponse.redirect(
       new URL(`/submit/status?id=${encodeURIComponent(result.id)}`, request.url),
