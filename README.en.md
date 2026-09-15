@@ -1,5 +1,10 @@
 <p align="center">
-  <img src="./docs/images/icon.png" width="112" height="112" alt="PriceAI" />
+  <picture>
+    <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.png" />
+    <source media="(prefers-reduced-motion: reduce)" srcset="./docs/images/logo-light.png" />
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.gif" />
+    <img src="./docs/images/logo-light.gif" width="112" height="112" alt="PriceAI" />
+  </picture>
 </p>
 
 <h1 align="center">PriceAI — AI Subscription Price Radar</h1>
