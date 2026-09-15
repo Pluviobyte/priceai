@@ -1,3 +1,5 @@
+import { officialPriceHref } from "@/lib/official-subscription-links";
+import { OfficialSourceLink } from "../source-link";
 import Form from "next/form";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -72,10 +74,10 @@ function newestPriceRecord(rows: readonly OfficialSubscriptionPrice[]): Official
 }
 
 function PriceCell({ row, check }: { row: OfficialSubscriptionPrice | null; check: OfficialSubscriptionCheck | undefined }) {
-  if (!row || check?.status === "price_anomaly") return <div className="priceai-region-price"><span className="priceai-region-missing">{check?.status === "price_anomaly" ? "源站金额异常 · 待核验" : "尚未取得套餐报价"}</span>{check && <details><summary>查看原因与来源</summary><small>{check.reason}</small><small>检查日期 {priceDate(check.checkedAt)}</small><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看官方来源 ↗</a></details>}</div>;
+  if (!row || check?.status === "price_anomaly") return <div className="priceai-region-price"><span className="priceai-region-missing">{check?.status === "price_anomaly" ? "源站金额异常 · 待核验" : "尚未取得套餐报价"}</span>{check && <details><summary>查看原因与来源</summary><small>{check.reason}</small><small>检查日期 {priceDate(check.checkedAt)}</small><OfficialSourceLink url={check.evidenceUrl} /></details>}</div>;
   const fresh = isFreshOfficialSubscriptionPrice(row);
   return <div className={`priceai-region-price${fresh ? "" : " is-stale"}`}>
-    <a className="priceai-region-price-source" href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><b>{originalPrice(row)}</b></a>
+    <Link className="priceai-region-price-source" href={officialPriceHref(row)}><b>{originalPrice(row)}</b></Link>
     <small>{row.cnyEstimate ? cnyPrice(row) : "人民币换算待补"} · {hasVerifiedSubscriptionBilling(row) ? periodNames[row.billingPeriod] ?? row.billingPeriod : "周期待核验"}</small>
     <em className={fresh ? undefined : "stale"}>{getOfficialSubscriptionPriceStatus(row)}</em>
     <small>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? "公告日期" : "价格日期"} {priceDate(row.verifiedAt)}</small>

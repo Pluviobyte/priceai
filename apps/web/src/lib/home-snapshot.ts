@@ -1,3 +1,4 @@
+import { officialPriceHref } from "./official-subscription-links";
 import type { OfferMode } from "@price-radar/schema";
 
 import { query } from "./database";
@@ -43,9 +44,9 @@ export interface BaselineRow {
   /** 规格摘要，例如「1 个月」。同规格才可比。 */
   spec: string;
   /** 官方价，折人民币。区间价不进入这里，只认精确价。 */
-  official: { cny: number; note: string; evidenceUrl: string } | null;
+  official: { cny: number; note: string; evidenceUrl: string; detailUrl: string } | null;
   /** 已收录同套餐、同周期的官方地区/渠道最低价。 */
-  officialFloor?: { cny: number; note: string; evidenceUrl: string } | null;
+  officialFloor?: { cny: number; note: string; evidenceUrl: string; detailUrl: string } | null;
   /** 当前可买最低价：24 小时内验证过、有货、与官方价同规格。 */
   lowest: {
     cny: number;
@@ -114,7 +115,7 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
       let region = price.countryCode;
       try { region = new Intl.DisplayNames(["zh-CN"], { type: "region" }).of(region) ?? region; } catch { /* Preserve unknown region codes. */ }
       const channel = ({ web: "官网", app_store: "App Store", google_play: "Google Play" } as Record<string, string>)[price.channel];
-      return { cny: Number(price.cnyEstimate), evidenceUrl: price.evidenceUrl,
+      return { cny: Number(price.cnyEstimate), detailUrl: officialPriceHref(price), evidenceUrl: price.evidenceUrl,
         note: `${region} ${channel} ${price.currency} ${Number(price.amount)}/月 · ${price.verifiedAt.toLocaleDateString("zh-CN", {timeZone:"Asia/Shanghai"})}核验` };
     };
     const eligible = offers.filter(o => o.slug === base.slug && o.currency === "CNY" && Number(o.price) > 0 && Number.isFinite(Number(o.price)))

@@ -1,3 +1,5 @@
+import { officialPageUrl } from "@/lib/official-subscription-links";
+import { OfficialSourceLink } from "../source-link";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -71,7 +73,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
   const sample = rows[0];
   const planName = sample?.planName ?? catalogPlan!.displayName;
   const billingPeriod = sample?.billingPeriod ?? catalogPlan!.billingPeriod;
-  const officialUrl = catalogPlan?.officialUrl ?? sample!.evidenceUrl;
+  const officialUrl = catalogPlan?.officialUrl ?? officialPageUrl(sample!.evidenceUrl);
   const sorted = sortCollectedSubscriptionPrices(rows);
 
   return <div className="priceai-page priceai-official-detail-page">
@@ -83,17 +85,17 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
         <dl><div><dt>厂商</dt><dd>{companyNames[vendor] ?? vendor}</dd></div><div><dt>价格记录</dt><dd>{rows.length || "待接入"}</dd></div><div><dt>目录周期</dt><dd>{periodNames[billingPeriod] ?? billingPeriod}</dd></div></dl>
       </section>
 
-      <div className="priceai-detail-region-link"><span>想直接比较同一套餐在各地区的价格？</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(catalogPlan?.planCode ?? sample!.planCode)}`}>打开地区横向对照　›</Link></div>
+      <div className="priceai-detail-region-link"><a href={officialUrl} target="_blank" rel="noopener noreferrer nofollow">前往官方 ↗</a><span>想直接比较同一套餐在各地区的价格？</span><Link href={`/official-prices/regions?plan=${encodeURIComponent(catalogPlan?.planCode ?? sample!.planCode)}`}>打开地区横向对照　›</Link></div>
 
       {rows.length ? <div className="priceai-detail-table-wrap"><table>
         <thead><tr><th>地区</th><th>渠道</th><th>原币标价与周期</th><th>人民币估算</th><th>证据状态</th><th>官方证据</th></tr></thead>
-        <tbody>{sorted.map((row) => <tr key={row.id}>
+        <tbody>{sorted.map((row) => <tr key={row.id} id={`quote-${row.id}`}>
           <td><b>{countryNames[row.countryCode] ?? regionDisplayName(row.countryCode)}</b><small>{row.countryCode}</small></td>
           <td><ChannelMark channel={row.channel} vendor={vendor} />{channelNames[row.channel] ?? row.channel}</td>
           <td><b>{originalPrice(row)}</b><small>{hasVerifiedSubscriptionBilling(row) ? periodNames[row.billingPeriod] ?? row.billingPeriod : "周期待核验"}</small></td>
           <td><strong>{row.cnyEstimate !== null ? `≈ ¥${Number(row.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "换算待补"}</strong><small>{row.exchangeRateDate ? row.exchangeRateUrl ? <a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate}　↗</a> : `汇率日期 ${row.exchangeRateDate}` : "汇率日期待补"}</small></td>
           <td><em>{getOfficialSubscriptionPriceStatus(row)}</em><small>{row.evidenceUrl.includes("/introducing-chatgpt-go/") ? "公告日期" : "价格日期"} {priceDate(row.verifiedAt)}</small></td>
-          <td><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看官方来源　↗</a><small>{row.rawPlanName}</small></td>
+          <td><OfficialSourceLink url={row.evidenceUrl} /><small>{row.rawPlanName}</small></td>
         </tr>)}</tbody>
       </table></div> : <section className="priceai-official-detail-empty" role="status"><span aria-hidden="true">⌁</span><div><h2>{databaseAvailable ? "这项订阅正在等待首条核验报价" : "价格数据库暂时未连接"}</h2><p>套餐目录已经收录，但 PriceAI 不会在缺少证据时填入估算价格。你可以先前往厂商页面查看当前结算金额。</p></div><a href={officialUrl} target="_blank" rel="noopener noreferrer nofollow">查看官方页面　↗</a></section>}
 

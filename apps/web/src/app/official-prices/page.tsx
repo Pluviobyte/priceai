@@ -1,3 +1,4 @@
+import { officialPriceHref, officialPageUrl } from "@/lib/official-subscription-links";
 import Form from "next/form";
 import { regionDisplayName } from "@price-radar/price-channels/storefront-catalog";
 import type { Metadata } from "next";
@@ -87,7 +88,7 @@ function groupPlans(rows: OfficialSubscriptionPrice[]): PlanGroup[] {
           planCode: row.planCode,
           planName: row.planName,
           billingPeriod: row.billingPeriod,
-          officialUrl: row.evidenceUrl,
+          officialUrl: officialPageUrl(row.evidenceUrl),
           rows: [row],
         });
   }
@@ -207,13 +208,13 @@ export default async function OfficialPricesPage({ searchParams }: { searchParam
             return <tr key={plan.key}>
               <td><Link className="priceai-official-product" href={planHref(plan)}><ProductIcon vendor={plan.vendor} label={plan.planName} /><span><b>{plan.planName}</b><small>{companyNames[plan.vendor.toLowerCase()] ?? plan.vendor}</small></span></Link></td>
               <td><b>{periodNames[plan.billingPeriod] ?? plan.billingPeriod}</b><small>{vendorNames[plan.vendor.toLowerCase()] ?? plan.vendor}</small></td>
-              <td>{reference ? <a href={reference.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow"><strong>{original} ↗</strong><small>{estimate}</small><em>{getOfficialSubscriptionPriceStatus(reference)}</em></a> : <Link href={planHref(plan)}><strong>{original}</strong><small>{estimate}</small></Link>}</td>
-              <td>{minimum ? <a href={minimum.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">
-                <strong>≈ ¥{Number(minimum.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ↗</strong>
+              <td>{reference ? <Link href={officialPriceHref(reference)}><strong>{original} ›</strong><small>{estimate}</small><em>{getOfficialSubscriptionPriceStatus(reference)}</em></Link> : <Link href={planHref(plan)}><strong>{original}</strong><small>{estimate}</small></Link>}</td>
+              <td>{minimum ? <Link href={officialPriceHref(minimum)}>
+                <strong>≈ ¥{Number(minimum.cnyEstimate).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ›</strong>
                 <small>{minimum.currency} {Number(minimum.amount).toLocaleString("zh-CN", { maximumFractionDigits: 2 })} · {regionDisplayName(minimum.countryCode)}</small>
                 <small><ChannelMark channel={minimum.channel} vendor={plan.vendor} />{channelNames[minimum.channel] ?? minimum.channel}</small>
                 <em>{getOfficialSubscriptionPriceStatus(minimum)}</em>
-              </a> : <span>暂无可换算的采集报价</span>}</td>
+              </Link> : <span>暂无可换算的采集报价</span>}</td>
               <td><b>{reference ? countryNames[reference.countryCode] ?? reference.countryCode : "—"}</b><small>{reference ? <><ChannelMark channel={reference.channel} vendor={plan.vendor} />{channelNames[reference.channel]}</> : "尚无周期明确的当前标价"}</small></td>
               <td><b>{plan.rows.length || "—"}</b><small>{plan.rows.length ? "公开地区报价" : "等待价格入库"}</small></td>
               <td><span>{reference ? reference.verifiedAt.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }) : "—"}</span>{reference?.exchangeRateDate && <small>汇率 {reference.exchangeRateDate}</small>}<Link className="priceai-row-button" href={planHref(plan)}>查看　›</Link></td>

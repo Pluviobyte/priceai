@@ -47,12 +47,12 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
 
     <div className="blue-engine-official" data-label="官方正价（折人民币）">
       {row.official
-        ? <><strong>{cny(row.official.cny)}</strong><small><a href={row.official.evidenceUrl} target="_blank" rel="noopener noreferrer">{row.official.note} ↗</a></small></>
+        ? <><strong>{cny(row.official.cny)}</strong><small><Link href={row.official.detailUrl}>{row.official.note} ›</Link></small></>
         : <span className="blue-engine-nodata">官方正价待确认</span>}
     </div>
     <div className="blue-engine-official blue-engine-official-floor" data-label="官方底价（折人民币）">
       {row.officialFloor
-        ? <><strong>{cny(row.officialFloor.cny)}</strong><small><a href={row.officialFloor.evidenceUrl} target="_blank" rel="noopener noreferrer">{row.officialFloor.note} ↗</a></small></>
+        ? <><strong>{cny(row.officialFloor.cny)}</strong><small><Link href={row.officialFloor.detailUrl}>{row.officialFloor.note} ›</Link></small></>
         : <span className="blue-engine-nodata">官方底价待确认</span>}
     </div>
 

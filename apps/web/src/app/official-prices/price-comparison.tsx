@@ -1,3 +1,5 @@
+import { officialPriceHref } from "@/lib/official-subscription-links";
+import { OfficialSourceLink } from "./source-link";
 import { comparisonPage } from "@/lib/comparison-pagination";
 import Form from "next/form";
 import Link from "next/link";
@@ -47,14 +49,14 @@ function Cell({ row, check, monthly, lowest }: { row: Price | undefined; check: 
     {lowest && <em className={styles.best}>同渠道跨地区标价折算较低</em>}
     {exact && row && !hasVerifiedSubscriptionBilling(row) && <small>此金额尚不能认作目录所示周期的应付价</small>}
     <details className={styles.evidence}><summary>{exact ? "来源与核验" : "查看原因"}</summary>
-      {row && <><p>{announcement ? "公告日期" : "价格核验"}：<time dateTime={row.verifiedAt.toISOString()}>{date(row.verifiedAt)}</time></p><p>原始内购名称：{row.rawPlanName}</p><a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">价格来源 ↗</a>{row.exchangeRateDate && row.exchangeRateUrl && <p><a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate} ↗</a></p>}</>}
-      {typeof row?.evidence?.billingEvidenceUrl === "string" && <p><a href={row.evidence.billingEvidenceUrl} target="_blank" rel="noopener noreferrer nofollow">{billingMethods[String(row.evidence.billingEvidenceMethod)] ?? "计费周期依据"} ↗</a></p>}
+      {row && <><p>{announcement ? "公告日期" : "价格核验"}：<time dateTime={row.verifiedAt.toISOString()}>{date(row.verifiedAt)}</time></p><p>原始内购名称：{row.rawPlanName}</p><p><Link href={officialPriceHref(row)}>查看套餐详情与官方入口 ›</Link></p><OfficialSourceLink url={row.evidenceUrl} />{row.exchangeRateDate && row.exchangeRateUrl && <p><a href={row.exchangeRateUrl} target="_blank" rel="noopener noreferrer nofollow">汇率日期 {row.exchangeRateDate} ↗</a></p>}</>}
+      {typeof row?.evidence?.billingEvidenceUrl === "string" && <div><OfficialSourceLink url={row.evidence.billingEvidenceUrl} label={billingMethods[String(row.evidence.billingEvidenceMethod)] ?? "计费周期依据"} /></div>}
       {typeof row?.evidence?.taxTreatment === "string" && taxLabels[row.evidence.taxTreatment] && <p>{taxLabels[row.evidence.taxTreatment]}</p>}
       {row?.evidence?.rolloutGated === true && <p>本币定价处于灰度，部分用户仍可能看到美元或欧元价</p>}
       {Array.isArray(row?.evidence?.duplicateOf) && row.evidence.duplicateOf.length > 0 && <p>同名候选金额与 {row.evidence.duplicateOf.join("、")} 相同，尚不能确认是重复项</p>}
       {row?.evidence?.resolvedBy === "vendor_monthly_amount" && Array.isArray(row.evidence.listedAmounts) && <p>同名内购项列出 {row.evidence.listedAmounts.map(String).join(" / ")}，旧记录曾按同国官网金额选择，现已撤回此周期推断</p>}
       {check?.status === "range_only" && typeof check.evidence?.lowerText === "string" && <p>应用内购买区间：{String(check.evidence.lowerText)} – {String(check.evidence.upperText ?? "")}</p>}
-      {check ? <><p>{check.reason}</p><p>采集检查：{date(check.checkedAt)}</p><a href={check.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow">查看被检查的官方页面 ↗</a></> : <p>没有本地区、套餐与渠道的采集检查记录；不代表免费或不能购买。</p>}
+      {check ? <><p>{check.reason}</p><p>采集检查：{date(check.checkedAt)}</p><OfficialSourceLink url={check.evidenceUrl} label="被检查的官方页面" /></> : <p>没有本地区、套餐与渠道的采集检查记录；不代表免费或不能购买。</p>}
     </details>
   </div>;
 }

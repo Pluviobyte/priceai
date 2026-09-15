@@ -39,6 +39,8 @@ test("official regular and floor use current, verified monthly prices with separ
  assert.equal(row.official?.cny,140);
  assert.equal(row.officialFloor?.cny,100);
  assert.equal(row.officialFloor?.evidenceUrl,"https://example.com/jp");
+ assert.equal(row.officialFloor?.detailUrl,"/official-prices/openai__chatgpt-plus-monthly#quote-jp");
+ assert.equal(row.official?.detailUrl,"/official-prices/openai__chatgpt-plus-monthly#quote-us");
  assert.match(row.officialFloor!.note,/日本 App Store/);
  const noUS=buildHomeBaseline([low],[])[0]!;
  assert.equal(noUS.official,null);
