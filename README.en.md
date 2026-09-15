@@ -1,13 +1,13 @@
-<p align="center">
+<h1 align="center">
   <picture>
     <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.png" />
     <source media="(prefers-reduced-motion: reduce)" srcset="./docs/images/logo-light.png" />
     <source media="(prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.gif" />
     <img src="./docs/images/logo-light.gif" width="112" height="112" alt="PriceAI" />
   </picture>
-</p>
-
-<h1 align="center">PriceAI — AI Subscription Price Radar</h1>
+  <br/>
+  PriceAI — AI Subscription Price Radar
+</h1>
 
 <p align="center">
   <strong>Continuously collects real listed prices from public channels and normalises scattered listings into comparable entitlement products.</strong><br/>

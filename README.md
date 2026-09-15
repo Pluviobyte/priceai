@@ -1,13 +1,13 @@
-<p align="center">
+<h1 align="center">
   <picture>
     <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.png" />
     <source media="(prefers-reduced-motion: reduce)" srcset="./docs/images/logo-light.png" />
     <source media="(prefers-color-scheme: dark)" srcset="./docs/images/logo-dark.gif" />
     <img src="./docs/images/logo-light.gif" width="112" height="112" alt="PriceAI" />
   </picture>
-</p>
-
-<h1 align="center">PriceAI——AI底价比价雷达</h1>
+  <br/>
+  PriceAI——AI底价比价雷达
+</h1>
 
 <p align="center">
   <strong>持续采集公开渠道的真实售价，把零散商品标准化成可比较的权益产品。</strong><br/>
