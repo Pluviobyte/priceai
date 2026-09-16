@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { API_SECTIONS_ENABLED, SPONSORS_ENABLED } from "@/lib/site-features";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
@@ -29,6 +29,11 @@ type NavLink = { key: NavKey; label: string; href: string; note?: string };
 type NavGroup = { id: string; kicker: string; summary: string; links: readonly NavLink[] };
 
 const THEME_KEY = "priceai-theme";
+
+function AccountNavigationStatus() {
+  const { pending } = useLinkStatus();
+  return <span className={`site-account-navigation-status${pending ? " is-pending" : ""}`} role="status">{pending ? "正在打开个人账户…" : ""}</span>;
+}
 
 /**
  * 主导航按购买路径分组，而不是平铺频道：
@@ -338,7 +343,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
               <button className="site-icon-button site-social-button site-theme-toggle" type="button" onClick={toggleTheme} aria-label={themeToggleLabel} title={themeToggleLabel} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={17} />
               </button>
-              <Link className={`site-icon-button site-social-button site-account-button site-login-entry${accountName ? " is-signed-in" : ""}`} href={loginHref} aria-label={accountName ? `${accountName}，已登录，查看个人账户` : accountName === null ? "登录个人账户" : "查看个人账户"} title={accountName ? `${accountName} · 已登录` : "个人账户"}>
+              <Link className={`site-icon-button site-social-button site-account-button site-login-entry${accountName ? " is-signed-in" : ""}`} href={loginHref} prefetch={typeof accountName === "string"} aria-label={accountName ? `${accountName}，已登录，查看个人账户` : accountName === null ? "登录个人账户" : "查看个人账户"} title={accountName ? `${accountName} · 已登录` : "个人账户"}>
                 {accountName ? (
                   <>
                     <span className="site-account-avatar" aria-hidden="true">{(Array.from(accountName)[0] ?? "我").toLocaleUpperCase()}</span>
@@ -346,6 +351,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
                     <span className="site-account-status">已登录</span>
                   </>
                 ) : <><Icon name="user" size={17} /><span>{accountName === null ? "登录" : "账户"}</span></>}
+                <AccountNavigationStatus />
               </Link>
               <button ref={menuToggleRef} className="site-icon-button site-menu-toggle" type="button" aria-expanded={drawerOpen} aria-controls={drawerId} aria-label="打开站点菜单" onClick={() => setDrawerOpen(true)}>
                 <Icon name="menu" size={18} />
@@ -387,7 +393,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
             <div className="site-drawer-foot">
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("qq")}>QQ 交流群</button>
               <button className="site-outline-link" type="button" aria-haspopup="dialog" onClick={() => setCommunityPlatform("wechat")}>微信交流群</button>
-              <Link className="site-outline-link" href={loginHref}>{accountName ? `${accountName} · 已登录` : accountName === null ? "登录" : "个人账户"}</Link>
+              <Link className="site-outline-link site-account-navigation-link" href={loginHref} prefetch={typeof accountName === "string"}>{accountName ? `${accountName} · 已登录` : accountName === null ? "登录" : "个人账户"}<AccountNavigationStatus /></Link>
               <button className="site-outline-link" type="button" onClick={toggleTheme} aria-pressed={dark}>
                 <Icon name={dark ? "sun" : "moon"} size={16} />
                 {dark ? "浅色模式" : "深色模式"}
