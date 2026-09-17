@@ -924,42 +924,42 @@ export interface AdminGeneration {
   manifestHash: string | null;
   isCurrent: boolean;
   snapshotCount: number;
-  addedCount: number;
-  removedCount: number;
-  changedCount: number;
+  snapshotState: string;
+  addedCount: number | null;
+  removedCount: number | null;
+  changedCount: number | null;
 }
 
 interface GenerationRow {
   id: string; status: string; published_at: Date | null; offer_count: number;
   product_count: number; source_count: number; previous_generation_id: string | null;
   manifest_url: string | null; manifest_hash: string | null; is_current: boolean;
-  snapshot_count: string; added_count: string; removed_count: string; changed_count: string;
+  snapshot_state: string; snapshot_present: boolean;
+  added_count: number | null; removed_count: number | null; changed_count: number | null;
 }
 
 export async function getAdminGenerations(channel = "card_prices"): Promise<AdminGeneration[]> {
   const rows = await query<GenerationRow>(
     `select g.id,g.status,g.published_at,g.offer_count,g.product_count,g.source_count,
-            g.previous_generation_id,g.manifest_url,g.manifest_hash,
+            g.previous_generation_id,g.manifest_url,g.manifest_hash,g.snapshot_state,
             (pc.current_generation_id=g.id) as is_current,
-            (select count(*) from published_offer_snapshots s where s.publish_generation_id=g.id)::text snapshot_count,
-            (select count(*) from published_offer_snapshots s
-              where s.publish_generation_id=g.id and not exists (
-                select 1 from published_offer_snapshots p where p.publish_generation_id=g.previous_generation_id
-                and p.source_id=s.source_id and p.source_item_id=s.source_item_id))::text added_count,
-            (select count(*) from published_offer_snapshots p
-              where p.publish_generation_id=g.previous_generation_id and not exists (
-                select 1 from published_offer_snapshots s where s.publish_generation_id=g.id
-                and s.source_id=p.source_id and s.source_item_id=p.source_item_id))::text removed_count,
-            (select count(*) from published_offer_snapshots s join published_offer_snapshots p
-              on p.publish_generation_id=g.previous_generation_id and p.source_id=s.source_id and p.source_item_id=s.source_item_id
-              where s.publish_generation_id=g.id and (s.price,s.currency,s.stock_state,s.availability_state)
-                is distinct from (p.price,p.currency,p.stock_state,p.availability_state))::text changed_count
+            g.added_count,g.removed_count,g.changed_count,
+            case when g.snapshot_state='retained' then exists(
+              select 1 from published_offer_snapshots s where s.publish_generation_id=g.id limit 1
+            ) else false end as snapshot_present
        from publish_generations g
        left join publication_channels pc on pc.channel=$1
-      order by g.generated_at desc limit 60`,
-    [channel],
+      where g.channel=$1 or g.channel is null
+      order by g.generated_at desc limit 60`, [channel],
   );
-  return rows.map((row) => ({ id: row.id, status: row.status, publishedAt: row.published_at, offerCount: row.offer_count, productCount: row.product_count, sourceCount: row.source_count, previousGenerationId: row.previous_generation_id, manifestUrl: row.manifest_url, manifestHash: row.manifest_hash, isCurrent: row.is_current, snapshotCount: Number(row.snapshot_count), addedCount: Number(row.added_count), removedCount: Number(row.removed_count), changedCount: Number(row.changed_count) }));
+  return rows.map(row => ({ id: row.id, status: row.status, publishedAt: row.published_at,
+    offerCount: row.offer_count, productCount: row.product_count, sourceCount: row.source_count,
+    previousGenerationId: row.previous_generation_id, manifestUrl: row.manifest_url,
+    manifestHash: row.manifest_hash, isCurrent: row.is_current,
+    snapshotState: row.snapshot_state,
+    snapshotCount: row.snapshot_present ? row.offer_count : 0,
+    addedCount: row.added_count, removedCount: row.removed_count, changedCount: row.changed_count,
+  }));
 }
 
 export async function rollbackAdminGeneration(input: { generationId: string; reason: string; actorId: string; channel?: string }): Promise<number> {
@@ -967,11 +967,13 @@ export async function rollbackAdminGeneration(input: { generationId: string; rea
   const client = await databasePool.connect();
   try {
     await client.query("begin");
+    const lock = await client.query("select pg_try_advisory_xact_lock(718231, 1) as acquired");
+    if (!lock.rows[0]?.acquired) throw new Error("publication_busy");
     const pointerResult = await client.query<{ current_generation_id: string }>("select current_generation_id from publication_channels where channel=$1 for update", [channel]);
     const current = pointerResult.rows[0]?.current_generation_id;
     if (!current) throw new Error("publication_channel_empty");
     if (current === input.generationId) throw new Error("generation_already_current");
-    const eligible = await client.query("select id from publish_generations where id=$1 and status in ('published','superseded')", [input.generationId]);
+    const eligible = await client.query("select id from publish_generations where id=$1 and snapshot_state='retained' and status in ('published','superseded')", [input.generationId]);
     if (!eligible.rowCount) throw new Error("generation_not_rollback_eligible");
     const snapshot = await client.query<{ count: string }>("select count(*)::text count from published_offer_snapshots where publish_generation_id=$1", [input.generationId]);
     const count = Number(snapshot.rows[0]?.count ?? 0);

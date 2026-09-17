@@ -18,8 +18,8 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
   const publisher=new IncrementalPublisher(async()=>{
     const started=Date.now();await seedCanonicalProducts(db);
     const publication=await publishLatestSnapshots(db);
-    log({event:'channels_published',...publication,durationMs:Date.now()-started});
-    if(options.rawObjectStore) await storePublicGenerationSnapshot(db,options.rawObjectStore,publication.generationId).catch(error=>log({event:'public_snapshot_failed',error:String(error)}));
+    log({event:publication.unchanged?'channels_refreshed':'channels_published',...publication,durationMs:Date.now()-started});
+    if(options.rawObjectStore && !publication.unchanged) await storePublicGenerationSnapshot(db,options.rawObjectStore,publication.generationId).catch(error=>log({event:'public_snapshot_failed',error:String(error)}));
     await evaluatePriceAlerts(db,publication.generationId).catch(error=>log({event:'price_alert_evaluation_failed',error:String(error)}));
   },error=>log({event:'incremental_publication_failed',error:String(error)}));
   const maintain=async()=>{
