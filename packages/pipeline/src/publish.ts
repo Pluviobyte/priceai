@@ -1,4 +1,5 @@
 import {latestCatalogRowSql} from './catalog-scope.js';
+import { catalogContentHash, offerContentHash } from './publication-content.js';
 import { and, eq, notInArray, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
@@ -10,6 +11,7 @@ import {
   offerMatches,
   offerPriceHistory,
   offers,
+  merchants,
   publicationChannels,
   publishGenerations,
   rawOfferSnapshots,
@@ -28,6 +30,7 @@ export interface PublishOptions {
   channel?: string;
   now?: Date;
   allowEmpty?: boolean;
+  forceGeneration?: boolean;
 }
 
 export interface PublishResult {
@@ -37,6 +40,7 @@ export interface PublishResult {
   productCount: number;
   sourceCount: number;
   quarantinedCount: number;
+  unchanged: boolean;
 }
 
 function freshnessFor(capturedAt: Date, now: Date): FreshnessState {
@@ -52,44 +56,52 @@ export async function publishLatestSnapshots(
 ): Promise<PublishResult> {
   const channel = options.channel ?? "card_prices";
   const now = options.now ?? new Date();
-  const rows = await db
-    .select({ raw: rawOfferSnapshots, source: sources })
-    .from(rawOfferSnapshots)
-    .innerJoin(
-      sources,
-      and(
-        eq(rawOfferSnapshots.sourceId, sources.id),
-        latestCatalogRowSql,
-      ),
-    )
-    .where(eq(sources.enabled, true));
-
-  if (rows.length === 0 && !options.allowEmpty) {
-    throw new Error("publish_refused_empty_snapshot");
-  }
-
-  const products = await db.select().from(canonicalProducts);
-  const productBySlug = new Map(products.map((product) => [product.slug, product]));
-  const productById = new Map(products.map((product) => [product.id, product]));
-  const overrides = await db
-    .select()
-    .from(classificationOverrides)
-    .where(eq(classificationOverrides.active, true));
-  const overrideBySourceItem = new Map(
-    overrides.map((override) => [
-      `${override.sourceId}:${override.sourceItemId}`,
-      override,
-    ]),
-  );
-
   return db.transaction(async (tx) => {
+    // Shared by publication, rollback and retention. Never queue behind another publisher.
+    const lock = await tx.execute(sql`select pg_try_advisory_xact_lock(718231, 1) as acquired`);
+    if (!lock.rows[0]?.acquired) throw new Error('publication_busy');
+    const rows = await tx
+      .select({ raw: rawOfferSnapshots, source: sources })
+      .from(rawOfferSnapshots)
+      .innerJoin(
+        sources,
+        and(
+          eq(rawOfferSnapshots.sourceId, sources.id),
+          latestCatalogRowSql,
+        ),
+      )
+      .where(eq(sources.enabled, true));
+
+    if (rows.length === 0 && !options.allowEmpty) {
+      throw new Error("publish_refused_empty_snapshot");
+    }
+
+    const products = await tx.select().from(canonicalProducts);
+    const merchantRows = await tx.select({ id: merchants.id, name: merchants.name }).from(merchants);
+    const merchantNames = new Map(merchantRows.map(row => [row.id, row.name]));
+    const productBySlug = new Map(products.map((product) => [product.slug, product]));
+    const productById = new Map(products.map((product) => [product.id, product]));
+    const overrides = await tx
+      .select()
+      .from(classificationOverrides)
+      .where(eq(classificationOverrides.active, true));
+    const overrideBySourceItem = new Map(
+      overrides.map((override) => [
+        `${override.sourceId}:${override.sourceItemId}`,
+        override,
+      ]),
+    );
+
     const [publication] = await tx
       .select()
       .from(publicationChannels)
       .where(eq(publicationChannels.channel, channel))
       .limit(1);
     const previousGenerationId = publication?.currentGenerationId ?? null;
-    if (previousGenerationId) {
+    const [previous] = previousGenerationId ? await tx.select().from(publishGenerations)
+      .where(eq(publishGenerations.id, previousGenerationId)).limit(1) : [];
+    // Only legacy releases without a fingerprint can need the original backfill.
+    if (previousGenerationId && !previous?.contentHash) {
       await tx.execute(sql`
         insert into published_offer_snapshots (
           publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
@@ -105,16 +117,12 @@ export async function publishLatestSnapshots(
         on conflict (publish_generation_id,source_id,source_item_id) do nothing
       `);
     }
-    const [generation] = await tx
-      .insert(publishGenerations)
-      .values({ status: "staging", previousGenerationId })
-      .returning({ id: publishGenerations.id });
-    if (!generation) throw new Error("publish_generation_insert_failed");
-
     const productIds = new Set<string>();
     const sourceIds = new Set<string>();
     let offerCount = 0;
     let quarantinedCount = 0;
+    const contentHashes: string[] = [];
+    const updateLiveOffers: Array<(generationId: string) => Promise<void>> = [];
 
     for (const row of rows) {
       const raw = rawOfferInputSchema.parse({
@@ -353,38 +361,30 @@ export async function publishLatestSnapshots(
         ? eligibility.reasons.join(",")
         : null;
       if (eligibility.availabilityState === "quarantined") quarantinedCount += 1;
+      contentHashes.push(offerContentHash({
+        sourceId: row.source.id, sourceItemId: raw.sourceItemId,
+        productId: product.id, productName: product.displayName, productSlug: product.slug,
+        merchantName: row.source.merchantId ? merchantNames.get(row.source.merchantId) : null,
+        price: raw.price, currency: raw.currency,
+        stockCount: raw.stockCount ?? null, stockState: raw.stockState,
+        rawTitle: raw.rawTitle, rawPriceText: raw.rawPriceText,
+        rawDescription: raw.rawDescription ?? null, rawCategory: raw.rawCategory ?? null,
+        productUrl: raw.productUrl, attributes, freshnessState,
+        availabilityState: eligibility.availabilityState, quarantineReason,
+        classificationConfidence: classification.confidence,
+      }));
 
-      const [publishedOffer] = await tx
-        .insert(offers)
-        .values({
-          sourceId: row.source.id,
-          sourceItemId: raw.sourceItemId,
-          canonicalProductId: product.id,
-          latestRawSnapshotId: row.raw.id,
-          price: raw.price,
-          currency: raw.currency,
-          ...(raw.stockCount !== undefined ? { stockCount: raw.stockCount } : {}),
-          stockState: raw.stockState,
-          availabilityState: eligibility.availabilityState,
-          freshnessState,
-          riskFacts: attributes.riskFacts,
-          offerMode: attributes.offerMode,
-          productUrl: raw.productUrl,
-          lastSeenAt: row.raw.capturedAt,
-          offerVerifiedAt: row.raw.capturedAt,
-          lastCheckedAt: row.raw.capturedAt,
-          classificationConfidence: String(classification.confidence),
-          quarantineReason,
-          publishGenerationId: generation.id,
-        })
-        .onConflictDoUpdate({
-          target: [offers.sourceId, offers.sourceItemId],
-          set: {
+      updateLiveOffers.push(async (targetGenerationId) => {
+        const [publishedOffer] = await tx
+          .insert(offers)
+          .values({
+            sourceId: row.source.id,
+            sourceItemId: raw.sourceItemId,
             canonicalProductId: product.id,
             latestRawSnapshotId: row.raw.id,
             price: raw.price,
             currency: raw.currency,
-            stockCount: raw.stockCount ?? null,
+            ...(raw.stockCount !== undefined ? { stockCount: raw.stockCount } : {}),
             stockState: raw.stockState,
             availabilityState: eligibility.availabilityState,
             freshnessState,
@@ -396,35 +396,57 @@ export async function publishLatestSnapshots(
             lastCheckedAt: row.raw.capturedAt,
             classificationConfidence: String(classification.confidence),
             quarantineReason,
-            publishGenerationId: generation.id,
-            updatedAt: now,
-          },
-        })
-        .returning({ id: offers.id });
-      if (!publishedOffer) throw new Error("offer_upsert_failed");
-      if (detectedAnomalies.length > 0) {
-        await tx
-          .update(offerAnomalies)
-          .set({ offerId: publishedOffer.id })
-          .where(eq(offerAnomalies.rawOfferSnapshotId, row.raw.id));
-      }
+            publishGenerationId: targetGenerationId,
+          })
+          .onConflictDoUpdate({
+            target: [offers.sourceId, offers.sourceItemId],
+            set: {
+              canonicalProductId: product.id,
+              latestRawSnapshotId: row.raw.id,
+              price: raw.price,
+              currency: raw.currency,
+              stockCount: raw.stockCount ?? null,
+              stockState: raw.stockState,
+              availabilityState: eligibility.availabilityState,
+              freshnessState,
+              riskFacts: attributes.riskFacts,
+              offerMode: attributes.offerMode,
+              productUrl: raw.productUrl,
+              lastSeenAt: row.raw.capturedAt,
+              offerVerifiedAt: row.raw.capturedAt,
+              lastCheckedAt: row.raw.capturedAt,
+              classificationConfidence: String(classification.confidence),
+              quarantineReason,
+              publishGenerationId: targetGenerationId,
+              updatedAt: now,
+            },
+          })
+          .returning({ id: offers.id });
+        if (!publishedOffer) throw new Error("offer_upsert_failed");
+        if (detectedAnomalies.length > 0) {
+          await tx
+            .update(offerAnomalies)
+            .set({ offerId: publishedOffer.id })
+            .where(eq(offerAnomalies.rawOfferSnapshotId, row.raw.id));
+        }
 
-      const changed =
-        !existing ||
-        existing.price !== raw.price ||
-        existing.stockCount !== (raw.stockCount ?? null) ||
-        existing.stockState !== raw.stockState;
-      if (changed) {
-        await tx.insert(offerPriceHistory).values({
-          offerId: publishedOffer.id,
-          price: raw.price,
-          currency: raw.currency,
-          ...(raw.stockCount !== undefined ? { stockCount: raw.stockCount } : {}),
-          stockState: raw.stockState,
-          observedAt: now,
-          crawlRunId: row.raw.crawlRunId,
-        });
-      }
+        const changed =
+          !existing ||
+          existing.price !== raw.price ||
+          existing.stockCount !== (raw.stockCount ?? null) ||
+          existing.stockState !== raw.stockState;
+        if (changed) {
+          await tx.insert(offerPriceHistory).values({
+            offerId: publishedOffer.id,
+            price: raw.price,
+            currency: raw.currency,
+            ...(raw.stockCount !== undefined ? { stockCount: raw.stockCount } : {}),
+            stockState: raw.stockState,
+            observedAt: now,
+            crawlRunId: row.raw.crawlRunId,
+          });
+        }
+      });
 
       offerCount += 1;
       productIds.add(product.id);
@@ -434,6 +456,33 @@ export async function publishLatestSnapshots(
     if (offerCount === 0 && !options.allowEmpty) {
       throw new Error("publish_refused_no_classified_offers");
     }
+    const contentHash = catalogContentHash(contentHashes);
+    const unchanged = !options.forceGeneration && previous?.snapshotState === 'retained' && previous.contentHash === contentHash;
+    const [generation] = unchanged ? [{id: previous.id}] : await tx.insert(publishGenerations)
+      .values({status:'staging',previousGenerationId,channel}).returning({id:publishGenerations.id});
+    if (!generation) throw new Error('publish_generation_insert_failed');
+    // Decide the version before writing offers: one live update per item, no temporary version or second rewrite.
+    for (const update of updateLiveOffers) await update(generation.id);
+    if (unchanged && previous) {
+      return { generationId: previous.id, previousGenerationId: previous.previousGenerationId,
+        offerCount, productCount: productIds.size, sourceCount: sourceIds.size, quarantinedCount, unchanged: true };
+    }
+    // Compute the legacy price/status comparison once, not sixty times on each admin page visit.
+    const comparison = !previous || previous.snapshotState === 'retained' ? await tx.execute(sql`
+      with current_rows as (
+        select source_id,source_item_id,price,currency,stock_state,availability_state
+        from offers where publish_generation_id=${generation.id}::uuid
+      ), previous_rows as (
+        select source_id,source_item_id,price,currency,stock_state,availability_state
+        from published_offer_snapshots where publish_generation_id=${previousGenerationId}::uuid
+      ) select count(*) filter(where p.source_id is null)::int as added,
+        count(*) filter(where c.source_id is null)::int as removed,
+        count(*) filter(where p.source_id is not null and c.source_id is not null and
+          (c.price,c.currency,c.stock_state,c.availability_state) is distinct from
+          (p.price,p.currency,p.stock_state,p.availability_state))::int as changed
+      from current_rows c full join previous_rows p using(source_id,source_item_id)
+    `) : null;
+    const delta = comparison?.rows[0] as {added:number;removed:number;changed:number} | undefined;
     await tx.execute(sql`
       insert into published_offer_snapshots (
         publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
@@ -456,6 +505,10 @@ export async function publishLatestSnapshots(
         offerCount,
         productCount: productIds.size,
         sourceCount: sourceIds.size,
+        contentHash,
+        addedCount: delta?.added ?? null,
+        removedCount: delta?.removed ?? null,
+        changedCount: delta?.changed ?? null,
       })
       .where(eq(publishGenerations.id, generation.id));
     if (previousGenerationId) {
@@ -488,6 +541,7 @@ export async function publishLatestSnapshots(
       productCount: productIds.size,
       sourceCount: sourceIds.size,
       quarantinedCount,
+      unchanged: false,
     };
   });
 }

@@ -443,6 +443,13 @@ export const publishGenerations = pgTable("publish_generations", {
   sourceCount: integer("source_count").notNull().default(0),
   manifestUrl: text("manifest_url"),
   manifestHash: text("manifest_hash"),
+  contentHash: text("content_hash"),
+  channel: text("channel"),
+  snapshotState: text("snapshot_state").notNull().default("retained"),
+  snapshotPinned: boolean("snapshot_pinned").notNull().default(false),
+  addedCount: integer("added_count"),
+  removedCount: integer("removed_count"),
+  changedCount: integer("changed_count"),
   previousGenerationId: uuid("previous_generation_id"),
 });
 

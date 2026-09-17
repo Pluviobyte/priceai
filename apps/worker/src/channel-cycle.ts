@@ -110,13 +110,13 @@ export async function runChannelCycleWith(db: Database, registry: CollectorRegis
     await seedCanonicalProducts(db);
     const publication = await publishLatestSnapshots(db);
     let publicSnapshot: unknown = null;
-    if (options.rawObjectStore) {
+    if (options.rawObjectStore && !publication.unchanged) {
       try { publicSnapshot = await storePublicGenerationSnapshot(db, options.rawObjectStore, publication.generationId); }
       catch (error) { publicSnapshot = { error: String(error) }; }
     }
     result.publication = { ...publication, publicSnapshot };
     published = true;
-    log({ event: "channels_published", generationId: publication.generationId, durationMs: Date.now() - started });
+    log({ event: publication.unchanged ? "channels_refreshed" : "channels_published", generationId: publication.generationId, durationMs: Date.now() - started });
     // Alert delivery failure must not invalidate an already committed generation.
     try { await evaluatePriceAlerts(db, publication.generationId); }
     catch (error) { log({event: "price_alert_evaluation_failed", error: String(error)}); }

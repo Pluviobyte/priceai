@@ -18,6 +18,7 @@ import time
 import urllib.request
 
 STATE = Path('/etc/priceai-release')
+OBSERVER = Path('/run/priceai-release-observer.json')
 APPS = [
     ('web', '2p6cPHkJktKqz1gXz0e34', 'priceai-priceai-web-pbcibz', None),
     ('worker', 'sGr4c80QiSDR7eYYrg7y5', 'priceai-priceai-official-worker-kshd6w',
@@ -87,6 +88,14 @@ def capacity():
             'inodeUsedPercent': round(inode_percent, 1)}
 
 
+def observer_guard():
+    # Optional administrator-started observer. Once present, fail closed on stale/error state.
+    if OBSERVER.exists():
+        observation = json.loads(OBSERVER.read_text())
+        if time.time() - observation.get('at', 0) > 20 or observation.get('healthy') is not True:
+            raise RuntimeError('Host observer paused deployment; inspect administrator monitoring log')
+
+
 def status():
     result = capacity()
     result['services'] = []
@@ -106,6 +115,7 @@ def status():
 def wait_service(service, image, timeout=360):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        observer_guard()
         spec = json.loads(run(['docker', 'service', 'inspect', service]))[0]
         update = spec.get('UpdateStatus', {}).get('State', '')
         if update in ('paused', 'rollback_paused', 'rollback_completed'):
@@ -139,6 +149,7 @@ def wait_public_health(release, timeout=90):
 
 def deploy(payload, registry_token):
     validate(payload)
+    observer_guard()
     usage = capacity()
     if usage['freeGiB'] < 15 or usage['diskUsedPercent'] >= 85 or usage['inodeUsedPercent'] >= 85:
         raise RuntimeError('Insufficient deployment disk headroom: ' + json.dumps(usage))
@@ -146,7 +157,9 @@ def deploy(payload, registry_token):
     with tempfile.TemporaryDirectory(prefix='priceai-registry-') as config:
         run(['docker', '--config', config, 'login', 'ghcr.io', '-u', 'Pluviobyte', '--password-stdin'], registry_token)
         for kind in ['web', 'worker']:
+            observer_guard()
             run(['docker', '--config', config, 'pull', payload[kind]], timeout=600)
+            observer_guard()
             image = json.loads(run(['docker', 'image', 'inspect', payload[kind]]))[0]
             labels = image['Config'].get('Labels', {})
             if labels.get('org.opencontainers.image.revision') != payload['sha'] or labels.get('io.priceai.release') != payload['release'] or image['Architecture'] != 'amd64':
@@ -163,6 +176,7 @@ def deploy(payload, registry_token):
     original_auth = json.loads(docker_auth_path.read_text()).get('auths', {}).get('ghcr.io') if docker_auth_path.exists() else None
     try:
         for kind, app_id, service, command in APPS:
+            observer_guard()
             entrypoint = '/usr/bin/tini -g --' if command else None
             args_sql = 'ARRAY[' + ','.join(quote(arg) for arg in command.removeprefix('/usr/bin/tini -g -- ').split()) + ']::text[]' if command else 'NULL'
             sql('UPDATE application SET "sourceType"=\'docker\', "autoDeploy"=false, '
@@ -185,6 +199,7 @@ def deploy(payload, registry_token):
                 sql('UPDATE application SET "autoDeploy"=false WHERE "applicationId"=' + quote(app_id) + ';')
             deadline = time.monotonic() + 480
             while time.monotonic() < deadline:
+                observer_guard()
                 records = json.loads(sql('SELECT coalesce(json_agg(d),\'[]\'::json) FROM '
                     '(SELECT "deploymentId",status FROM deployment WHERE "applicationId"=' + quote(app_id) + ') d;'))
                 new = [d for d in records if d['deploymentId'] not in before_ids]
@@ -198,6 +213,7 @@ def deploy(payload, registry_token):
             wait_service(service, payload[kind])
             print(service + ': exact image healthy', flush=True)
         wait_public_health(payload['release'])
+        observer_guard()
         if previous and previous != payload:
             save(STATE / 'previous.json', previous)
         save(STATE / 'current.json', payload)

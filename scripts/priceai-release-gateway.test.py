@@ -9,8 +9,32 @@ import tempfile
 spec = importlib.util.spec_from_file_location('gateway', Path(__file__).with_name('priceai-release-gateway.py'))
 gateway = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gateway)
+observer_spec = importlib.util.spec_from_file_location('observer', Path(__file__).with_name('priceai-release-observer.py'))
+observer = importlib.util.module_from_spec(observer_spec)
+observer_spec.loader.exec_module(observer)
 
 class ManifestValidation(unittest.TestCase):
+    def test_observer_protects_running_containers_and_resource_headroom(self):
+        original = {'name': 'other-project', 'running': True, 'restarts': 0, 'oom': False, 'health': 'healthy'}
+        baseline = {'abc': original}
+        self.assertEqual(observer.problems(baseline, baseline, 2*1024**3, 50*1024**3, 30, 2), [])
+        self.assertTrue(observer.problems(baseline, {}, 2*1024**3, 50*1024**3, 30, 2))
+        for field, value in [('restarts', 1), ('health', 'unhealthy'), ('oom', True)]:
+            self.assertTrue(observer.problems(baseline, {'abc': {**original, field: value}}, 2*1024**3, 50*1024**3, 30, 2))
+        self.assertEqual(len(observer.problems(baseline, baseline, 0, 0, 90, 15)), 4)
+
+    def test_observer_fails_closed_on_stale_or_unhealthy_heartbeat(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'observer.json'
+            with patch.object(gateway, 'OBSERVER', path), patch.object(gateway.time, 'time', return_value=100):
+                gateway.observer_guard()
+                for value in [{'at': 100, 'healthy': False}, {'at': 79, 'healthy': True}]:
+                    path.write_text(json.dumps(value))
+                    with self.assertRaises(RuntimeError):
+                        gateway.observer_guard()
+                path.write_text(json.dumps({'at': 95, 'healthy': True}))
+                gateway.observer_guard()
+
     def manifest(self):
         return {'sha': 'a' * 40, 'release': 'b' * 64,
                 'web': 'ghcr.io/pluviobyte/priceai-web@sha256:' + 'c' * 64,

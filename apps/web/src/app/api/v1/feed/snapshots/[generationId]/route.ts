@@ -10,6 +10,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ gene
   if (!UUID.test(generationId)) return Response.json({ error: "invalid_generation" }, { status: 400 });
   const feed = await buildGenerationFeed(generationId);
   if (!feed) return Response.json({ error: "generation_not_found" }, { status: 404 });
+  if ('expired' in feed) return Response.json({ error: "generation_expired" }, { status: 410, headers: { "Cache-Control": "no-store" } });
+  if ('incomplete' in feed) return Response.json({ error: "generation_snapshot_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } });
   const etag = `\"${feed.sha256}\"`;
   const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=31536000, immutable", ETag: etag, "X-Content-Type-Options": "nosniff" };
   if (request.headers.get("if-none-match") === etag) return new Response(null, { status: 304, headers });
