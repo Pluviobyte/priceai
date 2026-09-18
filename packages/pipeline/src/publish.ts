@@ -1,3 +1,4 @@
+import { snapshotIdSql } from './snapshot-id.js';
 import {latestCatalogRowSql} from './catalog-scope.js';
 import { catalogContentHash, offerContentHash } from './publication-content.js';
 import { and, eq, notInArray, sql } from "drizzle-orm";
@@ -104,12 +105,12 @@ export async function publishLatestSnapshots(
     if (previousGenerationId && !previous?.contentHash) {
       await tx.execute(sql`
         insert into published_offer_snapshots (
-          publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+          id,publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
           latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
           freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
           offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
         )
-        select ${previousGenerationId}::uuid,id,source_id,source_item_id,canonical_product_id,
+        select ${snapshotIdSql(now)},${previousGenerationId}::uuid,id,source_id,source_item_id,canonical_product_id,
           latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
           freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
           offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}
@@ -485,12 +486,12 @@ export async function publishLatestSnapshots(
     const delta = comparison?.rows[0] as {added:number;removed:number;changed:number} | undefined;
     await tx.execute(sql`
       insert into published_offer_snapshots (
-        publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+        id,publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
         latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
         freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
         offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
       )
-      select ${generation.id}::uuid,id,source_id,source_item_id,canonical_product_id,
+      select ${snapshotIdSql(now)},${generation.id}::uuid,id,source_id,source_item_id,canonical_product_id,
         latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
         freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
         offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}

@@ -77,3 +77,14 @@ node --import tsx scripts/snapshot-retention.mts --policy /受保护路径/reten
 - 本地214项通过、3项条件跳过；新增专项17项已验证，网关/观察器8项通过，CI类型、迁移、集成、构建、镜像及缓存复用全部通过。生产不构建。
 
 原工作区3个未推送提交未包含在本次上线。部署使用独立分支codex/snapshot-retention-release；原工作区已合并线上优化，私有提交保留且未推送，旧未提交副本保留在命名stash中。后续不要从原工作区直接推送main而意外带上这些提交。
+
+
+## New snapshot primary-key locality (2026-09-18)
+
+A guarded collector recovery was paused twice when host I/O wait remained above 10% for three 5-second samples, even with relay requests spaced 15 seconds apart. A live activity sample caught snapshot insertion. Cumulative index statistics showed 8,140,670 reads on the snapshot primary key versus 129,836 and 5,587 on its two generation indexes. These observations identify random primary-key access as a candidate bottleneck, not proof that all publication cost comes from it.
+
+New publication and legacy-backfill inserts now explicitly generate UUIDv7 IDs with a 48-bit publication timestamp and 74 per-row random bits from PostgreSQL gen_random_uuid(). The RFC variant is preserved. See RFC 9562 section 5.7: https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-7 . IDs within a millisecond are random, not strictly ordered. Existing UUIDs, constraints, publication IDs and API behavior remain unchanged. No migration, index rebuild, historical deletion or vacuum change is needed. Other insert paths retain the existing default.
+
+Local PostgreSQL 17 benchmark, shared_buffers=16MB: two separately seeded one-million-row tables with random UUID primary keys and 64-character payloads, CHECKPOINT before each 16,000-row insertion. Random IDs: 10,090 shared block reads, 10,400 dirtied blocks, WAL 30,825,254 bytes, 110ms. Time-local IDs: 7 reads, 316 dirtied blocks, WAL 3,652,037 bytes, 27ms. This isolates index locality; it excludes production secondary indexes, foreign keys, concurrency and storage latency, so these are not production speedup claims.
+
+Integration tests verify actual inserted snapshot UUID version/timestamp, per-row evaluation and 30,000 unique IDs across three timestamp boundaries, invalid timestamps, existing deduplication, rollback and bounded retention behavior. Deployment and guarded recovery results must be recorded separately; local evidence alone is not production acceptance.

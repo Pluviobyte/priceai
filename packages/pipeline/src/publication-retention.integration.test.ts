@@ -11,6 +11,7 @@ import pg from 'pg';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { sql } from 'drizzle-orm';
 import { createDatabase } from '@price-radar/database';
+import { snapshotIdSql } from './snapshot-id.js';
 import { publishLatestSnapshots } from './publish.js';
 import { rollbackPublication, storePublicGenerationSnapshot } from './generations.js';
 import { seedCanonicalProducts } from './catalog-products.js';
@@ -38,6 +39,26 @@ test('publication deduplication preserves observations, history, changes and rol
       values(${run}::uuid,${source}::uuid,'one','ChatGPT Plus 独享账号 月付','100','100','CNY',10,'in_stock','https://example.com/item',${at},'test-payload-hash-0001')`);
     const first=await publishLatestSnapshots(db,{now:at});
     assert.equal(first.unchanged,false);assert.equal(first.offerCount,1);
+    await t.test('new snapshot IDs carry publication time and UUIDv7 version without rewriting legacy IDs',async()=>{
+      const row=(await db.execute(sql`select id from published_offer_snapshots where publish_generation_id=${first.generationId}::uuid`)).rows[0]!;
+      const id=String(row.id);
+      assert.match(id,/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      assert.equal(parseInt(id.replaceAll('-','').slice(0,12),16),at.getTime());
+    });
+    await t.test('UUIDv7 SQL is evaluated per row, preserves variant, and supports 48-bit timestamp boundaries',async()=>{
+      for(const time of [0,at.getTime(),0xffffffffffff]) {
+        const rows=(await db.execute(sql`select ${snapshotIdSql(new Date(time))} as id from generate_series(1,10000)`)).rows;
+        const ids=rows.map(row=>String(row.id));
+        assert.equal(new Set(ids).size,10000);
+        for(const id of ids){
+          assert.match(id,/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+          assert.equal(parseInt(id.replaceAll('-','').slice(0,12),16),time);
+        }
+      }
+      assert.throws(()=>snapshotIdSql(new Date(-1)),/invalid_snapshot_id_timestamp/);
+      assert.throws(()=>snapshotIdSql(new Date(NaN)),/invalid_snapshot_id_timestamp/);
+      assert.throws(()=>snapshotIdSql(new Date(0x1000000000000)),/invalid_snapshot_id_timestamp/);
+    });
     const later=new Date(at.getTime()+60000);
     await db.execute(sql`update raw_offer_snapshots set captured_at=${later}`);
     await t.test('same business content refreshes live clocks without adding history',async()=>{
