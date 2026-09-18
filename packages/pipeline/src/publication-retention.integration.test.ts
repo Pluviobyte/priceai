@@ -62,8 +62,11 @@ test('publication deduplication preserves observations, history, changes and rol
     const later=new Date(at.getTime()+60000);
     await db.execute(sql`update raw_offer_snapshots set captured_at=${later}`);
     await t.test('same business content refreshes live clocks without adding history',async()=>{
+      const before=(await db.execute(sql`select m.xmin::text as match_revision,a.xmin::text as attribute_revision from offer_matches m join offer_attributes a on a.offer_match_id=m.id`)).rows;
       const second=await publishLatestSnapshots(db,{now:later});
       assert.equal(second.unchanged,true);assert.equal(second.generationId,first.generationId);
+      const after=(await db.execute(sql`select m.xmin::text as match_revision,a.xmin::text as attribute_revision from offer_matches m join offer_attributes a on a.offer_match_id=m.id`)).rows;
+      assert.deepEqual(after,before,'unchanged classification must not rewrite match/attribute rows');
       const rows=await db.execute(sql`select (select count(*)::int from publish_generations) as generations,
         (select count(*)::int from published_offer_snapshots) as snapshots,
         (select offer_verified_at from offers limit 1) as live_time,
@@ -71,6 +74,20 @@ test('publication deduplication preserves observations, history, changes and rol
       assert.equal(rows.rows[0]?.generations,1);assert.equal(rows.rows[0]?.snapshots,1);
       assert.equal(new Date(String(rows.rows[0]?.live_time)).getTime(),later.getTime());
       assert.equal(new Date(String(rows.rows[0]?.historical_time)).getTime(),at.getTime());
+    });
+    await t.test('manual attribute changes update existing rows and absent attributes are repaired',async()=>{
+      await db.execute(sql`insert into classification_overrides(source_id,source_item_id,decision,attribute_overrides,reason,created_by)
+        values(${source}::uuid,'one','approve','{"durationDays":90}'::jsonb,'test','test')`);
+      await publishLatestSnapshots(db,{now:later});
+      const changed=(await db.execute(sql`select m.review_status,a.duration_days from offer_matches m join offer_attributes a on a.offer_match_id=m.id`)).rows[0]!;
+      assert.equal(changed.review_status,'manual_approved');assert.equal(changed.duration_days,90);
+      await db.execute(sql`delete from offer_attributes`);
+      await publishLatestSnapshots(db,{now:later});
+      assert.equal((await db.execute(sql`select duration_days from offer_attributes`)).rows[0]!.duration_days,90);
+      await db.execute(sql`update classification_overrides set active=false`);
+      await publishLatestSnapshots(db,{now:later});
+      const restored=(await db.execute(sql`select m.review_status,a.duration_days from offer_matches m join offer_attributes a on a.offer_match_id=m.id`)).rows[0]!;
+      assert.equal(restored.review_status,'auto_approved');assert.notEqual(restored.duration_days,90);
     });
     await t.test('freshness transition alone publishes a version',async()=>{
       const changed=await publishLatestSnapshots(db,{now:new Date(later.getTime()+7*3600000)});
