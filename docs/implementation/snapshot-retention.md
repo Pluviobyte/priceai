@@ -77,3 +77,30 @@ node --import tsx scripts/snapshot-retention.mts --policy /受保护路径/reten
 - 本地214项通过、3项条件跳过；新增专项17项已验证，网关/观察器8项通过，CI类型、迁移、集成、构建、镜像及缓存复用全部通过。生产不构建。
 
 原工作区3个未推送提交未包含在本次上线。部署使用独立分支codex/snapshot-retention-release；原工作区已合并线上优化，私有提交保留且未推送，旧未提交副本保留在命名stash中。后续不要从原工作区直接推送main而意外带上这些提交。
+
+
+## New snapshot primary-key locality (2026-09-18)
+
+A guarded collector recovery was paused twice when host I/O wait remained above 10% for three 5-second samples, even with relay requests spaced 15 seconds apart. A live activity sample caught snapshot insertion. Cumulative index statistics showed 8,140,670 reads on the snapshot primary key versus 129,836 and 5,587 on its two generation indexes. These observations identify random primary-key access as a candidate bottleneck, not proof that all publication cost comes from it.
+
+New publication and legacy-backfill inserts now explicitly generate UUIDv7 IDs with a 48-bit publication timestamp and 74 per-row random bits from PostgreSQL gen_random_uuid(). The RFC variant is preserved. See RFC 9562 section 5.7: https://www.rfc-editor.org/rfc/rfc9562.html#name-uuid-version-7 . IDs within a millisecond are random, not strictly ordered. Existing UUIDs, constraints, publication IDs and API behavior remain unchanged. No migration, index rebuild, historical deletion or vacuum change is needed. Other insert paths retain the existing default.
+
+Local PostgreSQL 17 benchmark, shared_buffers=16MB: two separately seeded one-million-row tables with random UUID primary keys and 64-character payloads, CHECKPOINT before each 16,000-row insertion. Random IDs: 10,090 shared block reads, 10,400 dirtied blocks, WAL 30,825,254 bytes, 110ms. Time-local IDs: 7 reads, 316 dirtied blocks, WAL 3,652,037 bytes, 27ms. This isolates index locality; it excludes production secondary indexes, foreign keys, concurrency and storage latency, so these are not production speedup claims.
+
+Integration tests verify actual inserted snapshot UUID version/timestamp, per-row evaluation and 30,000 unique IDs across three timestamp boundaries, invalid timestamps, existing deduplication, rollback and bounded retention behavior. Deployment and guarded recovery results must be recorded separately; local evidence alone is not production acceptance.
+
+
+### Production observation and remaining publication writes
+
+UUID locality commit b08a5b9 passed CI 35314430369 and deployed with fingerprint 5376027d36b9b3e4139cc3b7769933af32821db9df480028a811a2b3cdda6c27. One actual 16,453-row generation contained only UUIDv7 snapshot IDs; two release windows incurred only 14 additional primary-key block reads. Publication still took 65–73 seconds. Guarded collector recovery subsequently paused on three consecutive 5-second I/O samples above 10%. The first pause overlapped the first completed automatic vacuum of published_offer_snapshots (completed 06:36:52 UTC, Sep 18); a later trial after its completion also paused. This is partial improvement, not completed recovery. Vacuum was neither cancelled nor tuned.
+
+The next change preloads current offers and matching/attribute rows (raw ID queries chunked to 5,000), then avoids match and attribute UPSERTs when computed fields are unchanged. Classification, overrides, anomaly handling, live freshness and price history remain evaluated. A PostgreSQL xmin regression test failed with the old implementation and passes when unchanged rows are reused; override changes/revocation and missing attribute repair are covered. This change also requires guarded production validation.
+
+
+## Publication optimization final state — Sep 18, 2026 15:00 CST
+
+Two focused fixes are deployed: b08a5b9 (snapshot UUID locality, CI 35314430369) and 746008704c9f1d7e2910f6f9bca583827c88fd11 (reuse unchanged matches/attributes, CI https://github.com/Pluviobyte/priceai/actions/runs/35316269470). Both CIs completed successfully on the first attempt; production did not build images. Final release fingerprint: 20565c334082be950d3abe3c15971291e5f0325cebd8304ca177e500c13d9387. Local final checks: 217 passed, 3 conditional skips, typecheck passed. No migrations, historical deletion, vacuum tuning or index rebuild.
+
+Final guarded trial began 06:55:10 UTC with 15-second Hangzhou pacing. Four natural publications completed in 41.0/37.0/38.0/37.5 seconds versus the earlier 80–89 seconds; these are short observational samples, not controlled throughput measurements. Four source crawls succeeded (two Hangzhou, two other hosts). Persistent I/O wait above 10% for three 5-second samples subsequently stopped the DMIT tunnel at approximately 06:59:20 UTC. Maximum sampled I/O wait in this trial was 27.3%, minimum available memory 1142MiB. An additional live sample found the Web catalog query waiting on DataFileRead; remaining host I/O cannot all be attributed to snapshot insertion.
+
+**Continuous recovery is NOT complete.** DMIT tunnel is inactive; Hangzhou relay was also stopped after the guard pause. Its persisted pacing remains 15000ms; original2500ms backup /etc/priceai-egress/pacing-before-restore-20260918.conf. No more repeated starts are scheduled. Web/Official/Channel remain healthy, public health/database=ok. Approximately41minutes of 5-second observation detected no protected-container restart or health degradation (18 protected containers); this is not proof of zero business latency impact. Final disk about50.7GiB free. Temporary observer is stopped at task cleanup and its heartbeat removed after exit; no permanent dependency/freshness alert was added. Existing periodic checks remain. Next work needs low-load investigation of the broader publication/read workload before another recovery attempt; do not raise protection thresholds to claim success.

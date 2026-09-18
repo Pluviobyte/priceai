@@ -1,6 +1,8 @@
+import { isDeepStrictEqual } from 'node:util';
+import { snapshotIdSql } from './snapshot-id.js';
 import {latestCatalogRowSql} from './catalog-scope.js';
 import { catalogContentHash, offerContentHash } from './publication-content.js';
-import { and, eq, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
 import {
@@ -104,18 +106,30 @@ export async function publishLatestSnapshots(
     if (previousGenerationId && !previous?.contentHash) {
       await tx.execute(sql`
         insert into published_offer_snapshots (
-          publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+          id,publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
           latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
           freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
           offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
         )
-        select ${previousGenerationId}::uuid,id,source_id,source_item_id,canonical_product_id,
+        select ${snapshotIdSql(now)},${previousGenerationId}::uuid,id,source_id,source_item_id,canonical_product_id,
           latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
           freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
           offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}
         from offers where publish_generation_id=${previousGenerationId}::uuid
         on conflict (publish_generation_id,source_id,source_item_id) do nothing
       `);
+    }
+    // Read current rows once; a publication otherwise performs one lookup per item.
+    const currentOffers = await tx.select({id:offers.id,sourceId:offers.sourceId,
+      sourceItemId:offers.sourceItemId,price:offers.price,stockCount:offers.stockCount,
+      stockState:offers.stockState}).from(offers);
+    const existingOffers = new Map(currentOffers.map(offer => [JSON.stringify([offer.sourceId,offer.sourceItemId]),offer]));
+    const priorMatches = new Map<string, {match:typeof offerMatches.$inferSelect; attributes:typeof offerAttributes.$inferSelect|null}>();
+    for (let offset=0;offset<rows.length;offset+=5000) {
+      const previousRows=await tx.select({match:offerMatches,attributes:offerAttributes})
+        .from(offerMatches).leftJoin(offerAttributes,eq(offerAttributes.offerMatchId,offerMatches.id))
+        .where(inArray(offerMatches.rawOfferSnapshotId,rows.slice(offset,offset+5000).map(row=>row.raw.id)));
+      for(const previousRow of previousRows) priorMatches.set(previousRow.match.rawOfferSnapshotId,previousRow);
     }
     const productIds = new Set<string>();
     const sourceIds = new Set<string>();
@@ -143,21 +157,7 @@ export async function publishLatestSnapshots(
         capturedAt: row.raw.capturedAt.toISOString(),
         rawPayloadHash: row.raw.rawPayloadHash,
       });
-      const [existing] = await tx
-        .select({
-          id: offers.id,
-          price: offers.price,
-          stockCount: offers.stockCount,
-          stockState: offers.stockState,
-        })
-        .from(offers)
-        .where(
-          and(
-            eq(offers.sourceId, row.source.id),
-            eq(offers.sourceItemId, raw.sourceItemId),
-          ),
-        )
-        .limit(1);
+      const existing = existingOffers.get(JSON.stringify([row.source.id,raw.sourceItemId]));
       const automaticClassification = classifyOffer(raw);
       const classificationOverride = overrideBySourceItem.get(
         `${row.source.id}:${raw.sourceItemId}`,
@@ -262,69 +262,21 @@ export async function publishLatestSnapshots(
             },
           });
       }
-      const [match] = await tx
-        .insert(offerMatches)
-        .values({
-          rawOfferSnapshotId: row.raw.id,
-          ...(product ? { canonicalProductId: product.id } : {}),
-          confidence: String(classification.confidence),
-          matchedRules: classification.matchedRules,
-          conflictingSignals: classification.conflictingSignals,
-          classifierVersion: classification.classifierVersion,
-          reviewStatus,
-        })
-        .onConflictDoUpdate({
-          target: offerMatches.rawOfferSnapshotId,
-          set: {
-            ...(product ? { canonicalProductId: product.id } : { canonicalProductId: null }),
-            confidence: String(classification.confidence),
-            matchedRules: classification.matchedRules,
-            conflictingSignals: classification.conflictingSignals,
-            classifierVersion: classification.classifierVersion,
-            reviewStatus,
-          },
-        })
-        .returning({ id: offerMatches.id });
-      if (!match) throw new Error("offer_match_upsert_failed");
+      const previousMatch=priorMatches.get(row.raw.id);
+      const matchValues={canonicalProductId:product?.id??null,
+        confidence:String(classification.confidence),matchedRules:classification.matchedRules,
+        conflictingSignals:classification.conflictingSignals,classifierVersion:classification.classifierVersion,reviewStatus};
+      const sameMatch=previousMatch && Number(previousMatch.match.confidence)===Number(matchValues.confidence)
+        && Object.entries(matchValues).filter(([key])=>key!=='confidence').every(([key,value])=>
+          isDeepStrictEqual(previousMatch.match[key as keyof typeof previousMatch.match],value));
+      const [match] = sameMatch ? [previousMatch.match] : await tx
+        .insert(offerMatches).values({rawOfferSnapshotId:row.raw.id,...matchValues})
+        .onConflictDoUpdate({target:offerMatches.rawOfferSnapshotId,set:matchValues})
+        .returning({id:offerMatches.id});
+      if(!match) throw new Error('offer_match_upsert_failed');
 
       const attributes = classification.attributes;
-      await tx
-        .insert(offerAttributes)
-        .values({
-          offerMatchId: match.id,
-          offerMode: attributes.offerMode,
-          ...(attributes.durationDays !== undefined
-            ? { durationDays: attributes.durationDays }
-            : {}),
-          ...(attributes.region ? { region: attributes.region } : {}),
-          accountOwnership: attributes.accountOwnership,
-          ...(attributes.phoneBound !== undefined ? { phoneBound: attributes.phoneBound } : {}),
-          ...(attributes.emailType ? { emailType: attributes.emailType } : {}),
-          warrantyType: attributes.warrantyType,
-          ...(attributes.warrantyHours !== undefined
-            ? { warrantyHours: attributes.warrantyHours }
-            : {}),
-          ...(attributes.autoDelivery !== undefined
-            ? { autoDelivery: attributes.autoDelivery }
-            : {}),
-          ...(attributes.webAvailable !== undefined
-            ? { webAvailable: attributes.webAvailable }
-            : {}),
-          ...(attributes.desktopAvailable !== undefined
-            ? { desktopAvailable: attributes.desktopAvailable }
-            : {}),
-          ...(attributes.apiAvailable !== undefined
-            ? { apiAvailable: attributes.apiAvailable }
-            : {}),
-          ...(attributes.shared !== undefined ? { shared: attributes.shared } : {}),
-          ...(attributes.invoiceAvailable !== undefined
-            ? { invoiceAvailable: attributes.invoiceAvailable }
-            : {}),
-          riskFacts: attributes.riskFacts,
-        })
-        .onConflictDoUpdate({
-          target: offerAttributes.offerMatchId,
-          set: {
+      const attributeValues={
             offerMode: attributes.offerMode,
             durationDays: attributes.durationDays ?? null,
             region: attributes.region ?? null,
@@ -340,8 +292,11 @@ export async function publishLatestSnapshots(
             shared: attributes.shared ?? null,
             invoiceAvailable: attributes.invoiceAvailable ?? null,
             riskFacts: attributes.riskFacts,
-          },
-        });
+      };
+      const sameAttributes=previousMatch?.attributes && Object.entries(attributeValues).every(([key,value])=>
+        isDeepStrictEqual(previousMatch.attributes![key as keyof typeof previousMatch.attributes],value));
+      if(!sameAttributes) await tx.insert(offerAttributes).values({offerMatchId:match.id,...attributeValues})
+        .onConflictDoUpdate({target:offerAttributes.offerMatchId,set:attributeValues});
 
       if (!product) {
         quarantinedCount += 1;
@@ -485,12 +440,12 @@ export async function publishLatestSnapshots(
     const delta = comparison?.rows[0] as {added:number;removed:number;changed:number} | undefined;
     await tx.execute(sql`
       insert into published_offer_snapshots (
-        publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
+        id,publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
         latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
         freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
         offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,captured_at
       )
-      select ${generation.id}::uuid,id,source_id,source_item_id,canonical_product_id,
+      select ${snapshotIdSql(now)},${generation.id}::uuid,id,source_id,source_item_id,canonical_product_id,
         latest_raw_snapshot_id,price,currency,stock_count,stock_state,availability_state,
         freshness_state,risk_facts,offer_mode,product_url,first_seen_at,last_seen_at,
         offer_verified_at,last_checked_at,classification_confidence,quarantine_reason,${now}
