@@ -1,3 +1,4 @@
+import { discoveryFailure } from "./discovery-policy.js";
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { discoveryRuns, sourceCandidates, sources, type Database } from "@price-radar/database";
@@ -91,10 +92,11 @@ function mergeEvidence(existing: DiscoveryEvidence[] | null | undefined, lead: C
   return list.slice(0, 50);
 }
 
-export async function ingestCandidateLeads(db: Database, leads: readonly CandidateLead[], runId?: string): Promise<IngestSummary> {
+export async function ingestCandidateLeads(db: Database, leads: readonly CandidateLead[], runId?: string, signal?: AbortSignal): Promise<IngestSummary> {
   const summary: IngestSummary = { considered: 0, inserted: 0, merged: 0, skippedKnownSource: 0, skippedInvalid: 0 };
   const seenInBatch = new Set<string>();
   for (const lead of leads) {
+    signal?.throwIfAborted();
     summary.considered += 1;
     const identity = leadIdentity(lead);
     if (!identity) {
@@ -153,6 +155,8 @@ export async function ingestCandidateLeads(db: Database, leads: readonly Candida
 }
 
 export interface DiscoveryRunInput {
+  ownership?: string;
+  consecutiveFailures?: number;
   kind: LeadDiscoveryKind;
   query: string;
   provider: string;
@@ -163,24 +167,27 @@ export async function recordDiscoveryRun(
   db: Database,
   input: DiscoveryRunInput,
   work: () => Promise<CandidateLead[]>,
+  signal?: AbortSignal,
 ): Promise<{ runId: string; resultCount: number; candidateCount: number; summary: IngestSummary }> {
-  const [run] = await db.insert(discoveryRuns).values({ kind: input.kind, query: input.query, provider: input.provider }).returning({ id: discoveryRuns.id });
+  const [run] = await db.insert(discoveryRuns).values({ kind: input.kind, query: input.query, provider: input.provider, evidence: input.ownership ? { ownership: input.ownership } : {} }).returning({ id: discoveryRuns.id });
   if (!run) throw new Error("discovery_run_insert_failed");
   try {
     const leads = await work();
-    const summary = await ingestCandidateLeads(db, leads.slice(0, 5_000), run.id);
+    const summary = await ingestCandidateLeads(db, leads.slice(0, 5_000), run.id, signal);
+    signal?.throwIfAborted();
     const digest = createHash("sha256").update(JSON.stringify(leads.map((lead) => lead.url))).digest("hex");
     await db.update(discoveryRuns).set({
       status: "success",
       resultCount: leads.length,
       candidateCount: summary.inserted,
-      evidence: { resultDigest: digest, ...summary },
+      evidence: { ...(input.ownership ? { ownership: input.ownership } : {}), resultDigest: digest, ...summary },
       finishedAt: new Date(),
     }).where(eq(discoveryRuns.id, run.id));
     return { runId: run.id, resultCount: leads.length, candidateCount: summary.inserted, summary };
   } catch (error) {
     await db.update(discoveryRuns).set({
       status: "failed",
+      evidence: { ...(input.ownership ? { ownership: input.ownership } : {}), ...discoveryFailure(error, new Date(), input.consecutiveFailures ?? 1) },
       errorMessage: error instanceof Error ? error.message.slice(0, 500) : "discovery_failed",
       finishedAt: new Date(),
     }).where(eq(discoveryRuns.id, run.id));

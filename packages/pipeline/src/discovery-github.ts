@@ -1,6 +1,8 @@
+import { runScheduledDiscovery } from "./discovery-schedule.js";
+import { DiscoveryHttpError } from "./discovery-policy.js";
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
-import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
+import type { CandidateLead } from "./candidates.js";
 import { extractMentionedUrlsWithContext, isUtilityHost, mentionLooksLikeShop } from "./discovery-links.js";
 
 /**
@@ -30,9 +32,10 @@ async function fetchText(url: string, signal: AbortSignal): Promise<string | nul
   return hostThrottle.run(target.hostname, async () => {
     const response = await fetch(target, { redirect: "follow", headers: { accept: "text/html,text/plain", "user-agent": USER_AGENT }, signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`github_http_${response.status}`);
+    if (!response.ok) throw new DiscoveryHttpError(`github_http_${response.status}`, response.status, response.headers.get("retry-after"));
     const text = await response.text();
-    return text.length > 2_000_000 ? null : text;
+    if (text.length > 2_000_000) throw new Error("github_response_too_large");
+    return text;
   }, signal);
 }
 
@@ -45,26 +48,20 @@ export interface GithubDiscoveryOptions {
 }
 
 export async function discoverGithubTopicReadmes(db: Database, options: GithubDiscoveryOptions = {}) {
-  const signal = options.signal ?? new AbortController().signal;
-  const now = options.now ?? new Date();
-  if (options.minIntervalMs) {
-    const last = await lastSuccessfulDiscoveryAt(db, GITHUB_TOPICS_PROVIDER);
-    if (last && now.getTime() - last.getTime() < options.minIntervalMs) return { status: "skipped" as const };
-  }
   const topics = (options.topics ?? DEFAULT_GITHUB_TOPICS).map((topic) => topic.trim()).filter((topic) => /^[a-z0-9-]{2,50}$/i.test(topic));
   const maxRepos = Math.max(1, options.maxRepositoriesPerTopic ?? 30);
   let repositoriesRead = 0;
-  const run = await recordDiscoveryRun(db, { kind: "community", query: `github topics: ${topics.join(",")}`, provider: GITHUB_TOPICS_PROVIDER }, async () => {
+  const run = await runScheduledDiscovery(db, { kind: "community", query: `github topics: ${topics.join(",")}`, provider: GITHUB_TOPICS_PROVIDER }, options, async (signal) => {
     const leads = new Map<string, CandidateLead>();
     const seenRepos = new Set<string>();
     for (const topic of topics) {
       signal.throwIfAborted();
-      const page = await fetchText(`https://github.com/topics/${encodeURIComponent(topic)}`, signal).catch((error: unknown) => { if (signal.aborted) throw error; return null; });
-      if (!page) continue;
+      const page = await fetchText(`https://github.com/topics/${encodeURIComponent(topic)}`, signal);
+      if (page === null) throw new Error(`github_topic_missing:${topic}`);
       for (const repo of parseTopicRepositories(page).slice(0, maxRepos)) {
         if (seenRepos.has(repo)) continue;
         seenRepos.add(repo);
-        const readme = await fetchText(`https://raw.githubusercontent.com/${repo}/HEAD/README.md`, signal).catch((error: unknown) => { if (signal.aborted) throw error; return null; });
+        const readme = await fetchText(`https://raw.githubusercontent.com/${repo}/HEAD/README.md`, signal);
         if (!readme) continue;
         repositoriesRead += 1;
         for (const mention of extractMentionedUrlsWithContext(readme, 120)) {
@@ -77,5 +74,6 @@ export async function discoverGithubTopicReadmes(db: Database, options: GithubDi
     }
     return [...leads.values()];
   });
-  return { status: "success" as const, ...run, repositoriesRead };
+  if (run.status !== "success") return run;
+  return { ...run, repositoriesRead };
 }

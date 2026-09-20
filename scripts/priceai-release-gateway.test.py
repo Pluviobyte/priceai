@@ -35,6 +35,15 @@ class ManifestValidation(unittest.TestCase):
                 path.write_text(json.dumps({'at': 95, 'healthy': True}))
                 gateway.observer_guard()
 
+    def test_discovery_monitor_executes_only_fixed_read_only_entrypoint(self):
+        calls = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return 'container123' if args[:2] == ['docker', 'ps'] else '{"healthy":true,"providers":[]}'
+        with patch.object(gateway, 'run', side_effect=fake_run):
+            self.assertTrue(gateway.discovery_status()['healthy'])
+        self.assertEqual(calls[1], ['docker', 'exec', 'container123', 'node', '--import', 'tsx', 'apps/worker/src/discovery-status.ts'])
+
     def manifest(self):
         return {'sha': 'a' * 40, 'release': 'b' * 64,
                 'web': 'ghcr.io/pluviobyte/priceai-web@sha256:' + 'c' * 64,

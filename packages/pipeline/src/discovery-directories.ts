@@ -1,6 +1,8 @@
+import { runScheduledDiscovery } from "./discovery-schedule.js";
+import { DiscoveryHttpError } from "./discovery-policy.js";
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
-import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
+import type { CandidateLead } from "./candidates.js";
 
 /**
  * Public shop directories maintained by other comparison sites. They are read
@@ -26,7 +28,7 @@ async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
       headers: { accept: "application/json", "user-agent": USER_AGENT },
       signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
     });
-    if (!response.ok) throw new Error(`directory_http_${response.status}:${target.hostname}`);
+    if (!response.ok) throw new DiscoveryHttpError(`directory_http_${response.status}:${target.hostname}`, response.status, response.headers.get("retry-after"));
     const text = await response.text();
     if (text.length > MAX_BYTES) throw new Error(`directory_too_large:${target.hostname}`);
     return JSON.parse(text) as unknown;
@@ -159,37 +161,33 @@ export function selectDirectoryProviders(env: NodeJS.ProcessEnv = process.env): 
 export interface DirectoryImportOptions {
   providers?: DirectoryProvider[];
   signal?: AbortSignal;
-  /** Skip providers whose last successful import is younger than this. */
+  /** Successful interval; failed attempts always obey their persisted cooldown. */
   minIntervalMs?: number;
   now?: Date;
 }
 
 export interface DirectoryImportResult {
   provider: string;
-  status: "success" | "skipped" | "failed";
+  status: "success" | "skipped" | "failed" | "deferred";
   resultCount?: number;
   candidateCount?: number;
   merged?: number;
   skippedKnownSource?: number;
   error?: string;
+  reason?: string;
+  retryAt?: string;
 }
 
 /** Imports every configured directory, one discovery run per provider. Failures never stop the others. */
 export async function importSourceDirectories(db: Database, options: DirectoryImportOptions = {}): Promise<DirectoryImportResult[]> {
   const providers = options.providers ?? selectDirectoryProviders();
   const signal = options.signal ?? new AbortController().signal;
-  const now = options.now ?? new Date();
   const results: DirectoryImportResult[] = [];
   for (const provider of providers) {
-    if (options.minIntervalMs) {
-      const last = await lastSuccessfulDiscoveryAt(db, provider.id);
-      if (last && now.getTime() - last.getTime() < options.minIntervalMs) {
-        results.push({ provider: provider.id, status: "skipped" });
-        continue;
-      }
-    }
     try {
-      const run = await recordDiscoveryRun(db, { kind: "directory", query: provider.homepage, provider: provider.id }, () => provider.fetchLeads(signal));
+      signal.throwIfAborted();
+      const run = await runScheduledDiscovery(db, { kind: "directory", query: provider.homepage, provider: provider.id }, options, attemptSignal => provider.fetchLeads(attemptSignal));
+      if (run.status !== "success") { results.push({ provider: provider.id, ...run }); continue; }
       results.push({ provider: provider.id, status: "success", resultCount: run.resultCount, candidateCount: run.candidateCount, merged: run.summary.merged, skippedKnownSource: run.summary.skippedKnownSource });
     } catch (error) {
       results.push({ provider: provider.id, status: "failed", error: error instanceof Error ? error.message : String(error) });

@@ -1,7 +1,9 @@
+import { boundedDiscoveryRead, runScheduledDiscovery } from "./discovery-schedule.js";
+import { DiscoveryHttpError } from "./discovery-policy.js";
 import { sql } from "drizzle-orm";
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
-import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
+import type { CandidateLead } from "./candidates.js";
 import { isUtilityHost, mentionLooksLikeShop } from "./discovery-links.js";
 
 /**
@@ -65,18 +67,19 @@ async function fetchChannelPage(handle: string, before: number | null, signal: A
   return hostThrottle.run(url.hostname, async () => {
     const response = await fetch(url, { redirect: "follow", headers: { accept: "text/html", "user-agent": USER_AGENT }, signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
     if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`telegram_http_${response.status}`);
+    if (!response.ok) throw new DiscoveryHttpError(`telegram_http_${response.status}`, response.status, response.headers.get("retry-after"));
     const text = await response.text();
-    return text.length > 4_000_000 ? null : text;
+    if (text.length > 4_000_000) throw new Error("telegram_response_too_large");
+    return text;
   }, signal);
 }
 
 /** Channel handles already mentioned by crawled catalogs and stored merchant contacts. */
 export async function telegramSeedHandles(db: Database, limit = 200): Promise<string[]> {
-  const { rows } = await db.execute<{ handle: string; mentions: number }>(sql`
+  const { rows } = await boundedDiscoveryRead(db, readDb => readDb.execute<{ handle: string; mentions: number }>(sql`
     with latest as (
-      select distinct on (s.id) s.id as source_id, r.id as run_id from sources s join crawl_runs r on r.source_id = s.id
-      where s.enabled and r.status = 'success' order by s.id, r.started_at desc
+      select s.id as source_id, s.latest_complete_run_id as run_id
+      from sources s where s.enabled and s.latest_complete_run_id is not null
     ), mentions as (
       select lower((regexp_matches(o.raw_description, '(?:t\\.me|telegram\\.me)/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})', 'gi'))[1]) as handle, l.source_id
       from raw_offer_snapshots o join latest l on l.run_id = o.crawl_run_id
@@ -86,7 +89,7 @@ export async function telegramSeedHandles(db: Database, limit = 200): Promise<st
     )
     select handle, count(distinct source_id) as mentions from mentions
     where handle ~ '^[a-z][a-z0-9_]{3,31}$'
-    group by handle order by mentions desc, handle limit ${limit}`);
+    group by handle order by mentions desc, handle limit ${limit}`));
   return rows.map((row) => row.handle);
 }
 
@@ -109,14 +112,8 @@ export interface TelegramDiscoveryReport {
 }
 
 export async function discoverTelegramChannels(db: Database, options: TelegramDiscoveryOptions = {}) {
-  const signal = options.signal ?? new AbortController().signal;
-  const now = options.now ?? new Date();
-  if (options.minIntervalMs) {
-    const last = await lastSuccessfulDiscoveryAt(db, TELEGRAM_CHANNEL_PROVIDER);
-    if (last && now.getTime() - last.getTime() < options.minIntervalMs) return { status: "skipped" as const };
-  }
   const report: TelegramDiscoveryReport = { channelsRead: 0, channelsMissing: 0, messages: 0, discoveredChannels: 0 };
-  const run = await recordDiscoveryRun(db, { kind: "community", query: "t.me/s public channels", provider: TELEGRAM_CHANNEL_PROVIDER }, async () => {
+  const run = await runScheduledDiscovery(db, { kind: "community", query: "t.me/s public channels", provider: TELEGRAM_CHANNEL_PROVIDER }, options, async (signal) => {
     const seeds = options.seedHandles ? [...options.seedHandles] : await telegramSeedHandles(db);
     const maxChannels = Math.max(1, options.maxChannels ?? 150);
     const maxPages = Math.max(1, options.maxPagesPerChannel ?? 3);
@@ -132,7 +129,7 @@ export async function discoverTelegramChannels(db: Database, options: TelegramDi
       visited.add(handle);
       let before: number | null = null;
       for (let page = 0; page < maxPages; page += 1) {
-        const html = await fetchChannelPage(handle, before, signal).catch((error: unknown) => { if (signal.aborted) throw error; return null; });
+        const html = await fetchChannelPage(handle, before, signal);
         if (html === null) { if (page === 0) report.channelsMissing += 1; break; }
         const parsed = parseTelegramChannelPage(html);
         if (page === 0) report.channelsRead += 1;
@@ -163,5 +160,6 @@ export async function discoverTelegramChannels(db: Database, options: TelegramDi
     report.discoveredChannels = discovered;
     return [...leads.values()];
   });
-  return { status: "success" as const, ...run, ...report };
+  if (run.status !== "success") return run;
+  return { ...run, ...report };
 }

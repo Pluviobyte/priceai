@@ -1,7 +1,9 @@
+import { runScheduledDiscovery } from "./discovery-schedule.js";
+import { DiscoveryHttpError, MARKETPLACE_DISABLED, DISCOVERY_DAY_MS } from "./discovery-policy.js";
 import { hostThrottle } from "@price-radar/collector-sdk";
 import type { Database } from "@price-radar/database";
 import { SIXTEEN688_FAMILY } from "@price-radar/source-signatures";
-import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
+import type { CandidateLead } from "./candidates.js";
 
 /**
  * 16688 exposes a public "source marketplace" (源头广场) that lists wholesale goods
@@ -29,7 +31,7 @@ async function post(path: string, body: unknown, signal: AbortSignal): Promise<u
       body: JSON.stringify(body),
       signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
     });
-    if (!response.ok) throw new Error(`16688_marketplace_http_${response.status}`);
+    if (!response.ok) throw new DiscoveryHttpError(`16688_marketplace_http_${response.status}`, response.status, response.headers.get("retry-after"));
     const envelope = (await response.json()) as Envelope;
     if (envelope.code !== 1) throw new Error(`16688_marketplace_rejected:${envelope.msg ?? "unknown"}`);
     return envelope.data;
@@ -72,13 +74,7 @@ export interface Enumerate16688Options {
 }
 
 export async function enumerate16688SourceMarketplace(db: Database, options: Enumerate16688Options = {}) {
-  const signal = options.signal ?? new AbortController().signal;
-  const now = options.now ?? new Date();
-  if (options.minIntervalMs) {
-    const last = await lastSuccessfulDiscoveryAt(db, SIXTEEN688_MARKETPLACE_PROVIDER);
-    if (last && now.getTime() - last.getTime() < options.minIntervalMs) return { status: "skipped" as const };
-  }
-  const run = await recordDiscoveryRun(db, { kind: "platform", query: `${ORIGIN}/source`, provider: SIXTEEN688_MARKETPLACE_PROVIDER }, async () => {
+  const run = await runScheduledDiscovery(db, { kind: "platform", query: `${ORIGIN}/source`, provider: SIXTEEN688_MARKETPLACE_PROVIDER }, options, async (signal) => {
     const categories = parseCategoryTree(await post("/index/SourceCategory/tree", {}, signal));
     const selected = options.allCategories ? categories : categories.filter((category) => category.name === AI_CATEGORY_NAME);
     const maxPages = Math.max(1, options.maxPagesPerCategory ?? 25);
@@ -99,7 +95,7 @@ export async function enumerate16688SourceMarketplace(db: Database, options: Enu
           let shopNo = merchantNo ? shopByMerchant.get(merchantNo) : undefined;
           let shopName: string | undefined;
           if (!shopNo) {
-            const detail = await post("/shopApi/goods/detail", { goods_no: goodsNo }, signal).catch(() => null);
+            const detail = await post("/shopApi/goods/detail", { goods_no: goodsNo }, signal);
             if (!isRecord(detail) || typeof detail.shop_no !== "string" || !detail.shop_no.trim()) continue;
             shopNo = detail.shop_no.trim();
             shopName = typeof detail.shop_alias === "string" && detail.shop_alias.trim() ? detail.shop_alias.trim() : undefined;
@@ -120,6 +116,13 @@ export async function enumerate16688SourceMarketplace(db: Database, options: Enu
       }
     }
     return leads;
+  }).catch((error: unknown) => {
+    // recordDiscoveryRun already persisted the failed attempt. Do not invent a
+    // successful empty discovery or turn this upstream switch into a worker fault.
+    if (error instanceof Error && error.message === MARKETPLACE_DISABLED) {
+      return { status: "unavailable" as const, reason: "marketplace_disabled", retryAt: new Date(Date.now() + DISCOVERY_DAY_MS).toISOString() };
+    }
+    throw error;
   });
-  return { status: "success" as const, ...run };
+  return run;
 }

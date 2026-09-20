@@ -1,7 +1,8 @@
+import { boundedDiscoveryRead, runScheduledDiscovery } from "./discovery-schedule.js";
 import { sql } from "drizzle-orm";
 import type { Database } from "@price-radar/database";
 import { PLATFORM_FAMILIES } from "@price-radar/source-signatures";
-import { lastSuccessfulDiscoveryAt, recordDiscoveryRun, type CandidateLead } from "./candidates.js";
+import type { CandidateLead } from "./candidates.js";
 
 /**
  * Autonomous discovery from data we already hold: merchants routinely mention
@@ -186,28 +187,22 @@ export interface CrawledLinksDiscoveryOptions {
 
 /** Reads the latest complete catalog of every enabled source and ingests the shops they link to. */
 export async function mineCrawledCatalogLinks(db: Database, options: CrawledLinksDiscoveryOptions = {}) {
-  const now = options.now ?? new Date();
-  if (options.minIntervalMs) {
-    const last = await lastSuccessfulDiscoveryAt(db, CRAWLED_LINKS_PROVIDER);
-    if (last && now.getTime() - last.getTime() < options.minIntervalMs) return { status: "skipped" as const };
-  }
   const maxRows = Math.max(1_000, Math.min(options.maxRows ?? 200_000, 1_000_000));
-  const run = await recordDiscoveryRun(db, { kind: "crawl", query: "raw_offer_snapshots.description_links", provider: CRAWLED_LINKS_PROVIDER }, async () => {
-    options.signal?.throwIfAborted();
-    const { rows } = await db.execute<{ source_id: string; source_host: string; source_entry_url: string; product_url: string; raw_description: string | null }>(sql`
+  const run = await runScheduledDiscovery(db, { kind: "crawl", query: "raw_offer_snapshots.description_links", provider: CRAWLED_LINKS_PROVIDER }, options, async (signal) => {
+    signal.throwIfAborted();
+    const { rows } = await boundedDiscoveryRead(db, readDb => readDb.execute<{ source_id: string; source_host: string; source_entry_url: string; product_url: string; raw_description: string | null }>(sql`
       with latest as (
-        select distinct on (s.id) s.id as source_id, r.id as run_id, s.canonical_entry_url as source_entry_url,
+        select s.id as source_id, s.latest_complete_run_id as run_id, s.canonical_entry_url as source_entry_url,
           lower(split_part(split_part(s.canonical_entry_url, '://', 2), '/', 1)) as source_host
-        from sources s join crawl_runs r on r.source_id = s.id
-        where s.enabled and r.status = 'success' and r.complete_snapshot
-        order by s.id, r.started_at desc
+        from sources s where s.enabled and s.latest_complete_run_id is not null
       )
       select l.source_id, l.source_host, l.source_entry_url, o.product_url, o.raw_description
       from raw_offer_snapshots o join latest l on l.run_id = o.crawl_run_id
       where o.raw_description ~* '(https?://|\\.(?:com|cn|net|xyz|top|shop|vip|cc|io|me|site|store|app|club|link|online|pro|fun|run|live|show|team|cyou|icu|art|win|tech|cloud|dev|one|ai|codes)\\b)'
-      limit ${maxRows}`);
+      limit ${maxRows}`));
     const leads = leadsFromCrawledRows(rows.map((row) => ({ sourceId: row.source_id, sourceHost: row.source_host, sourceEntryUrl: row.source_entry_url, productUrl: row.product_url, rawDescription: row.raw_description })));
     return leads.map(({ mentionedBy: _mentionedBy, ...lead }) => lead);
   });
-  return { status: "success" as const, ...run };
+  if (run.status !== "success") return run;
+  return { ...run };
 }

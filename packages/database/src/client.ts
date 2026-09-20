@@ -3,11 +3,11 @@ import { Pool } from "pg";
 import * as schema from "./schema.js";
 
 export interface DatabaseHandle {
-  db: NodePgDatabase<typeof schema>;
+  db: Database;
   close(): Promise<void>;
 }
 
-export type Database = NodePgDatabase<typeof schema>;
+export type Database = NodePgDatabase<typeof schema> & { $client?: Pool };
 
 export function createDatabase(databaseUrl: string): DatabaseHandle {
   const pool = new Pool({ connectionString: databaseUrl });

@@ -112,6 +112,16 @@ def status():
     return result
 
 
+def discovery_status():
+    # Fixed executable in the deployed image; no user-supplied command or SQL.
+    service = APPS[2][2]
+    cids = run(['docker', 'ps', '-q', '--filter', 'label=com.docker.swarm.service.name=' + service]).split()
+    if len(cids) != 1:
+        raise RuntimeError('Channel worker is not uniquely running')
+    return json.loads(run(['docker', 'exec', cids[0], 'node', '--import', 'tsx',
+                          'apps/worker/src/discovery-status.ts'], timeout=60))
+
+
 def wait_service(service, image, timeout=360):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -240,6 +250,9 @@ def main():
         raise ValueError('Manifest too large')
     incoming = json.loads(raw)
     action = incoming.get('action')
+    if action == 'discovery-status':
+        print(json.dumps(discovery_status()))
+        return
     if action == 'status':
         print(json.dumps(status()))
         return

@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
-      - name: Check disk, services and public database readiness
+      - name: Check capacity, public readiness and discovery scheduling
         env:
           DEPLOY_KEY: ${{ secrets.PRICEAI_DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.PRICEAI_DEPLOY_KNOWN_HOSTS }}
@@ -29,4 +29,7 @@ jobs:
           chmod 600 ~/.ssh/priceai_deploy
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           trap 'rm -f ~/.ssh/priceai_deploy' EXIT
-          printf '%s' '{"action":"status"}' | ssh -T -i ~/.ssh/priceai_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 root@64.186.227.21 | node scripts/check-production-status.mjs
+          failed=0
+          printf '%s' '{"action":"status"}' | ssh -T -i ~/.ssh/priceai_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 root@64.186.227.21 | node scripts/check-production-status.mjs || failed=1
+          printf '%s' '{"action":"discovery-status"}' | ssh -T -i ~/.ssh/priceai_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 root@64.186.227.21 | node scripts/check-discovery-status.mjs || failed=1
+          exit "$failed"

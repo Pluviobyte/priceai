@@ -1,3 +1,4 @@
+import { runDiscoveryLoop, runDiscoveryPass } from "./discovery-scheduler.js";
 import { sql } from 'drizzle-orm';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Database } from '@price-radar/database';
@@ -5,7 +6,7 @@ import type { CollectorRegistry } from '@price-radar/collector-sdk';
 import { crawlSource, vetCandidate, prepareVettingQueue, findChannelWork, recoverClearedPlatformCandidates,
   recoverAdmissionCandidates, recoverGrowthCandidates, measureCatalogGrowth, publishLatestSnapshots, seedCanonicalProducts,
   storePublicGenerationSnapshot, evaluatePriceAlerts, refreshSourceQualityProfiles,
-  repairShopApiEntryUrls, importSourceDirectories, enumerate16688SourceMarketplace } from '@price-radar/pipeline';
+  repairShopApiEntryUrls } from '@price-radar/pipeline';
 import type { WorkerConfig } from './config.js';
 import type { ChannelCycleOptions } from './channel-cycle.js';
 import { dispatchContinuously, IncrementalPublisher } from './channel-execution.js';
@@ -38,16 +39,16 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
     await refreshSourceQualityProfiles(db,{limit:10,maxAgeMs:config.qualityProfileMaxAgeMs});
     const repair=await repairShopApiEntryUrls(db,registry,{limit:10,signal});
     if(repair.repaired)log({event:"entry_urls_repaired",...repair});
-    if(config.sourceDiscoveryEnabled&&!options.skipDiscovery){
-      await importSourceDirectories(db,{signal,minIntervalMs:config.sourceDirectoryImportIntervalMs});
-      await enumerate16688SourceMarketplace(db,{signal,minIntervalMs:config.sourceDirectoryImportIntervalMs});
-    }
+
   };
   await prepareVettingQueue(db);
   const recovered=await recoverClearedPlatformCandidates(db,1000);
   if(recovered.requeued)log({event:'platform_candidates_recovered',...recovered});
   let stopping=false;
   const maintenanceAbort=new AbortController();
+  const discoverySignal=AbortSignal.any([signal,maintenanceAbort.signal]);
+  const discovery=runDiscoveryLoop(()=>runDiscoveryPass(db,config,{...options,signal:discoverySignal}),discoverySignal,
+    error=>log({event:'discovery_scheduler_failed',error:String(error)}));
   const maintenance=(async()=>{
     while(!stopping&&!signal.aborted){
       await delay(60_000,undefined,{signal:AbortSignal.any([signal,maintenanceAbort.signal])}).catch(()=>undefined);
@@ -79,7 +80,7 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
         }
       }});
   }finally{
-    stopping=true;maintenanceAbort.abort();await maintenance;await publisher.flush();
+    stopping=true;maintenanceAbort.abort();await Promise.allSettled([maintenance,discovery]);await publisher.flush();
   }
   return {crawl:{attempted:totals.attempted,complete:totals.complete,failed:totals.failed}};
 }
