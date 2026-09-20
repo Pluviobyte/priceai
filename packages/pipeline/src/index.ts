@@ -21,3 +21,5 @@ export * from "./vetting.js";
 export * from './platform-policy.js';
 
 export { measureCatalogGrowth, recoverGrowthCandidates, recoverClearedPlatformCandidates, recoverAdmissionCandidates, recoverClassifierCandidates, retireUtilityHostCandidates } from './growth.js';
+
+export { readDiscoveryHealth } from "./discovery-health.js";

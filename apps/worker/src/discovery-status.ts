@@ -1,8 +1,7 @@
 /** Read-only entry point for the restricted production monitor. Never runs discovery. */
 import { stat } from "node:fs/promises";
 import { createDatabase } from "@price-radar/database";
-import { DIRECTORY_PROVIDERS, selectDirectoryProviders } from "@price-radar/pipeline";
-import { readDiscoveryHealth } from "../../../packages/pipeline/src/discovery-health.js";
+import { DIRECTORY_PROVIDERS, selectDirectoryProviders, readDiscoveryHealth } from "@price-radar/pipeline";
 import { readWorkerConfig } from "./config.js";
 const config=readWorkerConfig();
 const enabledDirectories=new Set(selectDirectoryProviders().map(provider=>provider.id));
