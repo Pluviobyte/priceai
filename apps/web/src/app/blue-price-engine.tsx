@@ -74,7 +74,7 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
         : <><strong>{row.offerCount}</strong><small>{row.inStockMerchantCount} 家有货</small></>}
     </div>
 
-    <Link className="blue-engine-view" href={`/products/${row.slug}`}>看全部报价</Link>
+    <Link className="blue-engine-view" href={`/products/${row.slug}`} prefetch={false}>看全部报价</Link>
   </div>;
 }
 
