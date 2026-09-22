@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {buildHomeBaseline, type HomeOffer} from "./home-snapshot";
+import { createAsyncCache } from "./async-cache";
+import {buildHomeBaseline, readHomeSnapshot, type HomeOffer, type HomeSnapshot} from "./home-snapshot";
+
+const emptySnapshot = (): HomeSnapshot => ({ baseline: [], changes: [], coverage: {
+ verifiedOfferCount:0,activeSourceCount:0,officialVendorCount:0,publishedAt:null,
+}, placeholder:false });
 
 test("home minimum, merchant and distribution belong to the same delivery mode",()=>{
  const base:HomeOffer={id:"a",slug:"chatgpt-plus",price:"50",currency:"CNY",mode:"recharge",merchant_id:"m1",merchant_name:"甲",warranty_type:"none",verified_at:new Date()};
@@ -46,4 +51,29 @@ test("official regular and floor use current, verified monthly prices with separ
  assert.equal(noUS.official,null);
  assert.equal(noUS.officialFloor?.cny,100);
  assert.equal(buildHomeBaseline([],[])[0]!.officialFloor,null);
+});
+
+test("homepage returns an uncached degraded snapshot when pointer verification fails", async () => {
+ const cache=createAsyncCache<string,HomeSnapshot>({ttlMs:1000,maxEntries:2,shouldCache:value=>!value.warnings?.length});
+ let pointers=0,loads=0;
+ const snapshot=await readHomeSnapshot({
+  cache,
+  getPointer:async()=>{pointers++;if(pointers===2)throw new Error("temporary");return {generation_id:"a"};},
+  load:async generationId=>{loads++;assert.equal(generationId,"a");return emptySnapshot();},
+ });
+ assert.deepEqual(snapshot.warnings,["发布版本复核暂时失败"]);
+ assert.equal(cache.stats().size,0);
+ assert.equal(loads,1);
+});
+
+test("homepage retries a publication switch with the new exact generation", async () => {
+ const cache=createAsyncCache<string,HomeSnapshot>({ttlMs:1000,maxEntries:2});
+ const pointers=["a","b","b","b"],loads:Array<string|undefined>=[];
+ const snapshot=await readHomeSnapshot({
+  cache,
+  getPointer:async()=>({generation_id:pointers.shift()??"b"}),
+  load:async generationId=>{loads.push(generationId);return emptySnapshot();},
+ });
+ assert.equal(snapshot.placeholder,false);
+ assert.deepEqual(loads,["a","b"]);
 });

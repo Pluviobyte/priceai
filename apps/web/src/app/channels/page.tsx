@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import type { ComponentProps } from "react";
 import NextLink from "next/link";
-import { getChannelCatalog, type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
+import { type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
+import { getCachedChannelCatalog } from "@/lib/catalog-read-cache";
 import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PAGE_SIZES, CHANNEL_CATEGORIES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
 import { ModelIcon, type ModelIconName } from "../model-icons";
 import { SiteFooter } from "../site-footer";
@@ -110,7 +111,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   const view = catalogView(filters);
   let failed = false;
   let data: ChannelCatalog = { rows: [], total: 0, page: 1, pageSize: filters.pageSize, offerCount: 0, merchantCount: 0, availableCount: 0, latest: null, spec: null };
-  try { data = await getChannelCatalog(filters); } catch (error) { failed = true; console.error("Channel catalog unavailable", error instanceof Error ? error.message : "unknown error"); }
+  try { data = await getCachedChannelCatalog(filters); } catch (error) { failed = true; console.error("Channel catalog unavailable", error instanceof Error ? error.message : "unknown error"); }
   const chips = activeChannelChips(filters);
   const hasFilters = chips.length > 0 || Boolean(filters.spec);
   const resultUnit = view === "merchants" ? "家商家" : view === "offers" ? "条报价" : "组规格";

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Client, type QueryResultRow } from "pg";
 import { getChannelCatalog } from "../src/lib/channel-catalog";
+import { buildChannelCatalog, loadChannelReadModel } from "../src/lib/channel-read-model";
 import { activeChannelChips, catalogView, parseChannelFilters, channelHref, channelMoney } from "../src/lib/channel-filters";
 
 test("filter URLs preserve constraints, reset pagination and reject unsupported input", () => {
@@ -75,13 +76,14 @@ test("every narrowing is offered back as a removable chip", () => {
 });
 
 test("published channel catalog queries against PostgreSQL", { skip: !process.env.CHANNEL_TEST_DATABASE_URL }, async (t) => {
+  const generationId = "00000000-0000-4000-8000-000000000001";
   const db = new Client({ connectionString: process.env.CHANNEL_TEST_DATABASE_URL });
   await db.connect();
   const read = async <Row extends QueryResultRow>(sql: string, values: readonly unknown[] = []): Promise<Row[]> => (await db.query<Row>(sql, [...values])).rows;
   try {
     // Session-local tables: tests never write application tables or publish fixtures.
     await db.query(`
-      create temp table publication_channels(channel text,current_generation_id text);
+      create temp table publication_channels(channel text,current_generation_id uuid);
       create temp table canonical_products(id text,slug text,display_name text,brand text,status text,category text);
       create temp table sources(id text,merchant_id text,enabled boolean,health_status text,canonical_entry_url text);
       create temp table merchants(id text,slug text,name text,status text);
@@ -90,8 +92,8 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       create temp table offer_attributes(offer_match_id text,duration_days int,region text,account_ownership text,warranty_type text,warranty_hours int);
       create temp table offers(id text,canonical_product_id text,source_id text,latest_raw_snapshot_id text,
         offer_mode text,currency text,price numeric,stock_state text,stock_count int,offer_verified_at timestamptz,
-        availability_state text,risk_facts jsonb,publish_generation_id text);
-      insert into publication_channels values ('card_prices','live');
+        availability_state text,risk_facts jsonb,publish_generation_id uuid);
+      insert into publication_channels values ('card_prices','00000000-0000-4000-8000-000000000001');
       insert into canonical_products values ('p1','chatgpt-plus','ChatGPT Plus','OpenAI','active','chatgpt'),('p2','claude-pro','Claude Pro','Anthropic','active','claude');
       insert into merchants values ('m1','shop-a','卡网 A','active'),('m2','shop-b','卡网 B','active');
       insert into sources values ('s1','m1',true,'healthy','https://shop-a.example/shop/A'),('s2','m2',true,'healthy','https://shop-b.example/shop/B'),('disabled','m1',false,'healthy','https://shop-a.example/shop/X');
@@ -100,8 +102,8 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       await db.query("insert into raw_offer_snapshots values ($1,$2)", [id, `${id} 原始商品`]);
       await db.query("insert into offer_matches values ($1,$1)", [id]);
       await db.query("insert into offer_attributes values ($1,$2,$3,'buyer',$4,null)", [id, options.days === undefined ? 30 : options.days, options.region ?? "HK", options.warranty ?? "subscription_period"]);
-      await db.query(`insert into offers values ($1,$2,$3,$1,$4,$5,$6,$7,$8,now()-($9::text||' hours')::interval,$10,'[]','live')`,
-        [id, options.product ?? "p1", options.source ?? "s1", options.mode ?? "recharge", options.currency ?? "CNY", price, options.stock ?? "in_stock", options.count ?? 10, options.hours ?? 1, options.state ?? "purchasable"]);
+      await db.query(`insert into offers values ($1,$2,$3,$1,$4,$5,$6,$7,$8,now()-($9::text||' hours')::interval,$10,'[]',$11::uuid)`,
+        [id, options.product ?? "p1", options.source ?? "s1", options.mode ?? "recharge", options.currency ?? "CNY", price, options.stock ?? "in_stock", options.count ?? 10, options.hours ?? 1, options.state ?? "purchasable", generationId]);
     }
     await offer("normal", 100);
     await offer("cheap", 80, { source: "s2" });
@@ -306,6 +308,41 @@ test("published channel catalog queries against PostgreSQL", { skip: !process.en
       const subscriptions=await getChannelCatalog(parseChannelFilters({}),read);
       assert.equal(subscriptions.rows.filter(row=>row.product_slug==='chatgpt-plus'&&row.currency==='CNY').length,1,
         'a product occupies exactly one row per currency');
+    });
+    await t.test("generation read model matches SQL catalog behavior", async () => {
+      const model = await loadChannelReadModel(generationId, read);
+      assert.equal(model.generationId, generationId);
+      const cases = [
+        parseChannelFilters({}),
+        parseChannelFilters({ group: "expanded", stock: "available", currency: "CNY", sort: "price" }),
+        parseChannelFilters({ view: "merchants", sort: "low_price" }),
+        parseChannelFilters({ category: "mail" }),
+        parseChannelFilters({ q: "卡网 A", duration: "30" }),
+      ];
+      const rowShape = (row: Record<string, unknown>) => ({
+        id: row.id,
+        currency: row.currency, price: row.price === null ? null : Number(row.price),
+        offer_count: row.offer_count, available_count: row.available_count,
+        merchant_count: row.merchant_count, comparable_count: row.comparable_count ?? 0,
+        lowest_count: row.lowest_count ?? 0, top_five_count: row.top_five_count ?? 0,
+      });
+      for (const filters of cases) {
+        const expected = await getChannelCatalog(filters, read);
+        const actual = buildChannelCatalog(model, filters);
+        assert.deepEqual({ total: actual.total, page: actual.page, offerCount: actual.offerCount,
+          merchantCount: actual.merchantCount, availableCount: actual.availableCount },
+        { total: expected.total, page: expected.page, offerCount: expected.offerCount,
+          merchantCount: expected.merchantCount, availableCount: expected.availableCount });
+        assert.deepEqual(actual.rows.map(row => rowShape(row as unknown as Record<string, unknown>)),
+          expected.rows.map(row => rowShape(row as unknown as Record<string, unknown>)));
+      }
+    });
+    await t.test("empty published generation retains its identity", async () => {
+      await db.query("delete from offers");
+      const model = await loadChannelReadModel(generationId, read);
+      assert.equal(model.generationId, generationId);
+      assert.deepEqual(model.offers, []);
+      assert.equal(buildChannelCatalog(model, parseChannelFilters({})).total, 0);
     });
   } finally { await db.end(); }
 });

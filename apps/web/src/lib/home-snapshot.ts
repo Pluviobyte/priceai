@@ -1,8 +1,10 @@
 import { officialPriceHref } from "./official-subscription-links";
 import type { OfferMode } from "@price-radar/schema";
 
+import { createAsyncCache, type AsyncCache } from "./async-cache";
 import { query } from "./database";
-import { getPublicCatalog, getPublicMarketChanges } from "./public-catalog";
+import { getPublicMarketChanges } from "./public-catalog";
+import { getPublicationPointer } from "./publication-state";
 import { getCachedOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
 
 /** 把 10 种 offerMode 归成 4 类“账号最后归谁”，这是首页解释差价用的口径。 */
@@ -100,6 +102,12 @@ export interface HomeOffer {
   merchant_id: string; merchant_name: string; warranty_type: string; verified_at: Date;
 }
 
+interface HomeCoverage {
+  verified_offer_count: string;
+  active_source_count: string;
+  published_at: Date | null;
+}
+
 export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: HomeOffer[]): BaselineRow[] {
   return PLACEHOLDER.baseline.map(base => {
     const officialPrices = prices.filter(p => p.planCode === PLAN_CODES[base.slug] && p.billingPeriod === "month"
@@ -133,13 +141,39 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
   });
 }
 
-export async function getHomeSnapshot(): Promise<HomeSnapshot> {
+const globalForHomeCache = globalThis as typeof globalThis & {
+  priceRadarHomeCache?: ReturnType<typeof createAsyncCache<string, HomeSnapshot>>;
+  priceRadarMarketChangesCache?: ReturnType<typeof createAsyncCache<string, Awaited<ReturnType<typeof getPublicMarketChanges>>>>;
+};
+const homeCache = globalForHomeCache.priceRadarHomeCache ?? createAsyncCache<string, HomeSnapshot>({
+  ttlMs: 30_000,
+  maxEntries: 4,
+  shouldCache: snapshot => !snapshot.placeholder && !snapshot.warnings?.length,
+});
+globalForHomeCache.priceRadarHomeCache = homeCache;
+const marketChangesCache = globalForHomeCache.priceRadarMarketChangesCache
+  ?? createAsyncCache<string, Awaited<ReturnType<typeof getPublicMarketChanges>>>({ ttlMs: 5 * 60_000, maxEntries: 1 });
+globalForHomeCache.priceRadarMarketChangesCache = marketChangesCache;
+
+async function loadHomeSnapshot(generationId?: string): Promise<HomeSnapshot> {
+  const channelJoin = generationId ? "" : "join publication_channels pc on pc.current_generation_id=o.publish_generation_id and pc.channel='card_prices'";
+  const generationCondition = generationId ? "and o.publish_generation_id=$2::uuid" : "";
+  const coverageSql = generationId ? `select count(o.id)::text verified_offer_count,
+      count(distinct o.source_id)::text active_source_count,max(pg.published_at) published_at
+    from publish_generations pg left join offers o on o.publish_generation_id=pg.id
+      and o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours'
+    where pg.id=$1::uuid` : `select count(o.id)::text verified_offer_count,
+      count(distinct o.source_id)::text active_source_count,max(pg.published_at) published_at
+    from publication_channels pc join publish_generations pg on pg.id=pc.current_generation_id
+    left join offers o on o.publish_generation_id=pc.current_generation_id
+      and o.availability_state='purchasable' and o.offer_verified_at>now()-interval '24 hours'
+    where pc.channel='card_prices'`;
   const results = await Promise.allSettled([
     getCachedOfficialSubscriptionPrices(),
     query<HomeOffer>(`select distinct o.id,cp.slug,o.price,o.currency,o.offer_mode mode,m.id merchant_id,m.name merchant_name,
         coalesce(oa.warranty_type,'unknown') warranty_type,o.offer_verified_at verified_at
       from offers o join canonical_products cp on cp.id=o.canonical_product_id
-      join publication_channels pc on pc.current_generation_id=o.publish_generation_id and pc.channel='card_prices'
+      ${channelJoin}
       join sources s on s.id=o.source_id join merchants m on m.id=s.merchant_id
       join offer_matches om on om.raw_offer_snapshot_id=o.latest_raw_snapshot_id
       join offer_attributes oa on oa.offer_match_id=om.id
@@ -147,18 +181,19 @@ export async function getHomeSnapshot(): Promise<HomeSnapshot> {
         and o.availability_state='purchasable' and o.stock_state in ('in_stock','low_stock')
         and o.offer_verified_at>now()-interval '24 hours' and o.offer_verified_at<=now()
         and o.currency='CNY' and o.price>0 and oa.duration_days=30 and coalesce(oa.shared,false)=false
-        and o.offer_mode in ('recharge','finished_account','redeem_code')`, [Object.keys(PLAN_CODES)]),
-    getPublicCatalog(), getPublicMarketChanges(1),
+        and o.offer_mode in ('recharge','finished_account','redeem_code') ${generationCondition}`,
+      generationId ? [Object.keys(PLAN_CODES), generationId] : [Object.keys(PLAN_CODES)]),
+    query<HomeCoverage>(coverageSql, generationId ? [generationId] : []),
+    marketChangesCache.get("latest", () => getPublicMarketChanges(1)),
   ]);
-  const [official, channels, catalog, market] = results;
+  const [official, channels, coverageResult, market] = results;
   const warnings = results.flatMap((r,i)=>r.status === "rejected" ? [["官方价格","渠道报价","覆盖统计","价格异动"][i]+"暂时读取失败"] : []);
   for (const [i,r] of results.entries()) if(r.status === "rejected") console.error("home_snapshot_source_failed",i,r.reason);
   const baseline = buildHomeBaseline(official.status === "fulfilled" ? official.value : [], channels.status === "fulfilled" ? channels.value : []);
   const changes: ChangeRow[] = market.status === "fulfilled" ? market.value.flatMap(change => {
     const before = Number(change.previousPrice), after = Number(change.price);
     if(!Number.isFinite(before) || !Number.isFinite(after)) return [];
-    const stock = ["in_stock","low_stock"];
-    const restock = change.previousStockState === "out_of_stock" && stock.includes(change.stockState);
+    const stock = ["in_stock","low_stock"], restock = change.previousStockState === "out_of_stock" && stock.includes(change.stockState);
     const soldOut = stock.includes(change.previousStockState) && change.stockState === "out_of_stock";
     if(!restock && !soldOut && before === after) return [];
     return [{ productSlug:change.productSlug,productName:change.productName,merchantName:change.merchantName,
@@ -168,9 +203,48 @@ export async function getHomeSnapshot(): Promise<HomeSnapshot> {
       delta:restock?"补货":soldOut?"售罄":`${after<before?"−":"+"}${change.currency} ${Math.abs(after-before).toFixed(2)}`,
       observedAt:change.observedAt.toISOString() }];
   }).slice(0,6) : [];
+  const coverage = coverageResult.status === "fulfilled" ? coverageResult.value[0] : undefined;
   return { baseline, changes, warnings, placeholder: official.status === "rejected" && channels.status === "rejected",
-    coverage:{ verifiedOfferCount:catalog.status === "fulfilled" ? catalog.value.verifiedOfferCount : 0,
-      activeSourceCount:catalog.status === "fulfilled" ? catalog.value.activeSourceCount : 0,
+    coverage:{ verifiedOfferCount:Number(coverage?.verified_offer_count ?? 0),
+      activeSourceCount:Number(coverage?.active_source_count ?? 0),
       officialVendorCount:new Set(baseline.filter(r=>r.official).map(r=>r.brand)).size,
-      publishedAt:catalog.status === "fulfilled" ? catalog.value.publishedAt?.toISOString() ?? null : null } };
+      publishedAt:coverage?.published_at?.toISOString() ?? null } };
 }
+
+export interface HomeSnapshotReadDependencies {
+  getPointer(): Promise<{ generation_id: string | null } | null>;
+  load(generationId?: string): Promise<HomeSnapshot>;
+  cache: AsyncCache<string, HomeSnapshot>;
+}
+
+export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencies): Promise<HomeSnapshot> {
+  let firstPointer;
+  try {
+    firstPointer = await dependencies.getPointer();
+  } catch {
+    // Independently guarded reads can still provide official data during a pointer outage.
+    return dependencies.load();
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const generationId = firstPointer?.generation_id ?? "none";
+    const snapshot = await dependencies.cache.get(generationId, () => dependencies.load(generationId === "none" ? undefined : generationId));
+    let current;
+    try {
+      current = await dependencies.getPointer();
+    } catch {
+      // A transient pointer failure must not turn an otherwise usable homepage
+      // snapshot into a 500, and the unverified result must not remain cached.
+      dependencies.cache.delete(generationId);
+      return { ...snapshot, warnings: [...(snapshot.warnings ?? []), "发布版本复核暂时失败"] };
+    }
+    if ((current?.generation_id ?? "none") === generationId) return snapshot;
+    firstPointer = current;
+  }
+  throw new Error("publication_changed_during_home_read");
+}
+
+export function getHomeSnapshot(): Promise<HomeSnapshot> {
+  return readHomeSnapshot({ getPointer: getPublicationPointer, load: loadHomeSnapshot, cache: homeCache });
+}
+
+export function getHomeCacheStats() { return homeCache.stats(); }
