@@ -117,7 +117,7 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
         <p>不用再去各家卡网反复翻找比价。这里直接对照官方汇率正价与渠道最新现货底价，并清楚标注交付方式、来源商家与库存更新时间。</p>
       </div>
       <div className="blue-engine-toolbar">
-        <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <Link className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} key={label}>{label}</Link>)}</nav>
+        <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <Link className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} prefetch={false} key={label}>{label}</Link>)}</nav>
         <form className="blue-engine-find" action="/search" method="get">
           <label><SearchIcon /><input name="q" aria-label="查找表内没有的产品" placeholder="表里没有？搜产品名或商家" /></label>
           <button type="submit">查找</button>

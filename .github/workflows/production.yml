@@ -181,6 +181,10 @@ jobs:
   deploy:
     name: Deploy verified images and verify all services
     needs: [check, images]
+    # The original release gateway targets the retired DMIT deployment. Keep image
+    # builds available while requiring an explicit repository target before that
+    # gateway can start any service there.
+    if: vars.PRICEAI_DEPLOY_TARGET == 'dmit'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -237,7 +241,7 @@ jobs:
 
   rollback:
     name: Restore previous verified image digests
-    if: github.ref == 'refs/heads/main' && inputs.rollback == true
+    if: github.ref == 'refs/heads/main' && inputs.rollback == true && vars.PRICEAI_DEPLOY_TARGET == 'dmit'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:

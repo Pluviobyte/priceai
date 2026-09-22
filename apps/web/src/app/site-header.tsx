@@ -268,13 +268,13 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
 
   function renderNavLink(link: NavLink) {
     const current = isActive(active, link.key);
-    return <Link href={link.href} prefetch={link.key === "official" || link.key === "channels" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>{link.label}</Link>;
+    return <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>{link.label}</Link>;
   }
 
   function renderMenuLink(link: NavLink) {
     const current = isActive(active, link.key);
     return (
-      <Link href={link.href} prefetch={link.key === "official" || link.key === "channels" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>
+      <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>
         {link.label}
         {link.note && <small>{link.note}</small>}
       </Link>
@@ -284,7 +284,7 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
   function renderDrawerLink(link: NavLink) {
     const current = isActive(active, link.key);
     return (
-      <Link href={link.href} prefetch={link.key === "official" || link.key === "channels" ? true : "auto"} aria-current={current ? "page" : undefined} onClick={() => setDrawerOpen(false)} key={link.key}>
+      <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} onClick={() => setDrawerOpen(false)} key={link.key}>
         {link.label}
         {link.note && <small>{link.note}</small>}
       </Link>

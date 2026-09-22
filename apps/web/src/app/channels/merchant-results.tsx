@@ -14,7 +14,7 @@ function shopUrl(value: string | null) {
 function Identity({ row }: { row: ChannelRow }) {
   const url = shopUrl(row.merchant_host);
   return <div className={styles.product}><MerchantIcon source={row.merchant_host} name={row.merchant_name} /><div>
-    <Link href={`/merchants/${row.merchant_slug}`}><b>{row.merchant_name}</b></Link>
+    <Link href={`/merchants/${row.merchant_slug}`} prefetch={false}><b>{row.merchant_name}</b></Link>
     <small>{url ? `${url.host}${url.pathname === "/" ? "" : url.pathname}` : "来源待确认"}</small>
   </div></div>;
 }
@@ -29,7 +29,7 @@ function Score({ row, field }: { row: ChannelRow; field: "lowest_count" | "top_f
 
 function Actions({ row }: { row: ChannelRow }) {
   const url = shopUrl(row.merchant_host);
-  return <div className={styles.merchantActions}><Link className={styles.button} href={`/merchants/${row.merchant_slug}`}>查看报价 →</Link>
+  return <div className={styles.merchantActions}><Link className={styles.button} href={`/merchants/${row.merchant_slug}`} prefetch={false}>查看报价 →</Link>
     {url && <a className={styles.textLink} href={url.href} target="_blank" rel="noopener noreferrer nofollow" aria-label={`前往 ${row.merchant_name} 原店铺`}>进店 ↗</a>}
   </div>;
 }

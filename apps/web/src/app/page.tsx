@@ -167,8 +167,8 @@ export default async function HomePage() {
               <h3>{item.title}</h3>
               <p>{item.text}</p>
               <div className="priceai-path-actions">
-                <Link className="priceai-btn primary" href={item.primaryHref}>{item.primaryCta} <Arrow /></Link>
-                <Link className="priceai-btn" href={item.secondaryHref}>{item.secondaryCta}</Link>
+                <Link className="priceai-btn primary" href={item.primaryHref} prefetch={item.primaryHref === "/channels" ? false : "auto"}>{item.primaryCta} <Arrow /></Link>
+                <Link className="priceai-btn" href={item.secondaryHref} prefetch={item.secondaryHref === "/channels" ? false : "auto"}>{item.secondaryCta}</Link>
               </div>
             </article>
           ))}
@@ -197,7 +197,7 @@ export default async function HomePage() {
             <span className="priceai-pill">{item.band}</span>
             <p className="priceai-delivery-own">{item.ownership}</p>
             <p>{item.cost}</p>
-            <Link className="priceai-btn" href={item.href}>{item.cta} <Arrow /></Link>
+            <Link className="priceai-btn" href={item.href} prefetch={item.href === "/channels" ? false : "auto"}>{item.cta} <Arrow /></Link>
           </article>)}
         </div>
         <p className="priceai-delivery-note">上面表格里的最低价可能来自其中任何一种。比价之前先确认你要哪一种——同规格才有可比性。</p>

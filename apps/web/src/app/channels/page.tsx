@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import type { ComponentProps } from "react";
+import NextLink from "next/link";
 import { getChannelCatalog, type ChannelCatalog, type ChannelRow } from "@/lib/channel-catalog";
 import { activeChannelChips, catalogView, channelHref, channelMode, channelMoney, channelOwnership, channelSpecParts, channelTime, channelWarranty, CHANNEL_MODES, CHANNEL_PAGE_SIZES, CHANNEL_CATEGORIES, CHANNEL_PLATFORMS, CHANNEL_WARRANTIES, parseChannelFilters, type ChannelFilters } from "@/lib/channel-filters";
 import { ModelIcon, type ModelIconName } from "../model-icons";
@@ -18,6 +19,13 @@ export const metadata: Metadata = {
 type CatalogView = "products" | "offers" | "merchants";
 
 const icons: Record<string, ModelIconName> = { OpenAI: "openai", Anthropic: "claude", Google: "gemini", xAI: "grok", Perplexity: "perplexity" };
+
+// This route executes the catalogue aggregation. Prefetching every visible filter,
+// product and merchant link starts many database reads before the visitor chooses
+// one, so navigation from this page is deliberately demand-driven.
+function Link(props: ComponentProps<typeof NextLink>) {
+  return <NextLink prefetch={false} {...props} />;
+}
 
 // Four categories are a company's product and carry that company's own mark. The other
 // three are not: 邮箱 spans Outlook, Gmail and iCloud at once, so any one vendor's logo
