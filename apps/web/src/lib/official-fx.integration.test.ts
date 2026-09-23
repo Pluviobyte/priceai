@@ -47,7 +47,7 @@ test('official FX uses each currency latest valid rate; fallback preserves dates
     assert.equal(snapshot.prices.find(p => p.currency === 'CNY')!.cnyEstimate, '250.000000');
     const stale = snapshot.prices.find(p => p.currency === 'KWD')!;
     assert.equal(stale.exchangeRateDate, day(-8)); assert.equal(stale.eligibleForComparison, false);
-    const floor = buildHomeBaseline(snapshot.prices, [])[3]!.officialFloor;
+    const floor = buildHomeBaseline(snapshot.prices, []).find(row => row.slug === "supergrok")!.officialFloor;
     assert.equal(floor?.cny, 201); assert.match(floor!.note, /美国 官网/);
     const sorted = sortCollectedSubscriptionPrices(snapshot.prices);
     assert.ok(sorted.every((p,i) => i === 0 || Number(sorted[i-1]!.cnyEstimate) <= Number(p.cnyEstimate)));
@@ -60,7 +60,7 @@ test('official FX uses each currency latest valid rate; fallback preserves dates
     const fallback = await getOfficialSubscriptionSnapshot(failedRead);
     assert.equal(fallback.available, true);
     assert.ok(fallback.prices.filter(p => p.currency === 'USD').every(p => p.exchangeRateDate === day(-8) && !p.eligibleForComparison));
-    assert.equal(buildHomeBaseline(fallback.prices, [])[3]!.officialFloor, null);
+    assert.equal(buildHomeBaseline(fallback.prices, []).find(row => row.slug === "supergrok")!.officialFloor, null);
     const stored = (await client.query('select cny_estimate,verified_at from official_subscription_prices where currency=\'USD\' order by cny_estimate')).rows;
     assert.deepEqual(stored.map(p => p.cny_estimate), ['30.000000','31.000000']);
     assert.ok(stored.every(p => p.verified_at.getTime() === verifiedAt.getTime()));
