@@ -7,6 +7,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { sql } from 'drizzle-orm';
 import { createDatabase } from '@price-radar/database';
 import { publishLatestSnapshots } from './publish.js';
+import { loadAnomalyState, reconcileOfferAnomalies } from './offer-anomaly-state.js';
 import { seedCanonicalProducts } from './catalog-products.js';
 
 const adminUrl=process.env.POLICY_TEST_DATABASE_URL;
@@ -59,5 +60,20 @@ test('publication reuses anomalies across snapshots, preserves ignores and bound
     const before=(await db.execute(sql`select count(*)::int n from offer_anomalies`)).rows[0]!.n;
     await snapshot('一块普通石头');await publishLatestSnapshots(db,{now:at,allowEmpty:true});
     assert.equal((await db.execute(sql`select count(*)::int n from offer_anomalies`)).rows[0]!.n,before);
+    // Captured rows remain valid if an administrator disables the source between reads.
+    const current=(await db.execute(sql`select id,crawl_run_id from raw_offer_snapshots where source_id=${source}::uuid order by captured_at desc,id limit 1`)).rows[0]!;
+    const wanted={sourceId:source,sourceItemId:'one',rawId:String(current.id)};
+    await db.execute(sql`update sources set enabled=false where id=${source}::uuid`);
+    const state=await loadAnomalyState(db,[wanted]);assert.equal(state.size,1);
+    await reconcileOfferAnomalies(db,state,wanted,[{kind:'unclassified_product',severity:'warning',details:{}}],at);
+    assert.equal((await db.execute(sql`select count(*)::int n from offer_anomalies`)).rows[0]!.n,before);
+    // Large unrelated legacy set must not enter the reconciliation state or per-item writes.
+    await db.execute(sql`with inserted as (
+      insert into raw_offer_snapshots(crawl_run_id,source_id,source_item_id,raw_title,raw_price_text,raw_price_numeric,currency,stock_state_hint,product_url,captured_at,raw_payload_hash)
+      select ${current.crawl_run_id}::uuid,${source}::uuid,'removed-'||n,'Legacy','1',1,'CNY','in_stock','https://example.com',${at},'legacy-'||n from generate_series(1,20000) n returning id,source_id)
+      insert into offer_anomalies(raw_offer_snapshot_id,source_id,kind,severity,status)
+      select id,source_id,'unclassified_product','warning','open' from inserted`);
+    const scoped=await loadAnomalyState(db,[wanted]);assert.equal(scoped.size,1);
+    assert.equal([...scoped.values()][0]!.size,[...state.values()][0]!.size);
   } finally {await handle.close();await admin.query(`drop database "${name}"`);await admin.end();}
 });

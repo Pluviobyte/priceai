@@ -132,7 +132,7 @@ export async function publishLatestSnapshots(
         .where(inArray(offerMatches.rawOfferSnapshotId,rows.slice(offset,offset+5000).map(row=>row.raw.id)));
       for(const previousRow of previousRows) priorMatches.set(previousRow.match.rawOfferSnapshotId,previousRow);
     }
-    const anomalyState = await loadAnomalyState(tx);
+    const anomalyState = await loadAnomalyState(tx, rows.map(row => ({ sourceId: row.source.id, sourceItemId: row.raw.sourceItemId, rawId: row.raw.id })));
     const productIds = new Set<string>();
     const sourceIds = new Set<string>();
     let offerCount = 0;

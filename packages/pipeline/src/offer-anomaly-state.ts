@@ -11,16 +11,18 @@ const itemKey = (sourceId: string, itemId: string) => JSON.stringify([sourceId, 
 /** One representative per stable item/kind. Legacy duplicate cleanup is a separate job.
  * Prefer the current raw row to avoid the existing snapshot/kind unique constraint.
  * The publisher's advisory lock serializes this with other publishers. */
-export async function loadAnomalyState(db: Pick<Database, 'execute'>): Promise<AnomalyState> {
+export async function loadAnomalyState(db: Pick<Database, 'execute'>,
+  items: readonly { sourceId: string; sourceItemId: string; rawId: string }[]): Promise<AnomalyState> {
+  if (!items.length) return new Map();
+  const identities = JSON.stringify(items.map(item => ({ source_id: item.sourceId, source_item_id: item.sourceItemId, raw_id: item.rawId })));
   const result = await db.execute(sql`
     select distinct on (a.source_id,r.source_item_id,a.kind) a.*,r.source_item_id,
       bool_or(a.status='ignored') over(partition by a.source_id,r.source_item_id,a.kind) as ignored
     from offer_anomalies a join raw_offer_snapshots r on r.id=a.raw_offer_snapshot_id
-    join sources s on s.id=r.source_id and s.enabled
+    join jsonb_to_recordset(${identities}::jsonb) as wanted(source_id uuid,source_item_id text,raw_id uuid)
+      on wanted.source_id=a.source_id and wanted.source_item_id=r.source_item_id
     order by a.source_id,r.source_item_id,a.kind,
-      ((r.goods_type is null and r.crawl_run_id=s.latest_complete_run_id) or
-       (r.goods_type is not null and exists(select 1 from source_catalog_type_snapshots ct
-        where ct.source_id=r.source_id and ct.goods_type=r.goods_type and ct.run_id=r.crawl_run_id))) desc,
+      (a.raw_offer_snapshot_id=wanted.raw_id) desc,
       a.detected_at desc,a.id desc
   `);
   const state: AnomalyState = new Map();
