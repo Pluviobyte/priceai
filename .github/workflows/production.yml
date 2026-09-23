@@ -88,7 +88,7 @@ jobs:
         env:
           DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
       - name: Test publication retention against PostgreSQL
-        run: node --import tsx --test packages/pipeline/src/publication-retention.integration.test.ts packages/pipeline/src/offer-anomaly-state.integration.test.ts apps/web/src/lib/public-feed.integration.test.ts apps/web/src/lib/pricing-health.integration.test.ts
+        run: node --import tsx --test packages/pipeline/src/publication-retention.integration.test.ts packages/pipeline/src/offer-anomaly-state.integration.test.ts apps/web/src/lib/public-feed.integration.test.ts apps/web/src/lib/pricing-health.integration.test.ts apps/web/src/lib/official-fx.integration.test.ts
         env:
           POLICY_TEST_DATABASE_URL: postgres://priceai:ci-only-password@localhost:5432/priceai_ci
       - name: Test catalog queries against PostgreSQL

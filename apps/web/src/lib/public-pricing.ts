@@ -125,7 +125,7 @@ export interface CurrentCnyRate { rate: string; effectiveDate: string; sourceUrl
 
 /**
  * Re-convert every foreign amount at the latest rate of its currency, so that all displayed CNY
- * figures share one exchange-rate date and can be compared. The stored estimate used whichever rate
+ * figures in each currency share that currency’s latest available exchange-rate date. The stored estimate used whichever rate
  * was current when that record was swept: one HUF amount converted ¥15 apart on two channels. The
  * collected amount, verification time and evidence are left as they are. CNY prices need no rate,
  * and a currency without a current rate keeps its stored, dated conversion.
