@@ -13,7 +13,7 @@ export interface PublicHealthSummary {
   fullSuccessfulRuns24h: number;
   partialSuccessfulRuns24h: number;
   failedRuns24h: number;
-  runningRuns24h: number;
+  excludedRuns24h: number;
   enabledSourceCount: number;
   fullCoveredSourceCount: number;
   fullCoverageRate: number | null;
@@ -36,7 +36,7 @@ interface HealthRow {
   full_successful_runs_24h: string;
   partial_successful_runs_24h: string;
   failed_runs_24h: string;
-  running_runs_24h: string;
+  excluded_runs_24h: string;
   enabled_source_count: string;
   full_covered_source_count: string;
   current_offer_count: string;
@@ -64,7 +64,7 @@ export async function getPublicHealth(): Promise<PublicHealthSummary> {
               count(*) filter (where status='success' and complete_snapshot) full_successful_runs_24h,
               count(*) filter (where status='success' and not complete_snapshot) partial_successful_runs_24h,
               count(*) filter (where status in ('failed','partial')) failed_runs_24h,
-              count(*) filter (where status not in ('success','failed','partial')) running_runs_24h
+              count(*) filter (where status not in ('success','failed','partial')) excluded_runs_24h
          from crawl_runs where created_at > now() - interval '24 hours'
      ), offer_stats as (
        select count(*) current_offer_count,
@@ -94,7 +94,7 @@ export async function getPublicHealth(): Promise<PublicHealthSummary> {
     fullSuccessfulRuns24h: Number(row?.full_successful_runs_24h ?? 0),
     partialSuccessfulRuns24h: Number(row?.partial_successful_runs_24h ?? 0),
     failedRuns24h: Number(row?.failed_runs_24h ?? 0),
-    runningRuns24h: Number(row?.running_runs_24h ?? 0),
+    excludedRuns24h: Number(row?.excluded_runs_24h ?? 0),
     enabledSourceCount: Number(row?.enabled_source_count ?? 0),
     fullCoveredSourceCount: Number(row?.full_covered_source_count ?? 0),
     fullCoverageRate: Number(row?.enabled_source_count) ? Number(row?.full_covered_source_count) / Number(row?.enabled_source_count) : null,
