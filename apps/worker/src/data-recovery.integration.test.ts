@@ -4,7 +4,7 @@ import pg from 'pg';
 import { createDatabase } from '@price-radar/database';
 import { seedVerifiedOfficialApiPrices } from '@price-radar/price-channels';
 import { seedVerifiedSubscriptionPrices, verifyOfficialWebPrices } from '@price-radar/price-channels/subscriptions';
-import { runTransitSweep } from './transit-runner.js';
+import { runTransitSweep, TRANSIT_CATALOG_LOCK } from './transit-runner.js';
 
 const url = process.env.PRICEAI_RECOVERY_TEST_DATABASE_URL;
 test('recovery preserves evidence freshness and serializes transit refreshes', { skip: !url }, async () => {
@@ -38,9 +38,11 @@ test('recovery preserves evidence freshness and serializes transit refreshes', {
     assert.ok(prices.length >= 2);
     assert.ok(prices.every(row => row.verified_at <= verified));
 
-    await client.query('select pg_advisory_lock(7410319)');
+    await client.query('select pg_advisory_lock($1)', [TRANSIT_CATALOG_LOCK]);
     assert.equal((await runTransitSweep(url!)).reason, 'already_running');
-    await client.query('select pg_advisory_unlock(7410319)');
+    await client.query('select pg_advisory_unlock($1)', [TRANSIT_CATALOG_LOCK]);
+    // Production holds the channel lock continuously; transit must still run.
+    await client.query('select pg_advisory_lock(7410319)');
     let requests = 0;
     globalThis.fetch = async () => {
       requests++;
