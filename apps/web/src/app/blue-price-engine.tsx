@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ModelIcon, MODEL_ICON_PATHS, type ModelIconName } from "./model-icons";
+import { IntentPrefetchLink } from "./intent-prefetch-link";
+import { ModelIcon, PRODUCT_ICON_PATHS, type ProductIconName } from "./model-icons";
 import { OFFER_MODE_LABEL, type BaselineRow, type HomeSnapshot } from "@/lib/home-snapshot";
 
 const BRAND_TABS = [["全部", ""], ["ChatGPT", "OpenAI"], ["Claude", "Anthropic"], ["Gemini", "Google"], ["Grok", "xAI"]] as const;
@@ -12,8 +13,12 @@ function cny(value: number) {
   return `¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
 }
 
-function iconOf(row: BaselineRow): ModelIconName | null {
-  return row.icon && row.icon in MODEL_ICON_PATHS ? (row.icon as ModelIconName) : null;
+function GridIcon() {
+  return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6" /></svg>;
+}
+
+function iconOf(row: BaselineRow): ProductIconName | null {
+  return row.icon && row.icon in PRODUCT_ICON_PATHS ? (row.icon as ProductIconName) : null;
 }
 
 function relative(iso: string | null) {
@@ -74,7 +79,41 @@ function BaselineRowView({ row, placeholder }: { row: BaselineRow; placeholder: 
         : <><strong>{row.offerCount}</strong><small>{row.inStockMerchantCount} 家有货</small></>}
     </div>
 
-    <Link className="blue-engine-view" href={`/products/${row.slug}`} prefetch={false}>看全部报价</Link>
+    <IntentPrefetchLink className="blue-engine-view" href={`/products/${row.slug}`}>看全部报价</IntentPrefetchLink>
+  </div>;
+}
+
+/** 资源类商品没有官方订阅价，报价里临时、短效与成品号混在一起，所以只给价格区间，不评最低价。 */
+function ResourceRowView({ row, placeholder }: { row: BaselineRow; placeholder: boolean }) {
+  const icon = iconOf(row);
+  return <div className="blue-engine-row">
+    <div className="blue-engine-product">
+      <span className="blue-engine-mark">{icon ? <ModelIcon name={icon} label={row.name} /> : <b>{row.name.slice(0, 1)}</b>}</span>
+      <div><strong>{row.name}</strong><small>{row.spec}</small></div>
+    </div>
+
+    <div className="blue-engine-official" data-label="官方正价（折人民币）"><span className="blue-engine-nodata">官方免费注册</span></div>
+    <div className="blue-engine-official blue-engine-official-floor" data-label="官方底价（折人民币）"><span className="blue-engine-nodata">无官方订阅价</span></div>
+
+    <div className="blue-engine-lowest blue-engine-lowest-range">
+      {row.band
+        ? <>
+            <div><strong>{cny(row.band.minCny)} – {cny(row.band.maxCny)}</strong></div>
+            <p className="blue-engine-mode"><em>规格混杂</em>临时、短效与成品号价差很大</p>
+            <small>按商品标题核对后再买 · {relative(row.verifiedAt)}</small>
+          </>
+        : <span className="blue-engine-nodata">暂无近期有货报价</span>}
+    </div>
+
+    <span className="blue-engine-range blue-engine-nodata">规格不一，不排最低价</span>
+
+    <div className="blue-engine-offers">
+      {placeholder
+        ? <span className="blue-engine-nodata">待接入</span>
+        : <><strong>{row.offerCount}</strong><small>{row.inStockMerchantCount} 家有货</small></>}
+    </div>
+
+    <IntentPrefetchLink className="blue-engine-view" href={`/products/${row.slug}`}>看全部报价</IntentPrefetchLink>
   </div>;
 }
 
@@ -117,7 +156,7 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
         <p>不用再去各家卡网反复翻找比价。这里直接对照官方汇率正价与渠道最新现货底价，并清楚标注交付方式、来源商家与库存更新时间。</p>
       </div>
       <div className="blue-engine-toolbar">
-        <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <Link className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} prefetch={false} key={label}>{label}</Link>)}</nav>
+        <nav aria-label="按厂商筛选">{BRAND_TABS.map(([label, platform]) => <IntentPrefetchLink className={platform ? "" : "active"} href={platform ? `/channels?platform=${encodeURIComponent(platform)}` : "/channels"} key={label}>{label}</IntentPrefetchLink>)}</nav>
         <form className="blue-engine-find" action="/search" method="get">
           <label><SearchIcon /><input name="q" aria-label="查找表内没有的产品" placeholder="表里没有？搜产品名或商家" /></label>
           <button type="submit">查找</button>
@@ -129,7 +168,16 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
       {snapshot.warnings?.map(warning => <p key={warning} role="status" className="blue-engine-nodata">{warning}</p>)}
       <div className="blue-engine-table">
         <div className="blue-engine-table-head"><span>标准商品</span><span>官方正价（折人民币）</span><span>官方底价（折人民币）</span><span>渠道最低价</span><span>价格分布</span><span>同交付方式报价</span><span /></div>
-        {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
+        {baseline.map((row) => row.kind === "resource"
+          ? <ResourceRowView row={row} placeholder={placeholder} key={row.slug} />
+          : <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
+        <IntentPrefetchLink className="blue-engine-row blue-engine-all" href="/channels">
+          <span className="blue-engine-product">
+            <span className="blue-engine-mark"><GridIcon /></span>
+            <span><strong>查看所有 AI</strong><small>ChatGPT、Claude、Gemini、Grok、国产模型、视频生成等全部渠道报价</small></span>
+          </span>
+          <span className="blue-engine-all-cta">打开全部报价 →</span>
+        </IntentPrefetchLink>
       </div>
 
 

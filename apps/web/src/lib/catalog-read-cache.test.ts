@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAsyncCache } from "./async-cache";
+import { createAsyncCache, createStaleWhileRevalidate } from "./async-cache";
 import { filterKey, readCachedChannelCatalog, type CatalogReadDependencies } from "./catalog-read-cache";
 import { parseChannelFilters } from "./channel-filters";
 import type { ChannelCatalog } from "./channel-catalog";
@@ -70,4 +70,32 @@ test("catalog model failures retry and concurrent cold reads share one exact-gen
   release();
   await Promise.all([first, second]);
   assert.equal(dependencies.modelCache.stats().coalesced, 1);
+});
+
+test("catalog answers a new publication from the previous model while it loads", async () => {
+  const shared = caches();
+  const modelStaleFor = createStaleWhileRevalidate(shared.modelCache, { maxStaleMs: 60_000 });
+  const filters = parseChannelFilters({});
+  let pointer = "a", release!: () => void;
+  const loaded: Array<string | null> = [];
+  const dependencies: CatalogReadDependencies = {
+    ...shared,
+    modelStaleFor,
+    getPointer: async () => ({ generation_id: pointer }),
+    loadModel: async generationId => {
+      loaded.push(generationId);
+      if (generationId === "b") await new Promise<void>(resolve => { release = resolve; });
+      return { generationId, offers: [] };
+    },
+  };
+  await readCachedChannelCatalog(filters, dependencies);
+  pointer = "b";
+  await readCachedChannelCatalog(filters, dependencies);
+  assert.equal(shared.resultCache.peek(`b:${filterKey(filters)}`), undefined, "b's view was not built yet");
+  assert.equal(modelStaleFor.stats().staleServed, 1);
+  release();
+  await new Promise(resolve => setImmediate(resolve));
+  await readCachedChannelCatalog(filters, dependencies);
+  assert.notEqual(shared.resultCache.peek(`b:${filterKey(filters)}`), undefined);
+  assert.deepEqual(loaded, ["a", "b"]);
 });

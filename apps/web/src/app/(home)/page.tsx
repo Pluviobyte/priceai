@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { SiteFooter } from "./site-footer";
-import { PriceBaselineHero, PriceBaselineTable } from "./blue-price-engine";
-import { ModelIcon, type ModelIconName } from "./model-icons";
+import { SiteFooter } from "../site-footer";
+import { PriceBaselineHero, PriceBaselineTable } from "../blue-price-engine";
+import { ModelIcon, type ModelIconName } from "../model-icons";
 import { getHomeSnapshot } from "@/lib/home-snapshot";
 import { PURCHASE_PATHS_ENABLED } from "@/lib/site-features";
 

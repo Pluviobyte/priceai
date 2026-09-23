@@ -3,8 +3,9 @@
 import Link, { useLinkStatus } from "next/link";
 import { API_SECTIONS_ENABLED, SPONSORS_ENABLED } from "@/lib/site-features";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { BrandLockup, SITE_NAME } from "./site-brand";
+import { IntentPrefetchLink } from "./intent-prefetch-link";
 import { AnnouncementBanner } from "./announcement-banner";
 import { CommunityDialog, type CommunityPlatform } from "./community-dialog";
 
@@ -266,29 +267,25 @@ export function SiteHeader({ active = "home" }: { active?: HeaderSection }) {
     writeStorage(THEME_KEY, next ? "dark" : "light");
   }
 
+  // The two heavy database pages prefetch only once a visitor shows intent. The rest keep the default,
+  // which for a dynamic route stops at its loading.tsx.
+  function navAnchor(link: NavLink, children: ReactNode, onClick?: () => void) {
+    const props = { href: link.href, "aria-current": isActive(active, link.key) ? "page" as const : undefined, ...(onClick ? { onClick } : {}) };
+    return link.key === "official" || link.key === "channels"
+      ? <IntentPrefetchLink {...props} key={link.key}>{children}</IntentPrefetchLink>
+      : <Link {...props} prefetch="auto" key={link.key}>{children}</Link>;
+  }
+
   function renderNavLink(link: NavLink) {
-    const current = isActive(active, link.key);
-    return <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>{link.label}</Link>;
+    return navAnchor(link, link.label);
   }
 
   function renderMenuLink(link: NavLink) {
-    const current = isActive(active, link.key);
-    return (
-      <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} key={link.key}>
-        {link.label}
-        {link.note && <small>{link.note}</small>}
-      </Link>
-    );
+    return navAnchor(link, <>{link.label}{link.note && <small>{link.note}</small>}</>);
   }
 
   function renderDrawerLink(link: NavLink) {
-    const current = isActive(active, link.key);
-    return (
-      <Link href={link.href} prefetch={link.key === "channels" ? false : link.key === "official" ? true : "auto"} aria-current={current ? "page" : undefined} onClick={() => setDrawerOpen(false)} key={link.key}>
-        {link.label}
-        {link.note && <small>{link.note}</small>}
-      </Link>
-    );
+    return navAnchor(link, <>{link.label}{link.note && <small>{link.note}</small>}</>, () => setDrawerOpen(false));
   }
 
   return (

@@ -1,7 +1,7 @@
 import { officialPriceHref } from "./official-subscription-links";
 import type { OfferMode } from "@price-radar/schema";
 
-import { createAsyncCache, type AsyncCache } from "./async-cache";
+import { createAsyncCache, createStaleWhileRevalidate, type AsyncCache, type StaleWhileRevalidate } from "./async-cache";
 import { query } from "./database";
 import { getPublicMarketChanges } from "./public-catalog";
 import { getPublicationPointer } from "./publication-state";
@@ -45,6 +45,11 @@ export interface BaselineRow {
   icon: string | null;
   /** 规格摘要，例如「1 个月」。同规格才可比。 */
   spec: string;
+  /**
+   * resource：没有官方订阅价的资源类商品（如 Gmail 账号）。这类报价把临时、短效、成品号混在一起，
+   * 采集结果里也没有能区分规格的字段，所以只给价格区间，不评出「最低价」，也不和官方价对照。
+   */
+  kind?: "subscription" | "resource";
   /** 官方价，折人民币。区间价不进入这里，只认精确价。 */
   official: { cny: number; note: string; evidenceUrl: string; detailUrl: string } | null;
   /** 已收录同套餐、同周期的官方地区/渠道最低价。 */
@@ -86,9 +91,14 @@ export interface HomeSnapshot {
 const PLACEHOLDER: HomeSnapshot = {
   baseline: [
     { slug: "chatgpt-plus", name: "ChatGPT Plus", brand: "OpenAI", icon: "openai", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "chatgpt-pro-5x", name: "ChatGPT Pro 5x", brand: "OpenAI", icon: "openai", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "chatgpt-pro-20x", name: "ChatGPT Pro 20x", brand: "OpenAI", icon: "openai", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "claude-pro", name: "Claude Pro", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "claude-max-5x", name: "Claude Max 5x", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "claude-max-20x", name: "Claude Max 20x", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "gemini-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "supergrok", name: "SuperGrok", brand: "xAI", icon: "grok", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "resource-gmail", name: "Gmail", brand: "Google", icon: "gmail", spec: "邮箱账号", kind: "resource", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
   ],
   changes: [],
   coverage: { verifiedOfferCount: 0, activeSourceCount: 0, officialVendorCount: 0, publishedAt: null },
@@ -96,7 +106,12 @@ const PLACEHOLDER: HomeSnapshot = {
 };
 
 
-const PLAN_CODES: Record<string, string> = { "chatgpt-plus": "chatgpt-plus-monthly", "claude-pro": "claude-pro-monthly", "gemini-pro": "google-ai-pro-monthly", supergrok: "supergrok-monthly" };
+const PLAN_CODES: Record<string, string> = {
+  "chatgpt-plus": "chatgpt-plus-monthly", "chatgpt-pro-5x": "chatgpt-pro-5x-monthly", "chatgpt-pro-20x": "chatgpt-pro-20x-monthly",
+  "claude-pro": "claude-pro-monthly", "claude-max-5x": "claude-max-5x-monthly", "claude-max-20x": "claude-max-20x-monthly",
+  "gemini-pro": "google-ai-pro-monthly", supergrok: "supergrok-monthly",
+};
+const RESOURCE_SLUGS = PLACEHOLDER.baseline.filter(row => row.kind === "resource").map(row => row.slug);
 export interface HomeOffer {
   id: string; slug: string; price: string; currency: string; mode: OfferMode;
   merchant_id: string; merchant_name: string; warranty_type: string; verified_at: Date;
@@ -129,6 +144,11 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
     };
     const eligible = offers.filter(o => o.slug === base.slug && o.currency === "CNY" && Number(o.price) > 0 && Number.isFinite(Number(o.price)))
       .sort((a,b) => Number(a.price)-Number(b.price) || b.verified_at.getTime()-a.verified_at.getTime() || a.id.localeCompare(b.id));
+    if (base.kind === "resource") return { ...base,
+      band: eligible.length ? { minCny: Number(eligible[0]!.price), maxCny: Number(eligible.at(-1)!.price) } : null,
+      offerCount: eligible.length, inStockMerchantCount: new Set(eligible.map(o=>o.merchant_id)).size,
+      verifiedAt: eligible.length ? new Date(Math.max(...eligible.map(o=>o.verified_at.getTime()))).toISOString() : null,
+    };
     const lowest = eligible[0];
     const sameMode = lowest ? eligible.filter(o => o.mode === lowest.mode) : [];
     return { ...base,
@@ -144,21 +164,30 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
 
 const globalForHomeCache = globalThis as typeof globalThis & {
   priceRadarHomeCache?: ReturnType<typeof createAsyncCache<string, HomeSnapshot>>;
+  priceRadarHomeStale?: StaleWhileRevalidate<string, HomeSnapshot>;
   priceRadarMarketChangesCache?: ReturnType<typeof createAsyncCache<string, Awaited<ReturnType<typeof getPublicMarketChanges>>>>;
 };
+const completeSnapshot = (snapshot: HomeSnapshot) => !snapshot.placeholder && !snapshot.warnings?.length;
+// Keyed by publication, so an entry stays correct for as long as its publication is current.
 const homeCache = globalForHomeCache.priceRadarHomeCache ?? createAsyncCache<string, HomeSnapshot>({
-  ttlMs: 30_000,
+  ttlMs: 10 * 60_000,
   maxEntries: 4,
-  shouldCache: snapshot => !snapshot.placeholder && !snapshot.warnings?.length,
+  shouldCache: completeSnapshot,
 });
 globalForHomeCache.priceRadarHomeCache = homeCache;
+const homeStale = globalForHomeCache.priceRadarHomeStale ?? createStaleWhileRevalidate(homeCache, {
+  maxStaleMs: 10 * 60_000,
+  keep: completeSnapshot,
+  onBackgroundError: error => console.error("home_snapshot_refresh_failed", error),
+});
+globalForHomeCache.priceRadarHomeStale = homeStale;
 const marketChangesCache = globalForHomeCache.priceRadarMarketChangesCache
   ?? createAsyncCache<string, Awaited<ReturnType<typeof getPublicMarketChanges>>>({ ttlMs: 5 * 60_000, maxEntries: 1 });
 globalForHomeCache.priceRadarMarketChangesCache = marketChangesCache;
 
 async function loadHomeSnapshot(generationId?: string): Promise<HomeSnapshot> {
   const channelJoin = generationId ? "" : "join publication_channels pc on pc.current_generation_id=o.publish_generation_id and pc.channel='card_prices'";
-  const generationCondition = generationId ? "and o.publish_generation_id=$2::uuid" : "";
+  const generationCondition = generationId ? "and o.publish_generation_id=$3::uuid" : "";
   const coverageSql = generationId ? `select count(o.id)::text verified_offer_count,
       count(distinct o.source_id)::text active_source_count,max(pg.published_at) published_at
     from publish_generations pg left join offers o on o.publish_generation_id=pg.id
@@ -178,12 +207,13 @@ async function loadHomeSnapshot(generationId?: string): Promise<HomeSnapshot> {
       join sources s on s.id=o.source_id join merchants m on m.id=s.merchant_id
       join offer_matches om on om.raw_offer_snapshot_id=o.latest_raw_snapshot_id
       join offer_attributes oa on oa.offer_match_id=om.id
-      where cp.slug=any($1) and cp.status='active' and m.status='active' and s.enabled=true
+      where ((cp.slug=any($1) and oa.duration_days=30) or cp.slug=any($2))
+        and cp.status='active' and m.status='active' and s.enabled=true
         and o.availability_state='purchasable' and o.stock_state in ('in_stock','low_stock')
         and o.offer_verified_at>now()-interval '24 hours' and o.offer_verified_at<=now()
-        and o.currency='CNY' and o.price>0 and oa.duration_days=30 and coalesce(oa.shared,false)=false
+        and o.currency='CNY' and o.price>0 and coalesce(oa.shared,false)=false
         and o.offer_mode in ('recharge','finished_account','redeem_code') ${generationCondition}`,
-      generationId ? [Object.keys(PLAN_CODES), generationId] : [Object.keys(PLAN_CODES)]),
+      generationId ? [Object.keys(PLAN_CODES), RESOURCE_SLUGS, generationId] : [Object.keys(PLAN_CODES), RESOURCE_SLUGS]),
     query<HomeCoverage>(coverageSql, generationId ? [generationId] : []),
     marketChangesCache.get("latest", () => getPublicMarketChanges(1)),
   ]);
@@ -216,6 +246,8 @@ export interface HomeSnapshotReadDependencies {
   getPointer(): Promise<{ generation_id: string | null } | null>;
   load(generationId?: string): Promise<HomeSnapshot>;
   cache: AsyncCache<string, HomeSnapshot>;
+  /** Wraps `cache`: answers a new publication with the previous snapshot while it loads. */
+  staleFor?: StaleWhileRevalidate<string, HomeSnapshot>;
 }
 
 export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencies): Promise<HomeSnapshot> {
@@ -228,7 +260,16 @@ export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencie
   }
   for (let attempt = 0; attempt < 2; attempt++) {
     const generationId = firstPointer?.generation_id ?? "none";
-    const snapshot = await dependencies.cache.get(generationId, () => dependencies.load(generationId === "none" ? undefined : generationId));
+    const load = () => dependencies.load(generationId === "none" ? undefined : generationId);
+    let snapshot: HomeSnapshot;
+    if (dependencies.staleFor) {
+      const result = await dependencies.staleFor.get(generationId, load);
+      // A complete snapshot of the previous publication, knowingly one publication behind.
+      if (result.stale) return result.value;
+      snapshot = result.value;
+    } else {
+      snapshot = await dependencies.cache.get(generationId, load);
+    }
     let current;
     try {
       current = await dependencies.getPointer();
@@ -245,7 +286,7 @@ export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencie
 }
 
 export function getHomeSnapshot(): Promise<HomeSnapshot> {
-  return readHomeSnapshot({ getPointer: getPublicationPointer, load: loadHomeSnapshot, cache: homeCache });
+  return readHomeSnapshot({ getPointer: getPublicationPointer, load: loadHomeSnapshot, cache: homeCache, staleFor: homeStale });
 }
 
-export function getHomeCacheStats() { return homeCache.stats(); }
+export function getHomeCacheStats() { return { ...homeCache.stats(), ...homeStale.stats() }; }

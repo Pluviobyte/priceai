@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createAsyncCache } from "./async-cache";
+import { createAsyncCache, createStaleWhileRevalidate } from "./async-cache";
 import {buildHomeBaseline, readHomeSnapshot, type HomeOffer, type HomeSnapshot} from "./home-snapshot";
 
 const emptySnapshot = (): HomeSnapshot => ({ baseline: [], changes: [], coverage: {
@@ -13,14 +13,14 @@ test("home minimum, merchant and distribution belong to the same delivery mode",
  const row=rows[0]!;
  assert.equal(row.lowest?.merchantName,"甲");assert.equal(row.lowest?.cny,50);
  assert.deepEqual(row.band,{minCny:50,maxCny:90});assert.equal(row.offerCount,2);assert.equal(row.inStockMerchantCount,2);
- assert.equal(rows[1]!.lowest,null);
- assert.equal(rows[2]!.slug,"gemini-pro");
+ assert.equal(rows.find(r=>r.slug==="claude-pro")!.lowest,null);
+ assert.deepEqual(rows.map(r=>r.slug),["chatgpt-plus","chatgpt-pro-5x","chatgpt-pro-20x","claude-pro","claude-max-5x","claude-max-20x","gemini-pro","supergrok","resource-gmail"]);
 });
 
 test("home ignores non-finite and nonpositive prices and keeps verification time of the minimum",()=>{
  const old=new Date(Date.now()-3600000), fresh=new Date();
  const base:HomeOffer={id:"a",slug:"claude-pro",price:"80",currency:"CNY",mode:"recharge",merchant_id:"m1",merchant_name:"甲",warranty_type:"none",verified_at:old};
- const row=buildHomeBaseline([],[base,{...base,id:"b",price:"100",verified_at:fresh},{...base,id:"c",price:"NaN"},{...base,id:"d",price:"0"}])[1]!;
+ const row=buildHomeBaseline([],[base,{...base,id:"b",price:"100",verified_at:fresh},{...base,id:"c",price:"NaN"},{...base,id:"d",price:"0"}]).find(r=>r.slug==="claude-pro")!;
  assert.equal(row.lowest?.cny,80);assert.equal(row.verifiedAt,old.toISOString());assert.equal(row.offerCount,2);
 });
 
@@ -76,4 +76,32 @@ test("homepage retries a publication switch with the new exact generation", asyn
  });
  assert.equal(snapshot.placeholder,false);
  assert.deepEqual(loads,["a","b"]);
+});
+
+test("homepage answers a new publication with the previous snapshot while it loads", async () => {
+ const cache=createAsyncCache<string,HomeSnapshot>({ttlMs:60_000,maxEntries:4});
+ const staleFor=createStaleWhileRevalidate(cache,{maxStaleMs:60_000});
+ let pointer="a",release!:()=>void;
+ const loads:Array<string|undefined>=[];
+ const dependencies={cache,staleFor,getPointer:async()=>({generation_id:pointer}),
+  load:async(generationId?:string)=>{loads.push(generationId);if(generationId==="b")await new Promise<void>(resolve=>{release=resolve;});
+   return {...emptySnapshot(),coverage:{...emptySnapshot().coverage,publishedAt:generationId??null}};}};
+ assert.equal((await readHomeSnapshot(dependencies)).coverage.publishedAt,"a");
+ pointer="b";
+ assert.equal((await readHomeSnapshot(dependencies)).coverage.publishedAt,"a","the previous publication while b loads");
+ release();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal((await readHomeSnapshot(dependencies)).coverage.publishedAt,"b");
+ assert.deepEqual(loads,["a","b"]);
+});
+
+test("resource rows give a price range, never a crowned minimum or an official comparison",()=>{
+ const now=new Date(),earlier=new Date(Date.now()-3600000);
+ const base:HomeOffer={id:"a",slug:"resource-gmail",price:"0.5",currency:"CNY",mode:"redeem_code",merchant_id:"m1",merchant_name:"甲",warranty_type:"none",verified_at:earlier};
+ const row=buildHomeBaseline([],[base,{...base,id:"b",price:"12",mode:"finished_account",merchant_id:"m2",verified_at:now},{...base,id:"c",price:"0"}]).find(r=>r.slug==="resource-gmail")!;
+ assert.equal(row.kind,"resource");
+ assert.equal(row.lowest,null);assert.equal(row.official,null);
+ assert.deepEqual(row.band,{minCny:0.5,maxCny:12});
+ assert.equal(row.offerCount,2);assert.equal(row.inStockMerchantCount,2);
+ assert.equal(row.verifiedAt,now.toISOString());
 });

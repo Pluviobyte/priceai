@@ -13,6 +13,8 @@ export class AsyncCacheCapacityError extends Error {
 
 export interface AsyncCache<Key, Value> {
   get(key: Key, load: () => Promise<Value>): Promise<Value>;
+  /** The unexpired value for key, without loading or touching the counters. */
+  peek(key: Key): Value | undefined;
   stats(): AsyncCacheStats;
   delete(key: Key): void;
   clear(): void;
@@ -74,8 +76,55 @@ export function createAsyncCache<Key, Value>(options: {
       pending.set(key, promise);
       return promise;
     },
+    peek(key) {
+      const cached = values.get(key);
+      return cached && cached.expires > now() ? cached.value : undefined;
+    },
     stats: () => ({ ...counters, size: values.size, pending: pending.size }),
     delete(key) { values.delete(key); },
     clear() { values.clear(); pending.clear(); },
+  };
+}
+
+export interface StaleWhileRevalidateResult<Key, Value> { key: Key; value: Value; stale: boolean }
+
+export interface StaleWhileRevalidate<Key, Value> {
+  get(key: Key, load: () => Promise<Value>): Promise<StaleWhileRevalidateResult<Key, Value>>;
+  stats(): { staleServed: number; backgroundFailures: number };
+}
+
+/**
+ * Answers a key that is not loaded yet with the newest value already served for another key, and lets
+ * the load finish in the background. Meant for publication-scoped data: every publication is a new key,
+ * and the previous publication stays a complete, consistent answer until the next one is ready. Without
+ * this, the first visitor after each publication waits for the whole read. The fallback is used only
+ * while it was last served within maxStaleMs; older than that, the reader waits for the load.
+ */
+export function createStaleWhileRevalidate<Key, Value>(cache: AsyncCache<Key, Value>, options: {
+  maxStaleMs: number;
+  now?: () => number;
+  /** Values that should not answer later keys, such as a degraded read. */
+  keep?: (value: Value) => boolean;
+  onBackgroundError?: (error: unknown) => void;
+}): StaleWhileRevalidate<Key, Value> {
+  const now = options.now ?? Date.now;
+  let latest: { key: Key; value: Value; servedAt: number } | undefined;
+  const counters = { staleServed: 0, backgroundFailures: 0 };
+  return {
+    get(key, load) {
+      const ready = cache.peek(key) !== undefined;
+      const loading = cache.get(key, load).then(value => {
+        if (options.keep?.(value) !== false) latest = { key, value, servedAt: now() };
+        return value;
+      });
+      const fallback = latest;
+      if (!ready && fallback && fallback.key !== key && now() - fallback.servedAt <= options.maxStaleMs) {
+        counters.staleServed++;
+        loading.catch(error => { counters.backgroundFailures++; options.onBackgroundError?.(error); });
+        return Promise.resolve({ key: fallback.key, value: fallback.value, stale: true });
+      }
+      return loading.then(value => ({ key, value, stale: false }));
+    },
+    stats: () => ({ ...counters }),
   };
 }

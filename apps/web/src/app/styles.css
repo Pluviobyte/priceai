@@ -791,6 +791,13 @@ body { color: var(--color-text-body); background: var(--color-page); font-family
 .blue-engine-offers strong { font: 650 15px "DM Sans", system-ui, sans-serif; }
 .blue-engine-view { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 15px; border: 1px solid #cfd8ee; border-radius: 9px; color: var(--blue-brand); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .blue-engine-view:hover { color: #fff; border-color: var(--blue-brand); background: var(--blue-brand); }
+.blue-engine-lowest-range strong { color: var(--blue-ink); font-size: 16px; }
+.blue-engine-row.blue-engine-all { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 0; color: inherit; text-decoration: none; }
+.blue-engine-row.blue-engine-all:hover { background: var(--color-surface); }
+.blue-engine-row.blue-engine-all .blue-engine-mark { color: var(--blue-brand); }
+.blue-engine-all-cta { flex: none; color: var(--blue-brand); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.blue-engine-row.blue-engine-skeleton { display: grid; grid-template-columns: 1.5fr 1fr 1.6fr .7fr; }
+.blue-engine-skeleton span { height: 16px; border-radius: 6px; background: var(--color-surface); }
 .blue-engine-bottom { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 36px; }
 .blue-engine-changes,
 .blue-engine-guide { border-radius: 8px; }

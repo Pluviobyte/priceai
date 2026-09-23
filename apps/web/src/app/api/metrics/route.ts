@@ -47,9 +47,13 @@ export async function GET() {
     metric("price_radar_web_channel_read_model_hits_total", "Generation-level channel read model cache hits", channelReadModel.hits),
     metric("price_radar_web_channel_read_model_misses_total", "Generation-level channel read model cache misses", channelReadModel.misses),
     metric("price_radar_web_channel_read_model_coalesced_total", "Channel requests sharing an in-flight read model load", channelReadModel.coalesced),
+    metric("price_radar_web_channel_read_model_stale_served_total", "Channel requests answered from the previous publication while the new one loaded", channelReadModel.staleServed),
+    metric("price_radar_web_channel_read_model_refresh_failures_total", "Background channel read model loads that failed", channelReadModel.backgroundFailures),
     metric("price_radar_web_home_cache_hits_total", "Publication-scoped homepage cache hits", homeCache.hits),
     metric("price_radar_web_home_cache_misses_total", "Publication-scoped homepage cache misses", homeCache.misses),
     metric("price_radar_web_home_cache_coalesced_total", "Homepage requests joined to an in-flight read", homeCache.coalesced),
+    metric("price_radar_web_home_stale_served_total", "Homepage requests answered from the previous publication while the new one loaded", homeCache.staleServed),
+    metric("price_radar_web_home_refresh_failures_total", "Background homepage loads that failed", homeCache.backgroundFailures),
     metric("price_radar_metrics_query_ms", "Metrics query latency in milliseconds", performance.now() - started),
   ];
   return new Response(`${lines.join("\n")}\n`, { headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });

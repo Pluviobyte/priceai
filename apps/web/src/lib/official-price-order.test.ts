@@ -93,14 +93,14 @@ test("the homepage floor names the official site when an app store charges the s
  const row=buildHomeBaseline(applyCurrentCnyRates([
   price("id-app",{...pro,channel:"app_store"}),
   price("id-web",{...pro,verifiedAt:new Date(now.getTime()-3600000)}),
- ],rates({IDR:"0.000376"})),[])[2]!;
+ ],rates({IDR:"0.000376"})),[]).find(r=>r.slug==="gemini-pro")!;
  assert.equal(row.officialFloor?.evidenceUrl,"https://example.com/id-web");
  assert.match(row.officialFloor!.note,/印度尼西亚 官网 IDR 309000/);
 
  const grok=buildHomeBaseline(applyCurrentCnyRates([
   price("kw-app",{planCode:"supergrok-monthly",channel:"app_store",countryCode:"KW",amount:"30",cnyEstimate:"200.86"}),
   price("us-web",{planCode:"supergrok-monthly",amount:"30",cnyEstimate:"201.002355"}),
- ],rates({USD:"6.7000785"})),[])[3]!;
+ ],rates({USD:"6.7000785"})),[]).find(r=>r.slug==="supergrok")!;
  assert.match(grok.officialFloor!.note,/美国 官网 USD 30/);
  assert.equal(grok.officialFloor?.cny,201.002355);
 });
