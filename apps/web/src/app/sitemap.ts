@@ -3,6 +3,10 @@ import { API_SECTIONS_ENABLED, isApiSectionPath, SPONSORS_ENABLED } from "@/lib/
 import { query } from "@/lib/database";
 import { docsArticles } from "@/lib/docs-content";
 
+// Product and merchant URLs come from the database, which the image build cannot reach; prerendered,
+// the query failed silently and the sitemap shipped without them.
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const deploymentOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
   const base = process.env.PUBLIC_BASE_URL ?? (deploymentOrigin ? `https://${deploymentOrigin}` : "http://localhost:3000");
