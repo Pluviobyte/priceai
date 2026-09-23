@@ -328,22 +328,14 @@ export async function getOfficialApiPrices(): Promise<OfficialApiPrice[]> {
   }));
 }
 
-export async function getTransitOverview(): Promise<{ providers: TransitProviderOverview[]; prices: TransitModelPrice[]; events: TransitEvent[] }> {
-  const providers = await query<TransitProviderRow>(
-    `select p.id,p.slug,p.display_name,p.website_url,p.api_base_url,p.status_url,
-            p.operator_name,p.system_kind,p.evidence_url,
-            count(distinct mp.id)::text as model_count,
-            count(distinct pr.id) filter (where pr.checked_at >= now()-interval '7 days')::text as sample_count_7d,
-            avg(case when pr.success then 1.0 else 0.0 end) filter (where pr.checked_at >= now()-interval '7 days')::text as success_rate_7d,
-            avg(pr.latency_ms) filter (where pr.success and pr.checked_at >= now()-interval '7 days')::text as average_latency_7d,
-            max(pr.checked_at) as last_checked_at
-       from transit_providers p
-       left join transit_model_prices mp on mp.provider_id=p.id
-       left join transit_probes pr on pr.provider_id=p.id
-      where p.active=true
-      group by p.id
-      order by p.display_name`,
-  );
+export async function getTransitPrices(options: { provider?: string; page?: number; limit?: number; all?: boolean } = {}) {
+  const provider = options.provider || null;
+  const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Math.floor(options.limit!))) : 50;
+  const page = Number.isSafeInteger(options.page) ? Math.max(1, Math.min(1_000_000, options.page!)) : 1;
+  const offset = options.all ? 0 : (page - 1) * limit;
+  const [count] = await query<{ total: string }>(
+    `select count(*)::text total from transit_model_prices mp join transit_providers p on p.id=mp.provider_id
+     where p.active=true and ($1::text is null or p.slug=$1)`, [provider]);
   const prices = await query<{
     provider_slug: string; provider_name: string; model_code: string; display_name: string;
     currency: string; unit: string; input_price: string | null; output_price: string | null;
@@ -353,8 +345,30 @@ export async function getTransitOverview(): Promise<{ providers: TransitProvider
             mp.display_name,mp.currency,mp.unit,mp.input_price,mp.output_price,
             mp.multiplier,mp.evidence_kind,mp.evidence_url,mp.verified_at
        from transit_model_prices mp join transit_providers p on p.id=mp.provider_id
-      where p.active=true order by p.display_name,mp.model_code limit 300`,
+      where p.active=true and ($1::text is null or p.slug=$1)
+      order by p.display_name,p.slug,mp.model_code,mp.id limit $2 offset $3`,
+    [provider, options.all ? null : limit, offset],
   );
+  const total = Number(count?.total ?? 0);
+  return { prices: prices.map((row) => ({ providerSlug: row.provider_slug, providerName: row.provider_name, modelCode: row.model_code, displayName: row.display_name, currency: row.currency, unit: row.unit, inputPrice: row.input_price, outputPrice: row.output_price, multiplier: row.multiplier, evidenceKind: row.evidence_kind, evidenceUrl: row.evidence_url, verifiedAt: row.verified_at })), pagination: { page, limit, total, hasNext: offset + prices.length < total } };
+}
+
+export async function getTransitOverview(options: { includePrices?: boolean } = {}): Promise<{ providers: TransitProviderOverview[]; prices: TransitModelPrice[]; events: TransitEvent[] }> {
+  const providers = await query<TransitProviderRow>(
+    `select p.id,p.slug,p.display_name,p.website_url,p.api_base_url,p.status_url,
+            p.operator_name,p.system_kind,p.evidence_url,
+            (select count(*)::text from transit_model_prices mp where mp.provider_id=p.id) as model_count,
+            count(distinct pr.id) filter (where pr.checked_at >= now()-interval '7 days')::text as sample_count_7d,
+            avg(case when pr.success then 1.0 else 0.0 end) filter (where pr.checked_at >= now()-interval '7 days')::text as success_rate_7d,
+            avg(pr.latency_ms) filter (where pr.success and pr.checked_at >= now()-interval '7 days')::text as average_latency_7d,
+            max(pr.checked_at) as last_checked_at
+       from transit_providers p
+       left join transit_probes pr on pr.provider_id=p.id
+      where p.active=true
+      group by p.id
+      order by p.display_name`,
+  );
+  const prices = options.includePrices === false ? [] : (await getTransitPrices({ all: true })).prices;
   const events = await query<{
     provider_name: string; kind: string; title: string; details: string | null;
     evidence_url: string | null; started_at: Date; ended_at: Date | null;
@@ -365,7 +379,7 @@ export async function getTransitOverview(): Promise<{ providers: TransitProvider
   );
   return {
     providers: providers.map((row) => ({ id: row.id, slug: row.slug, displayName: row.display_name, websiteUrl: row.website_url, apiBaseUrl: row.api_base_url, statusUrl: row.status_url, operatorName: row.operator_name, systemKind: row.system_kind, evidenceUrl: row.evidence_url, modelCount: Number(row.model_count), sampleCount7d: Number(row.sample_count_7d), successRate7d: row.success_rate_7d === null ? null : Number(row.success_rate_7d), averageLatency7d: row.average_latency_7d === null ? null : Number(row.average_latency_7d), lastCheckedAt: row.last_checked_at })),
-    prices: prices.map((row) => ({ providerSlug: row.provider_slug, providerName: row.provider_name, modelCode: row.model_code, displayName: row.display_name, currency: row.currency, unit: row.unit, inputPrice: row.input_price, outputPrice: row.output_price, multiplier: row.multiplier, evidenceKind: row.evidence_kind, evidenceUrl: row.evidence_url, verifiedAt: row.verified_at })),
+    prices,
     events: events.map((row) => ({ providerName: row.provider_name, kind: row.kind, title: row.title, details: row.details, evidenceUrl: row.evidence_url, startedAt: row.started_at, endedAt: row.ended_at })),
   };
 }

@@ -1,3 +1,4 @@
+import { currentAnomalyJoins, currentAnomalyCount } from "./current-anomalies";
 import { databasePool, query } from "./database";
 
 export interface AdminReviewItem {
@@ -256,9 +257,7 @@ export async function getAdminDashboard(): Promise<{
     ),
     query<AnomalyRow>(
       `select oa.kind, oa.severity, count(*)::text as count
-         from offer_anomalies oa
-         join raw_offer_snapshots ros on ros.id = oa.raw_offer_snapshot_id
-         join sources s on s.id = ros.source_id and s.latest_complete_run_id = ros.crawl_run_id
+         ${currentAnomalyJoins}
         where oa.status = 'open'
         group by oa.kind, oa.severity
         order by case oa.severity when 'critical' then 1 when 'warning' then 2 else 3 end,
@@ -653,9 +652,7 @@ export async function getAdminAnomalies(): Promise<AdminAnomalyRow[]> {
     `select oa.id, oa.kind, oa.severity, ros.raw_title title,
             coalesce(m.name,s.platform_merchant_id) source_name,
             oa.observed_value, oa.baseline_value, oa.detected_at
-       from offer_anomalies oa
-       join raw_offer_snapshots ros on ros.id=oa.raw_offer_snapshot_id
-       join sources s on s.id=ros.source_id and s.latest_complete_run_id=ros.crawl_run_id
+       ${currentAnomalyJoins}
        left join merchants m on m.id=s.merchant_id
       where oa.status='open'
       order by case oa.severity when 'critical' then 1 when 'warning' then 2 else 3 end,
@@ -1012,7 +1009,7 @@ export async function getAdminQualityReport() {
        (select count(distinct canonical_product_id) from offers o,current c where o.publish_generation_id=c.id)::text covered_product_count,
        (select count(*) from offers o,current c where o.publish_generation_id=c.id)::text offer_count,
        (select count(*) from offers o,current c where o.publish_generation_id=c.id and o.freshness_state='stale')::text stale_offer_count,
-       (select count(*) from offer_anomalies where status='open')::text open_anomaly_count,
+       (${currentAnomalyCount})::text open_anomaly_count,
        (select count(*) from offer_matches where review_status='pending')::text pending_review_count,
        (select count(*) from semantic_duplicate_candidates where status='candidate')::text duplicate_candidate_count,
        (select count(*) from llm_extraction_candidates where status='candidate')::text llm_candidate_count,

@@ -1,3 +1,4 @@
+import { currentAnomalyCount } from "./current-anomalies";
 import { databasePool, query } from "./database";
 
 export interface PublicHealthSummary {
@@ -8,6 +9,14 @@ export interface PublicHealthSummary {
   failingSourceCount: number;
   runs24h: number;
   successfulRuns24h: number;
+  completedRuns24h: number;
+  fullSuccessfulRuns24h: number;
+  partialSuccessfulRuns24h: number;
+  failedRuns24h: number;
+  runningRuns24h: number;
+  enabledSourceCount: number;
+  fullCoveredSourceCount: number;
+  fullCoverageRate: number | null;
   runSuccessRate: number | null;
   currentOfferCount: number;
   staleOfferCount: number;
@@ -23,6 +32,13 @@ interface HealthRow {
   failing_source_count: string;
   runs_24h: string;
   successful_runs_24h: string;
+  completed_runs_24h: string;
+  full_successful_runs_24h: string;
+  partial_successful_runs_24h: string;
+  failed_runs_24h: string;
+  running_runs_24h: string;
+  enabled_source_count: string;
+  full_covered_source_count: string;
   current_offer_count: string;
   stale_offer_count: string;
   open_anomaly_count: string;
@@ -37,18 +53,25 @@ export async function getPublicHealth(): Promise<PublicHealthSummary> {
      ), source_stats as (
        select count(*) filter (where health_status <> 'removed') source_count,
               count(*) filter (where enabled and health_status='healthy') healthy_source_count,
+              count(*) filter (where enabled) enabled_source_count,
+              count(*) filter (where enabled and last_success_at>now()-interval '24 hours') full_covered_source_count,
               count(*) filter (where enabled and health_status in ('retrying','failing')) failing_source_count
          from sources
      ), run_stats as (
        select count(*) runs_24h,
-              count(*) filter (where status='success' and complete_snapshot) successful_runs_24h
+              count(*) filter (where status='success') successful_runs_24h,
+              count(*) filter (where status in ('success','failed','partial')) completed_runs_24h,
+              count(*) filter (where status='success' and complete_snapshot) full_successful_runs_24h,
+              count(*) filter (where status='success' and not complete_snapshot) partial_successful_runs_24h,
+              count(*) filter (where status in ('failed','partial')) failed_runs_24h,
+              count(*) filter (where status not in ('success','failed','partial')) running_runs_24h
          from crawl_runs where created_at > now() - interval '24 hours'
      ), offer_stats as (
        select count(*) current_offer_count,
               count(*) filter (where offer_verified_at<=now()-interval '24 hours') stale_offer_count
          from offers o,publication p where o.publish_generation_id=p.generation_id
      ), anomaly_stats as (
-       select count(*) open_anomaly_count from offer_anomalies where status='open'
+       select (${currentAnomalyCount}) open_anomaly_count
      )
      select p.published_at,p.generation_id,s.*,r.*,o.*,a.*
        from publication p cross join source_stats s cross join run_stats r
@@ -67,7 +90,15 @@ export async function getPublicHealth(): Promise<PublicHealthSummary> {
     failingSourceCount: Number(row?.failing_source_count ?? 0),
     runs24h,
     successfulRuns24h,
-    runSuccessRate: runs24h ? successfulRuns24h / runs24h : null,
+    completedRuns24h: Number(row?.completed_runs_24h ?? 0),
+    fullSuccessfulRuns24h: Number(row?.full_successful_runs_24h ?? 0),
+    partialSuccessfulRuns24h: Number(row?.partial_successful_runs_24h ?? 0),
+    failedRuns24h: Number(row?.failed_runs_24h ?? 0),
+    runningRuns24h: Number(row?.running_runs_24h ?? 0),
+    enabledSourceCount: Number(row?.enabled_source_count ?? 0),
+    fullCoveredSourceCount: Number(row?.full_covered_source_count ?? 0),
+    fullCoverageRate: Number(row?.enabled_source_count) ? Number(row?.full_covered_source_count) / Number(row?.enabled_source_count) : null,
+    runSuccessRate: Number(row?.completed_runs_24h) ? successfulRuns24h / Number(row?.completed_runs_24h) : null,
     currentOfferCount,
     staleOfferCount,
     staleRate: currentOfferCount ? staleOfferCount / currentOfferCount : null,

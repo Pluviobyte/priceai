@@ -1,8 +1,9 @@
+import { loadAnomalyState, reconcileOfferAnomalies } from './offer-anomaly-state.js';
 import { isDeepStrictEqual } from 'node:util';
 import { snapshotIdSql } from './snapshot-id.js';
 import {latestCatalogRowSql} from './catalog-scope.js';
 import { catalogContentHash, offerContentHash } from './publication-content.js';
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { classifyOffer } from "@price-radar/classifier";
 import { detectOfferAnomalies } from "@price-radar/anomaly-detector";
 import {
@@ -131,6 +132,7 @@ export async function publishLatestSnapshots(
         .where(inArray(offerMatches.rawOfferSnapshotId,rows.slice(offset,offset+5000).map(row=>row.raw.id)));
       for(const previousRow of previousRows) priorMatches.set(previousRow.match.rawOfferSnapshotId,previousRow);
     }
+    const anomalyState = await loadAnomalyState(tx);
     const productIds = new Set<string>();
     const sourceIds = new Set<string>();
     let offerCount = 0;
@@ -214,54 +216,10 @@ export async function publishLatestSnapshots(
             canonicalProductSlug: classification.canonicalProductSlug,
             ...(existing ? { previousPrice: existing.price } : {}),
           });
-      const anomalyKinds = detectedAnomalies.map((anomaly) => anomaly.kind);
-      await tx
-        .update(offerAnomalies)
-        .set({ status: "resolved", resolvedAt: now })
-        .where(
-          anomalyKinds.length > 0
-            ? and(
-                eq(offerAnomalies.rawOfferSnapshotId, row.raw.id),
-                notInArray(offerAnomalies.kind, anomalyKinds),
-              )
-            : eq(offerAnomalies.rawOfferSnapshotId, row.raw.id),
-        );
-      for (const anomaly of detectedAnomalies) {
-        await tx
-          .insert(offerAnomalies)
-          .values({
-            rawOfferSnapshotId: row.raw.id,
-            sourceId: row.source.id,
-            ...(existing ? { offerId: existing.id } : {}),
-            kind: anomaly.kind,
-            severity: anomaly.severity,
-            ...(anomaly.observedValue !== undefined
-              ? { observedValue: anomaly.observedValue }
-              : {}),
-            ...(anomaly.baselineValue !== undefined
-              ? { baselineValue: anomaly.baselineValue }
-              : {}),
-            details: anomaly.details,
-            status: "open",
-            detectedAt: now,
-          })
-          .onConflictDoUpdate({
-            target: [offerAnomalies.rawOfferSnapshotId, offerAnomalies.kind],
-            set: {
-              severity: anomaly.severity,
-              ...(anomaly.observedValue !== undefined
-                ? { observedValue: anomaly.observedValue }
-                : {}),
-              ...(anomaly.baselineValue !== undefined
-                ? { baselineValue: anomaly.baselineValue }
-                : {}),
-              details: anomaly.details,
-              status: sql`case when ${offerAnomalies.status} = 'ignored' then 'ignored' else 'open' end`,
-              detectedAt: now,
-              resolvedAt: sql`case when ${offerAnomalies.status} = 'ignored' then ${offerAnomalies.resolvedAt} else null end`,
-            },
-          });
-      }
+      await reconcileOfferAnomalies(tx, anomalyState, {
+        sourceId: row.source.id, sourceItemId: raw.sourceItemId, rawId: row.raw.id,
+        ...(existing ? { offerId: existing.id } : {}),
+      }, detectedAnomalies, now);
       const previousMatch=priorMatches.get(row.raw.id);
       const matchValues={canonicalProductId:product?.id??null,
         confidence:String(classification.confidence),matchedRules:classification.matchedRules,
@@ -382,7 +340,7 @@ export async function publishLatestSnapshots(
           await tx
             .update(offerAnomalies)
             .set({ offerId: publishedOffer.id })
-            .where(eq(offerAnomalies.rawOfferSnapshotId, row.raw.id));
+            .where(and(eq(offerAnomalies.rawOfferSnapshotId, row.raw.id), sql`${offerAnomalies.offerId} is distinct from ${publishedOffer.id}::uuid`));
         }
 
         const changed =
