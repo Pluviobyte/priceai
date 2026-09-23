@@ -64,6 +64,7 @@ interface PriceSeed {
 }
 
 export interface BrowserDocument {
+  html?: string;
   url: string;
   status: number | null;
   finalUrl: string;
@@ -125,10 +126,10 @@ const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
   { vendor: "openai", planCode: "chatgpt-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "ChatGPT Plus", evidenceUrl: "https://help.openai.com/en/articles/6950777-what-is-chatgpt-plus", evidence: { billing: "monthly", officialArticleUpdated: "2026-08-17" }, verificationTerms: ["ChatGPT Plus"] },
   { vendor: "openai", planCode: "chatgpt-pro-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Pro $100 (5x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 5, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "5x"] },
   { vendor: "openai", planCode: "chatgpt-pro-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro $200 (20x)", evidenceUrl: "https://help.openai.com/en/articles/9793128-what-is-chatgpt-pro", evidence: { usageMultiple: 20, officialArticleUpdated: "2026-08-26" }, verificationTerms: ["ChatGPT Pro", "20x"] },
-  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", verificationTerms: ["Pro"] },
-  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { billedUpfront: true }, verificationTerms: ["Pro"] },
-  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
-  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049762-choose-a-claude-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
+  { vendor: "anthropic", planCode: "claude-pro-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 20, rawPlanName: "Pro", evidenceUrl: "https://support.claude.com/en/articles/8325606-what-is-the-pro-plan", verificationTerms: ["Pro"] },
+  { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://claude.com/pricing", evidence: { billedUpfront: true }, verificationTerms: ["Pro"] },
+  { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049741-what-is-the-max-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
+  { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049741-what-is-the-max-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
   { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok"] },
   { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok Plus"] },
 ];
@@ -589,11 +590,22 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export async function verifyOfficialWebPrices(database: Database, verifiedAt = new Date()): Promise<number> {
+export async function verifyOfficialWebPrices(database: Database, verifiedAt = new Date(), fetchDocuments?: BrowserDocumentFetcher): Promise<number> {
   const referencePlans = PLAN_SEEDS.filter(plan => ["anthropic", "xai"].includes(plan.vendor));
   const sourceUrls = [...new Set(LIVE_WEB_PRICES.filter(price => referencePlans.some(plan => plan.planCode === price.planCode)).map(price => price.evidenceUrl))];
   const fetchedPages = await mapWithConcurrency(sourceUrls, 4, async sourceUrl => {
-    try { return [sourceUrl, { html: await fetchText(sourceUrl), error: "" }] as const; }
+    try {
+      // Use one browser request for the shared xAI page; do not retry a blocked source.
+      if (new URL(sourceUrl).hostname === "x.ai" && fetchDocuments) {
+        const [document] = await fetchDocuments([sourceUrl]);
+        if (!document || document.error || document.status !== 200 || document.url !== sourceUrl
+          || document.finalUrl !== sourceUrl || !document.text.trim()) {
+          throw new Error(`official_browser_failed:${document?.status ?? "unknown"}:${document?.error ?? "invalid_document"}`);
+        }
+        return [sourceUrl, { html: document.html ?? "", error: document.html ? "" : "official_browser_html_missing" }] as const;
+      }
+      return [sourceUrl, { html: await fetchText(sourceUrl), error: "" }] as const;
+    }
     catch (error) { return [sourceUrl, { html: null, error: errorMessage(error) }] as const; }
   });
   const pages = new Map<string, { html: string | null; error: string }>(fetchedPages);
@@ -1088,7 +1100,7 @@ export async function refreshOfficialSubscriptionChannels(
   try { exchangeRates = await refreshEcbCnyRates(database); } catch (error) { report("ecb", error); }
   options.onProgress?.("exchange_rates", {count: exchangeRates});
   const seededPrices = await seedVerifiedSubscriptionPrices(database);
-  const verifiedWebPrices = await verifyOfficialWebPrices(database, verifiedAt);
+  const verifiedWebPrices = await verifyOfficialWebPrices(database, verifiedAt, options.fetchDocuments);
   let google: GoogleWebCollectionResult = { prices: 0, countries: 0, monthlyAmounts: new Map() };
   try { google = await collectGoogleWebPrices(database, verifiedAt, { scope }); } catch (error) { report("google_web", error); }
   options.onProgress?.("google_web", {prices: google.prices, countries: google.countries});

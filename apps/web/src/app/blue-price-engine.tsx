@@ -26,7 +26,7 @@ function relative(iso: string | null) {
 
 /** 价格分布条：官方价为右端 100%，最低价落点按比例定位。 */
 function Band({ row }: { row: BaselineRow }) {
-  if (!row.band || !row.official) return <span className="blue-engine-nodata">分布待补</span>;
+  if (!row.band || !row.official) return <span className="blue-engine-nodata">{row.band ? "官方基准待核验" : "暂无同类报价"}</span>;
   const max = Math.max(row.official.cny, row.band.maxCny);
   const left = Math.max(0, Math.min(100, (row.band.minCny / max) * 100));
   const width = Math.max(2, Math.min(100 - left, ((row.band.maxCny - row.band.minCny) / max) * 100));
@@ -128,7 +128,7 @@ export function PriceBaselineTable({ snapshot }: { snapshot: HomeSnapshot }) {
 
       {snapshot.warnings?.map(warning => <p key={warning} role="status" className="blue-engine-nodata">{warning}</p>)}
       <div className="blue-engine-table">
-        <div className="blue-engine-table-head"><span>标准商品</span><span>官方正价（折人民币）</span><span>官方底价（折人民币）</span><span>渠道最低价</span><span>价格分布</span><span>有效报价</span><span /></div>
+        <div className="blue-engine-table-head"><span>标准商品</span><span>官方正价（折人民币）</span><span>官方底价（折人民币）</span><span>渠道最低价</span><span>价格分布</span><span>同交付方式报价</span><span /></div>
         {baseline.map((row) => <BaselineRowView row={row} placeholder={placeholder} key={row.slug} />)}
       </div>
 

@@ -197,6 +197,7 @@ export class BrowserCollector implements CollectorAdapter {
 // ---------------------------------------------------------------------------
 
 export interface BrowserDocumentResult {
+  html?: string;
   url: string;
   status: number | null;
   finalUrl: string;
@@ -205,6 +206,7 @@ export interface BrowserDocumentResult {
 }
 
 export interface BrowserDocumentFetchOptions {
+  includeHtml?: boolean;
   executablePath?: string;
   navigationTimeoutMs?: number;
   challengeWaitMs?: number;
@@ -254,7 +256,7 @@ export async function fetchDocumentsWithBrowser(
           }
         }
         blocked = status === 403 || status === 429 || status === 503 ? blocked + 1 : 0;
-        results.push({ url, status, finalUrl: page.url(), text });
+        results.push({ url, status, finalUrl: page.url(), text, ...(options.includeHtml ? { html: await page.content() } : {}) });
       } catch (error) {
         results.push({ url, status: null, finalUrl: url, text: "", error: error instanceof Error ? error.message : "browser_fetch_failed" });
       }

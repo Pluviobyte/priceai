@@ -102,7 +102,8 @@ async function upsertApiPrice(database: Database, seed: ApiPriceSeed, verifiedAt
   const priceTier = seed.priceTier ?? "standard";
   const evidenceHash = hash(seed);
   const [existing] = await database.select().from(officialApiPrices).where(and(eq(officialApiPrices.modelId, model.id), eq(officialApiPrices.priceTier, priceTier), eq(officialApiPrices.unit, seed.unit))).limit(1);
-  const changed = !existing || existing.evidenceHash !== evidenceHash;
+  // Historical seeds never replace a live or previously imported record.
+  if (existing) return;
   const values = {
     modelId: model.id,
     priceTier,
@@ -119,12 +120,10 @@ async function upsertApiPrice(database: Database, seed: ApiPriceSeed, verifiedAt
     evidenceHash,
     verifiedAt,
   };
-  const [price] = await database.insert(officialApiPrices).values(values).onConflictDoUpdate({
+  const [price] = await database.insert(officialApiPrices).values(values).onConflictDoNothing({
     target: [officialApiPrices.modelId, officialApiPrices.priceTier, officialApiPrices.unit],
-    set: { ...values, updatedAt: verifiedAt },
   }).returning({ id: officialApiPrices.id });
-  if (!price) throw new Error("official_api_price_upsert_failed");
-  if (changed) {
+  if (price) {
     await database.insert(officialApiPriceHistory).values({
       officialApiPriceId: price.id,
       inputPrice: decimal(seed.inputPrice),
@@ -138,8 +137,21 @@ async function upsertApiPrice(database: Database, seed: ApiPriceSeed, verifiedAt
   }
 }
 
-export async function seedVerifiedOfficialApiPrices(database: Database, verifiedAt = new Date()): Promise<{ vendors: number; priceRows: number }> {
+export function seedVerificationDate(documentVersion?: string): Date | null {
+  const match = documentVersion?.match(/^verified-(\d{4}-\d{2}-\d{2})$/);
+  if (!match) return null;
+  const date = new Date(`${match[1]}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === match[1] ? date : null;
+}
+
+export async function seedVerifiedOfficialApiPrices(database: Database): Promise<{ vendors: number; priceRows: number; skipped: number }> {
   for (const vendor of VENDORS) await upsertVendor(database, vendor);
-  for (const price of API_PRICES) await upsertApiPrice(database, price, verifiedAt);
-  return { vendors: VENDORS.length, priceRows: API_PRICES.length };
+  let priceRows = 0;
+  for (const price of API_PRICES) {
+    const verifiedAt = seedVerificationDate(price.documentVersion);
+    if (!verifiedAt) continue;
+    await upsertApiPrice(database, price, verifiedAt);
+    priceRows++;
+  }
+  return { vendors: VENDORS.length, priceRows, skipped: API_PRICES.length - priceRows };
 }

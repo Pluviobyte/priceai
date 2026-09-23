@@ -171,6 +171,23 @@ export function extractClaudePlanPrice(html: string, planCode: string): number |
   if (!name) return null;
   const requestedPeriod = planCode.endsWith("annual") ? "year" : "month";
   const amounts = new Set<number>();
+  const visible = visibleTextFromHtml(html);
+  // Help articles bind the plan, currency and billing period in the same sentence.
+  if (planCode === "claude-pro-monthly") {
+    for (const match of visible.matchAll(/Pro plan is available for \$([0-9]+(?:\.[0-9]{1,2})?) per month \(US\)/g)) amounts.add(Number(match[1]));
+  }
+  if (planCode.startsWith("claude-max-") && /prices are for web subscriptions only/i.test(visible)) {
+    const tier = planCode === "claude-max-5x-monthly" ? "5" : "20";
+    const pattern = new RegExp(`Max ${tier}x\\s*:\\s*\\$([0-9]+(?:\\.[0-9]{1,2})?) per month`, "g");
+    for (const match of visible.matchAll(pattern)) amounts.add(Number(match[1]));
+  }
+  if (planCode === "claude-pro-annual") {
+    const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+    for (const match of markup.matchAll(/<([a-z][a-z0-9]*)\b(?=[^>]*\bdata-plan=["']pro_annual["'])(?=[^>]*\bdata-plan-field=["']amount_total["'])[^>]*>([\s\S]*?)<\/\1>/gi)) {
+      const amount = visibleTextFromHtml(match[2]!).match(/^\$([0-9]+(?:\.[0-9]{1,2})?)$/);
+      if (amount && /^\s*billed up front/i.test(visibleTextFromHtml(markup.slice(match.index! + match[0].length, match.index! + match[0].length + 100)))) amounts.add(Number(amount[1]));
+    }
+  }
   const tables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)].map(table => table[1]!);
   for (const table of tables.length ? tables : [html]) {
     // The live guide uses ordinary td elements for its bold column headings.

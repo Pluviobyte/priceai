@@ -58,9 +58,10 @@ const PROVIDERS: readonly ProviderSeed[] = [
   },
 ] as const;
 
-function numberOrNull(value: unknown): number | null {
+export function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || (typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) return null;
   const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function modelArray(payload: unknown): Record<string, unknown>[] {
@@ -118,7 +119,7 @@ export async function seedTransitProviders(database: Database): Promise<number> 
   return PROVIDERS.length;
 }
 
-export async function refreshTransitProvider(database: Database, slug: string): Promise<{ success: boolean; models: number; prices: number }> {
+export async function refreshTransitProvider(database: Database, slug: string): Promise<{ success: boolean; models: number; prices: number; skipped: number }> {
   const seed = PROVIDERS.find((provider) => provider.slug === slug);
   if (!seed) throw new Error(`unknown_transit_provider:${slug}`);
   const providerId = await upsertProvider(database, seed);
@@ -126,8 +127,7 @@ export async function refreshTransitProvider(database: Database, slug: string): 
   try {
     const result = await boundedJson(seed.modelsEndpoint);
     const models = modelArray(result.payload);
-    await recordTransition(database, providerId, true, checkedAt);
-    await database.insert(transitProbes).values({ providerId, probeKind: "public_model_catalog", success: true, latencyMs: result.latencyMs, httpStatus: result.status, modelCount: models.length, evidence: { endpoint: seed.modelsEndpoint } });
+    if (!models.length) throw new Error("transit_empty_catalog");
     let prices = 0;
     for (const model of models) {
       const modelCode = typeof model.id === "string" ? model.id : null;
@@ -159,7 +159,10 @@ export async function refreshTransitProvider(database: Database, slug: string): 
       });
       prices += 1;
     }
-    return { success: true, models: models.length, prices };
+    if (!prices) throw new Error("transit_no_usable_prices");
+    await recordTransition(database, providerId, true, checkedAt);
+    await database.insert(transitProbes).values({ providerId, probeKind: "public_model_catalog", success: true, latencyMs: result.latencyMs, httpStatus: result.status, modelCount: models.length, evidence: { endpoint: seed.modelsEndpoint, prices, skipped: models.length - prices } });
+    return { success: true, models: models.length, prices, skipped: models.length - prices };
   } catch (error) {
     const details = error as Error & { httpStatus?: number; latencyMs?: number };
     await recordTransition(database, providerId, false, checkedAt);
@@ -172,12 +175,12 @@ export async function refreshTransitProvider(database: Database, slug: string): 
       errorCode: details.message.slice(0, 160),
       evidence: { endpoint: seed.modelsEndpoint },
     });
-    return { success: false, models: 0, prices: 0 };
+    return { success: false, models: 0, prices: 0, skipped: 0 };
   }
 }
 
-export async function refreshAllTransitProviders(database: Database): Promise<Record<string, { success: boolean; models: number; prices: number }>> {
-  const results: Record<string, { success: boolean; models: number; prices: number }> = {};
+export async function refreshAllTransitProviders(database: Database): Promise<Record<string, { success: boolean; models: number; prices: number; skipped: number }>> {
+  const results: Record<string, { success: boolean; models: number; prices: number; skipped: number }> = {};
   for (const provider of PROVIDERS.filter((item) => item.active)) results[provider.slug] = await refreshTransitProvider(database, provider.slug);
   return results;
 }

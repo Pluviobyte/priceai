@@ -1,3 +1,4 @@
+import { runTransitSweep } from "./transit-runner.js";
 import { runSubscriptionSweep } from "./subscription-runner.js";
 import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
@@ -167,7 +168,7 @@ async function main(): Promise<void> {
       const result = await runSubscriptionSweep(config.databaseUrl, {
         force: true,
         scope: argument === "featured" ? "featured" : "full",
-        fetchDocuments: (urls) => fetchDocumentsWithBrowser(urls, config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}),
+        fetchDocuments: (urls) => fetchDocumentsWithBrowser(urls, { ...(config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}), ...(urls.every(url => new URL(url).hostname === "x.ai") ? { includeHtml: true, navigationTimeoutMs: 15_000, challengeWaitMs: 0 } : {}) }),
         onError: (source, error) => process.stderr.write(`official subscription source failed: ${source}: ${error instanceof Error ? error.message : String(error)}\n`),
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -175,12 +176,16 @@ async function main(): Promise<void> {
       return;
     }
     if (command === "refresh-official-api") {
+      throw new Error("live_official_api_collection_not_implemented: use seed-official-api-history for dated historical seeds");
+    }
+    if (command === "seed-official-api-history") {
       const result = await seedVerifiedOfficialApiPrices(database.db);
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
     if (command === "refresh-transit") {
-      const result = await refreshAllTransitProviders(database.db);
+      const result = await runTransitSweep(config.databaseUrl);
+      if (result.status === "partial") process.exitCode = 1;
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
@@ -280,7 +285,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, publicSnapshot, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|discover-links|discover-telegram|discover-github|coverage-check|llm-extract-candidates|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|seed-official-api-history|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|discover-links|discover-telegram|discover-github|coverage-check|llm-extract-candidates|bootstrap> [argument]");
   } finally {
     await database.close();
     rawObjectStore.destroy();
