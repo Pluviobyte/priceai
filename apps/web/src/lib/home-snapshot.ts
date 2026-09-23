@@ -5,7 +5,7 @@ import { createAsyncCache, type AsyncCache } from "./async-cache";
 import { query } from "./database";
 import { getPublicMarketChanges } from "./public-catalog";
 import { getPublicationPointer } from "./publication-state";
-import { getCachedOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
+import { collectedSubscriptionPriceOrder, getCachedOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
 
 /** 把 10 种 offerMode 归成 4 类“账号最后归谁”，这是首页解释差价用的口径。 */
 export type DeliveryFamily = "official" | "own-account" | "handed-over" | "usage-only";
@@ -116,7 +116,9 @@ export function buildHomeBaseline(prices: OfficialSubscriptionPrice[], offers: H
       && isFreshOfficialSubscriptionPrice(p) && hasCurrentCnyEstimate(p));
     const reference = officialPrices.filter(p => p.channel === "web" && p.countryCode === "US")
       .sort((a,b) => b.verifiedAt.getTime() - a.verifiedAt.getTime())[0];
-    const floor = [...officialPrices].sort((a,b) => Number(a.cnyEstimate) - Number(b.cnyEstimate)
+    // Same amount, same price: the official site outranks an app store whatever its conversion or sweep time.
+    const samePriceOrder = collectedSubscriptionPriceOrder(officialPrices);
+    const floor = [...officialPrices].sort((a,b) => samePriceOrder(a,b)
       || b.verifiedAt.getTime() - a.verifiedAt.getTime() || a.id.localeCompare(b.id))[0];
     const officialQuote = (price: OfficialSubscriptionPrice | undefined) => {
       if (!price) return null;

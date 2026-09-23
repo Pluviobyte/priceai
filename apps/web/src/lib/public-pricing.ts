@@ -113,21 +113,47 @@ export function selectOfficialSubscriptionReference(rows: OfficialSubscriptionPr
       || a.countryCode.localeCompare(b.countryCode))[0] ?? null;
 }
 
-/** Sort collected exact amounts in CNY; records without a usable conversion follow. */
-export function sortCollectedSubscriptionPrices(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice[] {
-  const amount = (row: OfficialSubscriptionPrice) => row.priceKind === "exact" && row.amount !== null
+const CHANNEL_PRIORITY: Record<string, number> = { web: 0, app_store: 1, google_play: 2 };
+
+function hasComparableCny(row: OfficialSubscriptionPrice): boolean {
+  return row.priceKind === "exact" && row.amount !== null
     && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0
-    && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0
-    ? Number(row.cnyEstimate) : Infinity;
-  return [...rows].sort((a, b) => amount(a) - amount(b)
+    && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0;
+}
+
+/**
+ * Cheapest first, where records charging the same plan, currency and amount are one price: they rank
+ * together at the lowest CNY any of them converts to, and the official site leads the app stores. CNY
+ * alone cannot decide a tie, because each record converts at its own exchange-rate date — the same
+ * HUF amount has differed by ¥15 between channels. Records without a usable conversion compare equal
+ * here and are left to the caller's tie-breaks.
+ */
+export function collectedSubscriptionPriceOrder(rows: readonly OfficialSubscriptionPrice[]): (a: OfficialSubscriptionPrice, b: OfficialSubscriptionPrice) => number {
+  const samePrice = (row: OfficialSubscriptionPrice) => `${row.planCode}|${row.billingPeriod}|${row.currency}|${Number(row.amount)}`;
+  const lowest = new Map<string, number>();
+  for (const row of rows) {
+    if (hasComparableCny(row)) lowest.set(samePrice(row), Math.min(lowest.get(samePrice(row)) ?? Infinity, Number(row.cnyEstimate)));
+  }
+  const rank = (row: OfficialSubscriptionPrice) => hasComparableCny(row) ? lowest.get(samePrice(row)) ?? Infinity : Infinity;
+  const channel = (row: OfficialSubscriptionPrice) => CHANNEL_PRIORITY[row.channel] ?? Object.keys(CHANNEL_PRIORITY).length;
+  // Equal ranks can only come from finite ranks, so both records are comparable in the second branch.
+  // Grouping by the same-price key before the channel keeps the order transitive when two different
+  // prices happen to share a lowest conversion.
+  return (a, b) => rank(a) - rank(b) || (Number.isFinite(rank(a))
+    ? (samePrice(a) < samePrice(b) ? -1 : samePrice(a) > samePrice(b) ? 1 : 0) || channel(a) - channel(b)
+    : 0);
+}
+
+/** Sort collected exact amounts in CNY, official site first within a same price; records without a usable conversion follow. */
+export function sortCollectedSubscriptionPrices(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice[] {
+  const order = collectedSubscriptionPriceOrder(rows);
+  return [...rows].sort((a, b) => order(a, b)
     || a.countryCode.localeCompare(b.countryCode) || a.channel.localeCompare(b.channel)
     || a.id.localeCompare(b.id));
 }
 
 export function selectCollectedSubscriptionMinimum(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice | null {
-  return sortCollectedSubscriptionPrices(rows).find(row => row.priceKind === "exact"
-    && row.amount !== null && Number.isFinite(Number(row.amount)) && Number(row.amount) >= 0
-    && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0) ?? null;
+  return sortCollectedSubscriptionPrices(rows).find(hasComparableCny) ?? null;
 }
 
 export interface OfficialReferencePrice {

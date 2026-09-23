@@ -81,7 +81,7 @@ export default async function OfficialPriceDetailPage({ params }: { params: Prom
     <main className="priceai-detail-shell">
       <Link className="priceai-detail-back" href="/official-prices">← 返回官方订阅</Link>
       <section className="priceai-detail-hero">
-        <div><span>官方订阅地区参考</span><h1>{planName}</h1><p>按采集价格的人民币估算由低到高排列，缺少精确价格或换算的记录置后。周期待核验的内购金额不能直接当作标准月费；税费与购买资格以结算页为准。</p></div>
+        <div><span>官方订阅地区参考</span><h1>{planName}</h1><p>按采集价格的人民币估算由低到高排列；原币金额相同视为同价，官网排在应用商店之前，缺少精确价格或换算的记录置后。周期待核验的内购金额不能直接当作标准月费；税费与购买资格以结算页为准。</p></div>
         <dl><div><dt>厂商</dt><dd>{companyNames[vendor] ?? vendor}</dd></div><div><dt>价格记录</dt><dd>{rows.length || "待接入"}</dd></div><div><dt>目录周期</dt><dd>{periodNames[billingPeriod] ?? billingPeriod}</dd></div></dl>
       </section>
 
