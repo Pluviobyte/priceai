@@ -121,33 +121,47 @@ function hasComparableCny(row: OfficialSubscriptionPrice): boolean {
     && row.cnyEstimate !== null && Number.isFinite(Number(row.cnyEstimate)) && Number(row.cnyEstimate) >= 0;
 }
 
+export interface CurrentCnyRate { rate: string; effectiveDate: string; sourceUrl: string }
+
 /**
- * Cheapest first, where records charging the same plan, currency and amount are one price: they rank
- * together at the lowest CNY any of them converts to, and the official site leads the app stores. CNY
- * alone cannot decide a tie, because each record converts at its own exchange-rate date — the same
- * HUF amount has differed by ¥15 between channels. Records without a usable conversion compare equal
- * here and are left to the caller's tie-breaks.
+ * Re-convert every foreign amount at the latest rate of its currency, so that all displayed CNY
+ * figures share one exchange-rate date and can be compared. The stored estimate used whichever rate
+ * was current when that record was swept: one HUF amount converted ¥15 apart on two channels. The
+ * collected amount, verification time and evidence are left as they are. CNY prices need no rate,
+ * and a currency without a current rate keeps its stored, dated conversion.
  */
-export function collectedSubscriptionPriceOrder(rows: readonly OfficialSubscriptionPrice[]): (a: OfficialSubscriptionPrice, b: OfficialSubscriptionPrice) => number {
+export function applyCurrentCnyRates<T extends Pick<OfficialSubscriptionPrice, "currency" | "amount" | "cnyEstimate" | "exchangeRateDate" | "exchangeRateUrl">>(
+  rows: readonly T[], rates: ReadonlyMap<string, CurrentCnyRate>,
+): T[] {
+  return rows.map(row => {
+    const current = row.currency === "CNY" ? undefined : rates.get(row.currency);
+    if (!current || row.amount === null || !Number.isFinite(Number(row.amount))) return row;
+    // Same arithmetic as the collector, so a record swept at this rate converts to its stored figure.
+    return { ...row, cnyEstimate: (Number(row.amount) * Number(current.rate)).toFixed(6),
+      exchangeRateDate: current.effectiveDate, exchangeRateUrl: current.sourceUrl };
+  });
+}
+
+/**
+ * Cheapest displayed CNY first. Records charging the same currency and amount for the same plan are
+ * one price, and after applyCurrentCnyRates they convert to the same figure; among them the official
+ * site leads the app stores. Records without a usable conversion compare equal here and are left to
+ * the caller's tie-breaks.
+ */
+export function compareCollectedSubscriptionPrices(a: OfficialSubscriptionPrice, b: OfficialSubscriptionPrice): number {
+  const cny = (row: OfficialSubscriptionPrice) => hasComparableCny(row) ? Number(row.cnyEstimate) : Infinity;
   const samePrice = (row: OfficialSubscriptionPrice) => `${row.planCode}|${row.billingPeriod}|${row.currency}|${Number(row.amount)}`;
-  const lowest = new Map<string, number>();
-  for (const row of rows) {
-    if (hasComparableCny(row)) lowest.set(samePrice(row), Math.min(lowest.get(samePrice(row)) ?? Infinity, Number(row.cnyEstimate)));
-  }
-  const rank = (row: OfficialSubscriptionPrice) => hasComparableCny(row) ? lowest.get(samePrice(row)) ?? Infinity : Infinity;
   const channel = (row: OfficialSubscriptionPrice) => CHANNEL_PRIORITY[row.channel] ?? Object.keys(CHANNEL_PRIORITY).length;
-  // Equal ranks can only come from finite ranks, so both records are comparable in the second branch.
-  // Grouping by the same-price key before the channel keeps the order transitive when two different
-  // prices happen to share a lowest conversion.
-  return (a, b) => rank(a) - rank(b) || (Number.isFinite(rank(a))
+  // A zero difference means both figures are finite and equal. Comparing the same-price key before the
+  // channel keeps the order transitive when two different prices convert to the same figure.
+  return cny(a) - cny(b) || (Number.isFinite(cny(a))
     ? (samePrice(a) < samePrice(b) ? -1 : samePrice(a) > samePrice(b) ? 1 : 0) || channel(a) - channel(b)
     : 0);
 }
 
 /** Sort collected exact amounts in CNY, official site first within a same price; records without a usable conversion follow. */
 export function sortCollectedSubscriptionPrices(rows: OfficialSubscriptionPrice[]): OfficialSubscriptionPrice[] {
-  const order = collectedSubscriptionPriceOrder(rows);
-  return [...rows].sort((a, b) => order(a, b)
+  return [...rows].sort((a, b) => compareCollectedSubscriptionPrices(a, b)
     || a.countryCode.localeCompare(b.countryCode) || a.channel.localeCompare(b.channel)
     || a.id.localeCompare(b.id));
 }
@@ -270,8 +284,26 @@ export interface TransitEvent {
   endedAt: Date | null;
 }
 
+/** The collector's own window: the newest positive rate dated within the past seven days. */
+async function getCurrentCnyRates(read: typeof query): Promise<Map<string, CurrentCnyRate>> {
+  const now = Date.now();
+  const rows = await read<{ base_currency: string; rate: string; effective_date: string; source_url: string }>(
+    `select distinct on (base_currency) base_currency,rate::text as rate,effective_date::text as effective_date,source_url
+       from exchange_rate_snapshots
+      where quote_currency='CNY' and rate>0 and effective_date between $1::date and $2::date
+      order by base_currency,effective_date desc`,
+    [new Date(now - 7 * 86_400_000).toISOString().slice(0, 10), new Date(now).toISOString().slice(0, 10)],
+  );
+  return new Map(rows.map(row => [row.base_currency, { rate: row.rate, effectiveDate: row.effective_date, sourceUrl: row.source_url }]));
+}
+
 export async function getOfficialSubscriptionPrices(checksPromise = getOfficialSubscriptionChecks(), read: typeof query = query): Promise<OfficialSubscriptionPrice[]> {
-  const [rows, checks] = await Promise.all([read<SubscriptionRow>(
+  const ratesPromise = getCurrentCnyRates(read).catch((error: unknown) => {
+    // Stored conversions are still correct for their own dates; show those rather than no prices.
+    console.error("official_current_cny_rates_failed", error);
+    return new Map<string, CurrentCnyRate>();
+  });
+  const [rows, checks, rates] = await Promise.all([read<SubscriptionRow>(
     `select p.id, pl.vendor, pl.plan_code, pl.display_name as plan_name,
             pl.billing_period, p.channel, p.country_code, p.currency,
             p.price_kind, p.amount, p.lower_amount, p.upper_amount,
@@ -288,9 +320,9 @@ export async function getOfficialSubscriptionPrices(checksPromise = getOfficialS
       order by pl.vendor,pl.display_name,
                case p.price_kind when 'exact' then 0 when 'range' then 1 else 2 end,
                p.cny_estimate nulls last,p.channel,p.country_code`,
-  ), checksPromise]);
+  ), checksPromise, ratesPromise]);
   const statusIndex = new Map(checks.map(check => [`${check.vendor}:${check.planCode}:${check.channel}:${check.countryCode}`, check.status]));
-  const prices = rows.map((row) => ({
+  const prices = applyCurrentCnyRates(rows.map((row) => ({
     id: row.id, vendor: row.vendor, planCode: row.plan_code, planName: row.plan_name,
     billingPeriod: row.billing_period, channel: row.channel, countryCode: row.country_code,
     currency: row.currency, priceKind: row.price_kind, amount: row.amount,
@@ -299,7 +331,7 @@ export async function getOfficialSubscriptionPrices(checksPromise = getOfficialS
     evidenceUrl: row.evidence_url, verifiedAt: row.verified_at, evidence: row.evidence,
     exchangeRateDate: row.exchange_rate_date, exchangeRateUrl: row.exchange_rate_url,
     historyCount: Number(row.history_count), collectionStatus: statusIndex.get(`${row.vendor}:${row.plan_code}:${row.channel}:${row.country_code}`) ?? null,
-  }));
+  })), rates);
   return prices.map(row => ({ ...row, billingVerified: hasVerifiedSubscriptionBilling(row),
     evidenceStatus: getOfficialSubscriptionPriceStatus(row),
     eligibleForComparison: row.priceKind === "exact" && isFreshOfficialSubscriptionPrice(row) && hasCurrentCnyEstimate(row),
