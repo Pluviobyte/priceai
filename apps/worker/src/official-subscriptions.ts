@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
-import { fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
+import { fetchOfficialDocuments } from "./official-document-fetcher.js";
 import { readWorkerConfig } from "./config.js";
 import { runSubscriptionSweep } from "./subscription-runner.js";
 
@@ -28,7 +28,7 @@ try {
       const result = await runSubscriptionSweep(config.databaseUrl, {
         intervalMs: config.officialSubscriptionRefreshIntervalMs,
         onProgress: (source, result) => console.log(JSON.stringify({event:"official_source_completed",source,...result})),
-        fetchDocuments: urls => fetchDocumentsWithBrowser(urls, { ...(config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}), ...(urls.every(url => new URL(url).hostname === "x.ai") ? { includeHtml: true, navigationTimeoutMs: 15_000, challengeWaitMs: 0 } : {}) }),
+        fetchDocuments: urls => fetchOfficialDocuments(urls, config.browserExecutablePath),
       });
       if (result.status !== "skipped") console.log(JSON.stringify({event: "official_subscription_sweep", ...result}));
     } catch (error) { console.error(error); }

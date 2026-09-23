@@ -1,3 +1,4 @@
+import { runTransitSweep } from "./transit-runner.js";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import pino from "pino";
@@ -26,9 +27,7 @@ import {
 import { S3JsonObjectStore } from "@price-radar/object-storage";
 import { createCollectorRegistry } from "./registry.js";
 import {
-  refreshAllTransitProviders,
   refreshOfficialSubscriptionChannels,
-  seedVerifiedOfficialApiPrices,
 } from "@price-radar/price-channels";
 import { readWorkerConfig } from "./config.js";
 
@@ -124,9 +123,9 @@ const worker = new Worker(
       case "prices.subscriptions.refresh":
         throw new Error("Use the dedicated Dokploy official subscription worker");
       case "prices.official_api.refresh":
-        return seedVerifiedOfficialApiPrices(database.db);
+        throw new Error("live_official_api_collection_not_implemented");
       case "prices.transit.refresh":
-        return refreshAllTransitProviders(database.db);
+        return runTransitSweep(config.databaseUrl);
       default:
         throw new Error(`unknown_job:${job.name}`);
     }
@@ -199,11 +198,8 @@ async function deliverNotifications(): Promise<void> {
 }
 
 async function refreshPriceChannels(): Promise<void> {
-  const [officialApi, transit] = await Promise.all([
-    seedVerifiedOfficialApiPrices(database.db),
-    refreshAllTransitProviders(database.db),
-  ]);
-  logger.info({ officialApi, transit }, "official and transit price channels refreshed");
+  const transit = await runTransitSweep(config.databaseUrl);
+  logger.info({ transit }, "transit price channels refreshed");
 }
 
 async function runSourceDiscovery(): Promise<void> {

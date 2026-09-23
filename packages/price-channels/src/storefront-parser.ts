@@ -200,6 +200,7 @@ export function extractClaudePlanPrice(html: string, planCode: string): number |
     for (const cells of rows) {
       const priceCell = cells[priceIndex];
       if (cells[nameIndex] !== name || !priceCell) continue;
+      if (/\b(?:from|starting|up to)\b|[–—]|\$\s*\d+(?:\.\d+)?\s*-/.test(priceCell.toLowerCase())) continue;
       const interval = intervalIndex >= 0 ? cells[intervalIndex]?.toLowerCase() : undefined;
       if (requestedPeriod === "month" && (/\b(?:annual(?:ly)?|yearly)\b/i.test(priceCell) || /^(?:annual(?:ly)?|yearly)$/.test(interval ?? ""))) continue;
       if (requestedPeriod === "year" && interval === "monthly") continue;

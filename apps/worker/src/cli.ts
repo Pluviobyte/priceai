@@ -1,6 +1,7 @@
 import { runTransitSweep } from "./transit-runner.js";
 import { runSubscriptionSweep } from "./subscription-runner.js";
-import { BrowserCollector, fetchDocumentsWithBrowser } from "@price-radar/browser-collector";
+import { fetchOfficialDocuments } from "./official-document-fetcher.js";
+import { BrowserCollector } from "@price-radar/browser-collector";
 import { createDatabase } from "@price-radar/database";
 import { sources } from "@price-radar/database/schema";
 import { eq } from "drizzle-orm";
@@ -36,7 +37,6 @@ import { S3JsonObjectStore } from "@price-radar/object-storage";
 import { runChannelCycle } from "./channel-cycle.js";
 import { createCollectorRegistry } from "./registry.js";
 import {
-  refreshAllTransitProviders,
   refreshOfficialSubscriptionChannels,
   seedVerifiedOfficialApiPrices,
 } from "@price-radar/price-channels";
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
       const result = await runSubscriptionSweep(config.databaseUrl, {
         force: true,
         scope: argument === "featured" ? "featured" : "full",
-        fetchDocuments: (urls) => fetchDocumentsWithBrowser(urls, { ...(config.browserExecutablePath ? { executablePath: config.browserExecutablePath } : {}), ...(urls.every(url => new URL(url).hostname === "x.ai") ? { includeHtml: true, navigationTimeoutMs: 15_000, challengeWaitMs: 0 } : {}) }),
+        fetchDocuments: (urls) => fetchOfficialDocuments(urls, config.browserExecutablePath),
         onError: (source, error) => process.stderr.write(`official subscription source failed: ${source}: ${error instanceof Error ? error.message : String(error)}\n`),
       });
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

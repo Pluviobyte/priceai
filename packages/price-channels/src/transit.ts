@@ -3,8 +3,11 @@ import {
   transitModelPrices,
   transitProbes,
   transitProviders,
-  type Database,
 } from "@price-radar/database";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type * as schema from "@price-radar/database/schema";
+type Database = NodePgDatabase<typeof schema>;
+
 import { desc, eq } from "drizzle-orm";
 
 interface ProviderSeed {
@@ -70,6 +73,13 @@ function modelArray(payload: unknown): Record<string, unknown>[] {
   return Array.isArray(data) ? data.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object") : [];
 }
 
+export function transitRetryAt(value: string | null, now = Date.now()): string | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  const at = Number.isFinite(seconds) && seconds >= 0 ? now + seconds * 1000 : Date.parse(value);
+  return Number.isFinite(at) && at > now && at <= 8.64e15 ? new Date(at).toISOString() : undefined;
+}
+
 async function boundedJson(url: string, init: RequestInit = {}): Promise<{ payload: unknown; status: number; latencyMs: number }> {
   const started = performance.now();
   const response = await fetch(url, {
@@ -89,7 +99,7 @@ async function boundedJson(url: string, init: RequestInit = {}): Promise<{ paylo
   if (text.length > 5_000_000) throw new Error("transit_response_too_large");
   let payload: unknown = null;
   try { payload = JSON.parse(text); } catch { payload = { raw: text.slice(0, 500) }; }
-  if (!response.ok) throw Object.assign(new Error(`transit_http_${response.status}`), { httpStatus: response.status, latencyMs });
+  if (!response.ok) throw Object.assign(new Error(`transit_http_${response.status}`), { httpStatus: response.status, latencyMs, retryAt: transitRetryAt(response.headers.get("retry-after")) });
   return { payload, status: response.status, latencyMs };
 }
 
@@ -119,23 +129,26 @@ export async function seedTransitProviders(database: Database): Promise<number> 
   return PROVIDERS.length;
 }
 
-export async function refreshTransitProvider(database: Database, slug: string): Promise<{ success: boolean; models: number; prices: number; skipped: number }> {
+export async function refreshTransitProvider(database: Database, slug: string): Promise<{ success: boolean; models: number; prices: number; skipped: number; retryAt?: string }> {
   const seed = PROVIDERS.find((provider) => provider.slug === slug);
   if (!seed) throw new Error(`unknown_transit_provider:${slug}`);
   const providerId = await upsertProvider(database, seed);
   const checkedAt = new Date();
+  let modelCount = 0;
+  let prices = 0;
+  let skipped = 0;
   try {
     const result = await boundedJson(seed.modelsEndpoint);
     const models = modelArray(result.payload);
     if (!models.length) throw new Error("transit_empty_catalog");
-    let prices = 0;
+    modelCount = models.length;
     for (const model of models) {
       const modelCode = typeof model.id === "string" ? model.id : null;
-      if (!modelCode) continue;
+      if (!modelCode) { skipped++; continue; }
       const pricing = model.pricing && typeof model.pricing === "object" ? model.pricing as Record<string, unknown> : {};
       const inputPerToken = numberOrNull(pricing.prompt ?? pricing.input);
       const outputPerToken = numberOrNull(pricing.completion ?? pricing.output);
-      if (inputPerToken === null && outputPerToken === null) continue;
+      if (inputPerToken === null && outputPerToken === null) { skipped++; continue; }
       await database.insert(transitModelPrices).values({
         providerId,
         modelCode,
@@ -161,10 +174,10 @@ export async function refreshTransitProvider(database: Database, slug: string): 
     }
     if (!prices) throw new Error("transit_no_usable_prices");
     await recordTransition(database, providerId, true, checkedAt);
-    await database.insert(transitProbes).values({ providerId, probeKind: "public_model_catalog", success: true, latencyMs: result.latencyMs, httpStatus: result.status, modelCount: models.length, evidence: { endpoint: seed.modelsEndpoint, prices, skipped: models.length - prices } });
-    return { success: true, models: models.length, prices, skipped: models.length - prices };
+    await database.insert(transitProbes).values({ providerId, probeKind: "public_model_catalog", success: true, latencyMs: result.latencyMs, httpStatus: result.status, modelCount: models.length, evidence: { endpoint: seed.modelsEndpoint, prices, skipped } });
+    return { success: true, models: models.length, prices, skipped };
   } catch (error) {
-    const details = error as Error & { httpStatus?: number; latencyMs?: number };
+    const details = error as Error & { httpStatus?: number; latencyMs?: number; retryAt?: string };
     await recordTransition(database, providerId, false, checkedAt);
     await database.insert(transitProbes).values({
       providerId,
@@ -173,14 +186,15 @@ export async function refreshTransitProvider(database: Database, slug: string): 
       latencyMs: details.latencyMs ?? null,
       httpStatus: details.httpStatus ?? null,
       errorCode: details.message.slice(0, 160),
-      evidence: { endpoint: seed.modelsEndpoint },
+      modelCount,
+      evidence: { endpoint: seed.modelsEndpoint, prices, skipped },
     });
-    return { success: false, models: 0, prices: 0, skipped: 0 };
+    return { success: false, models: modelCount, prices, skipped, ...(details.retryAt ? { retryAt: details.retryAt } : {}) };
   }
 }
 
-export async function refreshAllTransitProviders(database: Database): Promise<Record<string, { success: boolean; models: number; prices: number; skipped: number }>> {
-  const results: Record<string, { success: boolean; models: number; prices: number; skipped: number }> = {};
+export async function refreshAllTransitProviders(database: Database): Promise<Record<string, { success: boolean; models: number; prices: number; skipped: number; retryAt?: string }>> {
+  const results: Record<string, { success: boolean; models: number; prices: number; skipped: number; retryAt?: string }> = {};
   for (const provider of PROVIDERS.filter((item) => item.active)) results[provider.slug] = await refreshTransitProvider(database, provider.slug);
   return results;
 }

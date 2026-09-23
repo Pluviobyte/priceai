@@ -18,6 +18,9 @@ export async function runTransitSweep(databaseUrl: string) {
     if (!locked) return { status: "skipped", reason: "already_running" };
     await client.query("update operator_job_requests set status='failed',finished_at=now(),error_message='worker interrupted' where kind=$1 and status='running'", [KIND]);
     const times = (await client.query("select max(finished_at) filter(where status='success') as success,max(finished_at) as attempt from operator_job_requests where kind=$1", [KIND])).rows[0];
+    const last = (await client.query("select result from operator_job_requests where kind=$1 order by created_at desc limit 1", [KIND])).rows[0]?.result;
+    const retryDates = Object.values(last ?? {}).map(value => value && typeof value === "object" && "retryAt" in value ? Date.parse(String(value.retryAt)) : 0);
+    if (retryDates.some(at => at > Date.now())) return { status: "skipped", reason: "retry_after" };
     if (!sweepIsDue(times.success, times.attempt, Date.now(), 86_400_000)) return { status: "skipped", reason: "not_due" };
     requestId = (await client.query("insert into operator_job_requests(kind,status,requested_by,reason,started_at) values($1,'running','official-worker','daily public transit catalog',now()) returning id", [KIND])).rows[0].id;
     const providers = await refreshAllTransitProviders(drizzle(client, { schema }));
