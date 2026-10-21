@@ -99,3 +99,18 @@ test("catalog answers a new publication from the previous model while it loads",
   assert.notEqual(shared.resultCache.peek(`b:${filterKey(filters)}`), undefined);
   assert.deepEqual(loaded, ["a", "b"]);
 });
+
+
+test("catalog invalidates live data within the same immutable snapshot", async () => {
+  let revision = "2026-10-21T00:00:00Z", loads = 0;
+  const dependencies: CatalogReadDependencies = {
+    ...caches(), getPointer: async () => ({generation_id:"a",refreshed_at:revision}),
+    loadModel: async generationId => { loads++; return {generationId,offers:[]}; },
+  };
+  await readCachedChannelCatalog(parseChannelFilters({}), dependencies);
+  await readCachedChannelCatalog(parseChannelFilters({}), dependencies);
+  assert.equal(loads,1);
+  revision = "2026-10-21T00:04:00Z";
+  await readCachedChannelCatalog(parseChannelFilters({}), dependencies);
+  assert.equal(loads,2);
+});

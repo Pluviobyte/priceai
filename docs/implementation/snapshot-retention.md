@@ -117,3 +117,26 @@ By 07:24 UTC, nine full source collections (eight via Hangzhou) and seven public
 A follow-up at 08:57 UTC confirmed both services still active, 296 sources with full success in the preceding 24 hours, and 83 completed publications since recovery. There were four collection task timeout/network errors followed by further successful collections, with no publication failures. The existing 16688 goods-list-disabled maintenance errors remain. Public Web/database readiness was healthy, and other container identities/start times remained unchanged.
 
 Historical snapshot deletion and vacuum tuning are still not enabled. Permanent dependency-service and collection-freshness alerts remain outstanding. The existing periodic production checks do not cover these dependencies; the completed observation is not ongoing monitoring.
+
+
+## Full snapshot cadence (2026-10-21)
+
+Full snapshots now have a rolling minimum interval of 15 minutes per channel. The
+publisher reads the latest persisted publication time under the existing advisory
+lock, so restarts, rollback and forceGeneration cannot bypass the interval. The
+initial publication is immediate; unchanged business content still produces no
+new version. No retention policy, historical deletion or schema migration is enabled.
+
+Every publication attempt continues to update live offers, observations, anomalies,
+price history and alerts. During the interval, the existing generation pointer is
+reused for live membership, absent offers are detached, and immutable snapshot rows,
+metadata and content hashes are preserved. publication_channels.updated_at is the
+live refresh revision; homepage and channel caches include it in their keys.
+Historical Feed output remains tied to immutable snapshots and can lag live prices.
+The continuous worker schedules a retry for deferred snapshots even if no more
+crawls complete, and reconciles once on startup. This is a maximum frequency, not
+a promise of a new snapshot exactly every 15 minutes.
+
+Regression coverage uses an isolated PostgreSQL database for live price/stock updates,
+removal, immutable history, exact interval boundary, fresh connection and rollback
+behavior, and cache tests for refreshes within one snapshot generation.

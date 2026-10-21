@@ -29,6 +29,8 @@ import {
   type FreshnessState,
 } from "@price-radar/schema";
 
+export const FULL_SNAPSHOT_INTERVAL_MS = 15 * 60_000;
+
 export interface PublishOptions {
   channel?: string;
   now?: Date;
@@ -43,7 +45,9 @@ export interface PublishResult {
   productCount: number;
   sourceCount: number;
   quarantinedCount: number;
+  /** True when no new immutable snapshot was created; live offers still refresh. */
   unchanged: boolean;
+  snapshotDeferredUntil?: string;
 }
 
 function freshnessFor(capturedAt: Date, now: Date): FreshnessState {
@@ -103,8 +107,15 @@ export async function publishLatestSnapshots(
     const previousGenerationId = publication?.currentGenerationId ?? null;
     const [previous] = previousGenerationId ? await tx.select().from(publishGenerations)
       .where(eq(publishGenerations.id, previousGenerationId)).limit(1) : [];
+    // Persisted publication time, read under the publication lock: restarts and
+    // rollback to an older current pointer must not bypass the rolling limit.
+    const latest = await tx.execute(sql`select max(published_at) as published_at
+      from publish_generations where channel=${channel}`);
+    const lastSnapshotAt = latest.rows[0]?.published_at ?? previous?.publishedAt;
+    const nextSnapshotAt = lastSnapshotAt ? (lastSnapshotAt instanceof Date ? lastSnapshotAt.getTime() : new Date(String(lastSnapshotAt)).getTime()) + FULL_SNAPSHOT_INTERVAL_MS : 0;
+    const intervalBlocked = !!previous && now.getTime() < nextSnapshotAt;
     // Only legacy releases without a fingerprint can need the original backfill.
-    if (previousGenerationId && !previous?.contentHash) {
+    if (previousGenerationId && !previous?.contentHash && !intervalBlocked) {
       await tx.execute(sql`
         insert into published_offer_snapshots (
           id,publish_generation_id,offer_id,source_id,source_item_id,canonical_product_id,
@@ -138,6 +149,7 @@ export async function publishLatestSnapshots(
     let offerCount = 0;
     let quarantinedCount = 0;
     const contentHashes: string[] = [];
+    const retainedLiveIds: string[] = [];
     const updateLiveOffers: Array<(generationId: string) => Promise<void>> = [];
 
     for (const row of rows) {
@@ -287,6 +299,7 @@ export async function publishLatestSnapshots(
         classificationConfidence: classification.confidence,
       }));
 
+      if (existing) retainedLiveIds.push(existing.id);
       updateLiveOffers.push(async (targetGenerationId) => {
         const [publishedOffer] = await tx
           .insert(offers)
@@ -371,14 +384,24 @@ export async function publishLatestSnapshots(
     }
     const contentHash = catalogContentHash(contentHashes);
     const unchanged = !options.forceGeneration && previous?.snapshotState === 'retained' && previous.contentHash === contentHash;
-    const [generation] = unchanged ? [{id: previous.id}] : await tx.insert(publishGenerations)
-      .values({status:'staging',previousGenerationId,channel}).returning({id:publishGenerations.id});
+    const reuseSnapshot = unchanged || intervalBlocked;
+    const [generation] = reuseSnapshot && previous ? [{id: previous.id}] : await tx.insert(publishGenerations)
+      .values({status:'staging',previousGenerationId,channel,generatedAt:now}).returning({id:publishGenerations.id});
     if (!generation) throw new Error('publish_generation_insert_failed');
     // Decide the version before writing offers: one live update per item, no temporary version or second rewrite.
+    if (reuseSnapshot && previous) {
+      // Reusing a snapshot pointer must not leave removed/unclassified offers live.
+      // Only detach absent rows; immutable snapshots and price history stay intact.
+      await tx.execute(sql`update offers set publish_generation_id=null,updated_at=${now}
+        where publish_generation_id=${previous.id}::uuid and id not in
+          (select value::uuid from jsonb_array_elements_text(${JSON.stringify(retainedLiveIds)}::jsonb))`);
+    }
     for (const update of updateLiveOffers) await update(generation.id);
-    if (unchanged && previous) {
+    if (reuseSnapshot && previous) {
+      await tx.update(publicationChannels).set({updatedAt:now}).where(eq(publicationChannels.channel,channel));
       return { generationId: previous.id, previousGenerationId: previous.previousGenerationId,
-        offerCount, productCount: productIds.size, sourceCount: sourceIds.size, quarantinedCount, unchanged: true };
+        offerCount, productCount: productIds.size, sourceCount: sourceIds.size, quarantinedCount, unchanged: true,
+        ...(!unchanged && intervalBlocked ? {snapshotDeferredUntil:new Date(nextSnapshotAt).toISOString()} : {}) };
     }
     // Compute the legacy price/status comparison once, not sixty times on each admin page visit.
     const comparison = !previous || previous.snapshotState === 'retained' ? await tx.execute(sql`

@@ -16,9 +16,14 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
   const signal=options.signal??new AbortController().signal,log=options.log??(()=>undefined);
   const totals={attempted:0,complete:0,failed:0,vetted:0,approved:0};
   const storage=options.rawObjectStore?{rawObjectStore:options.rawObjectStore}:{};
+  let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
   const publisher=new IncrementalPublisher(async()=>{
     const started=Date.now();await seedCanonicalProducts(db);
     const publication=await publishLatestSnapshots(db);
+    if (snapshotTimer) clearTimeout(snapshotTimer);
+    snapshotTimer = publication.snapshotDeferredUntil ? setTimeout(() => {
+      snapshotTimer = undefined; publisher.changed();
+    }, Math.max(0, Date.parse(publication.snapshotDeferredUntil) - Date.now())) : undefined;
     log({event:publication.unchanged?'channels_refreshed':'channels_published',...publication,durationMs:Date.now()-started});
     if(options.rawObjectStore && !publication.unchanged) await storePublicGenerationSnapshot(db,options.rawObjectStore,publication.generationId).catch(error=>log({event:'public_snapshot_failed',error:String(error)}));
     await evaluatePriceAlerts(db,publication.generationId).catch(error=>log({event:'price_alert_evaluation_failed',error:String(error)}));
@@ -56,6 +61,8 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
       try{await maintain();}catch(error){log({event:'channel_maintenance_failed',error:String(error)});}
     }
   })();
+  // Reconcile pending live changes even after a restart with no new crawl completion.
+  publisher.changed();
   log({event:'continuous_dispatcher_started',platformConcurrency:config.channelPlatformConcurrency});
   try{
     await dispatchContinuously({concurrency:config.channelPlatformConcurrency,signal,
@@ -80,7 +87,8 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
         }
       }});
   }finally{
-    stopping=true;maintenanceAbort.abort();await Promise.allSettled([maintenance,discovery]);await publisher.flush();
+    stopping=true;maintenanceAbort.abort();await Promise.allSettled([maintenance,discovery]);
+    try { await publisher.flush(); } finally { if (snapshotTimer) clearTimeout(snapshotTimer); }
   }
   return {crawl:{attempted:totals.attempted,complete:totals.complete,failed:totals.failed}};
 }

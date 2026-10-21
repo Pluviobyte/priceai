@@ -4,7 +4,7 @@ import type { OfferMode } from "@price-radar/schema";
 import { createAsyncCache, createStaleWhileRevalidate, type AsyncCache, type StaleWhileRevalidate } from "./async-cache";
 import { query } from "./database";
 import { getPublicMarketChanges } from "./public-catalog";
-import { getPublicationPointer } from "./publication-state";
+import { getPublicationPointer, publicationCacheKey } from "./publication-state";
 import { compareCollectedSubscriptionPrices, getCachedOfficialSubscriptionPrices, isFreshOfficialSubscriptionPrice, hasCurrentCnyEstimate, type OfficialSubscriptionPrice } from "./public-pricing";
 
 /** 把 10 种 offerMode 归成 4 类“账号最后归谁”，这是首页解释差价用的口径。 */
@@ -243,7 +243,7 @@ async function loadHomeSnapshot(generationId?: string): Promise<HomeSnapshot> {
 }
 
 export interface HomeSnapshotReadDependencies {
-  getPointer(): Promise<{ generation_id: string | null } | null>;
+  getPointer(): Promise<{ generation_id: string | null; refreshed_at?: Date | string | null } | null>;
   load(generationId?: string): Promise<HomeSnapshot>;
   cache: AsyncCache<string, HomeSnapshot>;
   /** Wraps `cache`: answers a new publication with the previous snapshot while it loads. */
@@ -260,15 +260,16 @@ export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencie
   }
   for (let attempt = 0; attempt < 2; attempt++) {
     const generationId = firstPointer?.generation_id ?? "none";
+    const cacheKey = publicationCacheKey(firstPointer);
     const load = () => dependencies.load(generationId === "none" ? undefined : generationId);
     let snapshot: HomeSnapshot;
     if (dependencies.staleFor) {
-      const result = await dependencies.staleFor.get(generationId, load);
+      const result = await dependencies.staleFor.get(cacheKey, load);
       // A complete snapshot of the previous publication, knowingly one publication behind.
       if (result.stale) return result.value;
       snapshot = result.value;
     } else {
-      snapshot = await dependencies.cache.get(generationId, load);
+      snapshot = await dependencies.cache.get(cacheKey, load);
     }
     let current;
     try {
@@ -276,10 +277,10 @@ export async function readHomeSnapshot(dependencies: HomeSnapshotReadDependencie
     } catch {
       // A transient pointer failure must not turn an otherwise usable homepage
       // snapshot into a 500, and the unverified result must not remain cached.
-      dependencies.cache.delete(generationId);
+      dependencies.cache.delete(cacheKey);
       return { ...snapshot, warnings: [...(snapshot.warnings ?? []), "发布版本复核暂时失败"] };
     }
-    if ((current?.generation_id ?? "none") === generationId) return snapshot;
+    if (publicationCacheKey(current) === cacheKey) return snapshot;
     firstPointer = current;
   }
   throw new Error("publication_changed_during_home_read");

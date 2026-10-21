@@ -31,7 +31,7 @@ export interface CatalogOffer extends QueryResultRow {
   spec_key: string;
 }
 
-export interface ChannelReadModel { generationId: string | null; offers: CatalogOffer[] }
+export interface ChannelReadModel { revisionKey?: string; generationId: string | null; offers: CatalogOffer[] }
 
 const READ_MODEL_SQL = `with published as (
   select $2::uuid current_generation_id

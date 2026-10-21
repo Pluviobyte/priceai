@@ -2,14 +2,14 @@ import { createAsyncCache, createStaleWhileRevalidate, type AsyncCache, type Sta
 import type { ChannelFilters } from "./channel-filters";
 import type { ChannelCatalog } from "./channel-catalog";
 import { buildChannelCatalog, loadChannelReadModel, type ChannelReadModel } from "./channel-read-model";
-import { getPublicationPointer } from "./publication-state";
+import { getPublicationPointer, publicationCacheKey } from "./publication-state";
 
 const globalForCatalogCache = globalThis as typeof globalThis & {
   priceRadarChannelCache?: ReturnType<typeof createAsyncCache<string, ChannelCatalog>>;
   priceRadarChannelReadModelCache?: ReturnType<typeof createAsyncCache<string, ChannelReadModel>>;
   priceRadarChannelReadModelStale?: StaleWhileRevalidate<string, ChannelReadModel>;
 };
-// Both caches are keyed by publication, so entries stay correct while their publication is current.
+// Both caches include the live refresh revision as well as the snapshot pointer.
 // Views are built in memory from the model; the model is the database read worth sharing.
 const channelCache = globalForCatalogCache.priceRadarChannelCache
   ?? createAsyncCache<string, ChannelCatalog>({ ttlMs: 5 * 60_000, maxEntries: 128, maxPending: 16 });
@@ -29,7 +29,7 @@ export function filterKey(filters: ChannelFilters) {
 }
 
 export interface CatalogReadDependencies {
-  getPointer(): Promise<{ generation_id: string | null } | null>;
+  getPointer(): Promise<{ generation_id: string | null; refreshed_at?: Date | string | null } | null>;
   loadModel(generationId: string | null): Promise<ChannelReadModel>;
   modelCache: AsyncCache<string, ChannelReadModel>;
   resultCache: AsyncCache<string, ChannelCatalog>;
@@ -40,24 +40,25 @@ export interface CatalogReadDependencies {
 /** A publication-scoped, lazy read model. One query builds each requested view. */
 export async function readCachedChannelCatalog(filters: ChannelFilters, dependencies: CatalogReadDependencies): Promise<ChannelCatalog> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const generationId = (await dependencies.getPointer())?.generation_id ?? "none";
-    const load = () => dependencies.loadModel(generationId === "none" ? null : generationId);
+    const pointer = await dependencies.getPointer();
+    const generationId = pointer?.generation_id ?? "none";
+    const cacheKey = publicationCacheKey(pointer);
+    const load = async () => ({ ...await dependencies.loadModel(generationId === "none" ? null : generationId), revisionKey: cacheKey });
     let model: ChannelReadModel;
     if (dependencies.modelStaleFor) {
-      const result = await dependencies.modelStaleFor.get(generationId, load);
+      const result = await dependencies.modelStaleFor.get(cacheKey, load);
       if (result.stale) {
         // The previous publication's complete model, knowingly one publication behind.
         const previous = result.value;
-        return dependencies.resultCache.get(`${previous.generationId ?? "none"}:${filterKey(filters)}`, async () => buildChannelCatalog(previous, filters));
+        return dependencies.resultCache.get(`${previous.revisionKey ?? previous.generationId ?? "none"}:${filterKey(filters)}`, async () => buildChannelCatalog(previous, filters));
       }
       model = result.value;
     } else {
-      model = await dependencies.modelCache.get(generationId, load);
+      model = await dependencies.modelCache.get(cacheKey, load);
     }
     if ((model.generationId ?? "none") !== generationId) continue;
-    const currentGenerationId = (await dependencies.getPointer())?.generation_id ?? "none";
-    if (currentGenerationId !== generationId) continue;
-    return dependencies.resultCache.get(`${generationId}:${filterKey(filters)}`, async () => buildChannelCatalog(model, filters));
+    if (publicationCacheKey(await dependencies.getPointer()) !== cacheKey) continue;
+    return dependencies.resultCache.get(`${cacheKey}:${filterKey(filters)}`, async () => buildChannelCatalog(model, filters));
   }
   throw new Error("publication_changed_during_catalog_read");
 }

@@ -95,7 +95,7 @@ test('publication deduplication preserves observations, history, changes and rol
     });
     await t.test('price change publishes and persists comparison without modifying old snapshots',async()=>{
       await db.execute(sql`update raw_offer_snapshots set raw_price_numeric='110',raw_price_text='110'`);
-      const changed=await publishLatestSnapshots(db,{now:new Date(later.getTime()+7*3600000)});
+      const changed=await publishLatestSnapshots(db,{now:new Date(later.getTime()+7*3600000+15*60000)});
       const row=(await db.execute(sql`select added_count,removed_count,changed_count,content_hash,manifest_hash from publish_generations where id=${changed.generationId}::uuid`)).rows[0]!;
       assert.equal(row.changed_count,1);assert.equal(row.added_count,0);assert.equal(row.removed_count,0);
       assert.ok(row.content_hash);assert.equal(row.manifest_hash,null);
@@ -105,7 +105,7 @@ test('publication deduplication preserves observations, history, changes and rol
     await t.test('retained rollback succeeds and dedup compares against the restored version',async()=>{
       const result=await rollbackPublication(db,{targetGenerationId:first.generationId,actorId:'test',reason:'integration test'});
       assert.equal(result.restoredOffers,1);
-      const next=await publishLatestSnapshots(db,{now:later});assert.equal(next.unchanged,false);
+      const next=await publishLatestSnapshots(db,{now:new Date(later.getTime()+8*3600000)});assert.equal(next.unchanged,false);
     });
     await t.test('object manifest hash stays distinct from content hash and is not overwritten on reuse',async()=>{
       let writes=0;
@@ -178,5 +178,59 @@ test('publication deduplication preserves observations, history, changes and rol
         assert.deepEqual((await db.execute(sql`select count(*)::int n from published_offer_snapshots`)).rows,before.rows);
       }finally{await rm(directory,{recursive:true,force:true});}
     });
+  }finally{await handle.close();await admin.query(`drop database "${name}"`);await admin.end();}
+});
+
+
+test('15-minute full snapshots preserve live prices, membership, history and restart/rollback limits',{skip:!adminUrl},async()=>{
+  const admin=new pg.Client({connectionString:adminUrl});await admin.connect();
+  const name=`price_retention_test_${randomUUID().replaceAll('-','')}`;
+  await admin.query(`create database "${name}"`);
+  const url=new URL(adminUrl!);url.pathname=`/${name}`;
+  const handle=createDatabase(url.toString());const db=handle.db;
+  const source=randomUUID(),run=randomUUID(),merchant=randomUUID();
+  const at=new Date('2026-09-16T10:00:00Z');
+  try{
+    await migrate(db,{migrationsFolder:fileURLToPath(new URL('../../database/drizzle/',import.meta.url))});
+    await seedCanonicalProducts(db);
+    await db.execute(sql`insert into merchants(id,name,slug) values(${merchant}::uuid,'Test merchant','test-merchant')`);
+    await db.execute(sql`insert into sources(id,merchant_id,platform_kind,platform_merchant_id,canonical_entry_url,collector_kind,enabled)
+      values(${source}::uuid,${merchant}::uuid,'test','test','https://example.com/shop','json_feed',true)`);
+    await db.execute(sql`insert into crawl_runs(id,source_id,collector_kind,collector_version,status,complete_snapshot)
+      values(${run}::uuid,${source}::uuid,'json_feed','1','success',true)`);
+    await db.execute(sql`update sources set latest_complete_run_id=${run}::uuid where id=${source}::uuid`);
+    await db.execute(sql`insert into raw_offer_snapshots(crawl_run_id,source_id,source_item_id,raw_title,raw_price_text,raw_price_numeric,currency,stock_count,stock_state_hint,product_url,captured_at,raw_payload_hash)
+      values(${run}::uuid,${source}::uuid,'one','ChatGPT Plus 独享账号 月付','100','100','CNY',10,'in_stock','https://example.com/item',${at},'test-payload-hash-0001')`);
+
+    const first=await publishLatestSnapshots(db,{now:at});
+    const snapshotBefore=(await db.execute(sql`select * from published_offer_snapshots`)).rows;
+    await db.execute(sql`update raw_offer_snapshots set raw_price_numeric='120',raw_price_text='120',stock_count=4`);
+    const minute=(n:number)=>new Date(at.getTime()+n*60000);
+    const deferred=await publishLatestSnapshots(db,{now:minute(1),forceGeneration:true});
+    assert.equal(deferred.unchanged,true);assert.equal(deferred.generationId,first.generationId);
+    assert.equal(deferred.snapshotDeferredUntil,minute(15).toISOString());
+    const live=(await db.execute(sql`select price,stock_count from offers where publish_generation_id=${first.generationId}::uuid`)).rows[0]!;
+    assert.equal(Number(live.price),120);assert.equal(live.stock_count,4);
+    assert.equal((await db.execute(sql`select count(*)::int n from offer_price_history`)).rows[0]!.n,2);
+    assert.deepEqual((await db.execute(sql`select * from published_offer_snapshots`)).rows,snapshotBefore);
+    // A fresh process/connection uses persisted state, not a worker-local timer.
+    const restarted=createDatabase(url.toString());
+    try { assert.equal((await publishLatestSnapshots(restarted.db,{now:minute(14)})).unchanged,true); }
+    finally { await restarted.close(); }
+    const second=await publishLatestSnapshots(db,{now:minute(15)});
+    assert.equal(second.unchanged,false);assert.notEqual(second.generationId,first.generationId);
+    assert.equal(Number((await db.execute(sql`select price from published_offer_snapshots where publish_generation_id=${second.generationId}::uuid`)).rows[0]!.price),120);
+    await db.execute(sql`update sources set enabled=false where id=${source}::uuid`);
+    const removed=await publishLatestSnapshots(db,{now:minute(16),allowEmpty:true});
+    assert.equal(removed.offerCount,0);assert.equal(removed.unchanged,true);
+    assert.equal((await db.execute(sql`select count(*)::int n from offers where publish_generation_id=${second.generationId}::uuid`)).rows[0]!.n,0);
+    assert.equal((await db.execute(sql`select count(*)::int n from published_offer_snapshots`)).rows[0]!.n,2);
+    await db.execute(sql`update sources set enabled=true where id=${source}::uuid`);
+    await rollbackPublication(db,{targetGenerationId:first.generationId,actorId:'test',reason:'rollback throttle'});
+    const afterRollback=await publishLatestSnapshots(db,{now:minute(17)});
+    assert.equal(afterRollback.unchanged,true);assert.equal(afterRollback.snapshotDeferredUntil,minute(30).toISOString());
+    assert.equal(Number((await db.execute(sql`select price from offers where publish_generation_id=${first.generationId}::uuid`)).rows[0]!.price),120);
+    assert.equal((await publishLatestSnapshots(db,{now:minute(30)})).unchanged,false);
+    assert.deepEqual((await db.execute(sql`select * from published_offer_snapshots where publish_generation_id=${first.generationId}::uuid`)).rows,snapshotBefore);
   }finally{await handle.close();await admin.query(`drop database "${name}"`);await admin.end();}
 });

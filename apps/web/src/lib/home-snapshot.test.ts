@@ -105,3 +105,14 @@ test("resource rows give a price range, never a crowned minimum or an official c
  assert.equal(row.offerCount,2);assert.equal(row.inStockMerchantCount,2);
  assert.equal(row.verifiedAt,now.toISOString());
 });
+
+
+test("homepage invalidates live data within the same immutable snapshot", async () => {
+ let revision="2026-10-21T00:00:00Z",loads=0;
+ const dependencies={cache:createAsyncCache<string,HomeSnapshot>({ttlMs:60000,maxEntries:4}),
+  getPointer:async()=>({generation_id:"a",refreshed_at:revision}),
+  load:async()=>{loads++;return emptySnapshot();}};
+ await readHomeSnapshot(dependencies);await readHomeSnapshot(dependencies);assert.equal(loads,1);
+ revision="2026-10-21T00:04:00Z";
+ await readHomeSnapshot(dependencies);assert.equal(loads,2);
+});
