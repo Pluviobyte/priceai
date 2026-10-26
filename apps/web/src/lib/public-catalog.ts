@@ -1,5 +1,7 @@
 import { cache } from "react";
 import { query } from "./database";
+import { AsyncCacheCapacityError, createAsyncCache, type AsyncCache } from "./async-cache";
+import { getPublicationPointer, publicationCacheKey } from "./publication-state";
 
 export interface PublicOffer {
   id: string;
@@ -727,10 +729,10 @@ export async function readOfferPage(sql: string, order: string, values: unknown[
     page: Math.min(requested, Math.max(1, Math.ceil(total / pageSize))) };
 }
 
-export async function getPublicProductListing(slug: string, filters: OfferFilters, page: number) {
-  const [product, publication] = await Promise.all([getProductIdentity(slug), getCurrentPublication()]);
+async function loadPublicProductListing(slug: string, filters: OfferFilters, page: number, generationId: string | null) {
+  const product = await getProductIdentity(slug);
   if (!product) return null;
-  const values: unknown[] = [publication?.generation_id ?? null, product.id];
+  const values: unknown[] = [generationId, product.id];
   const filtered = filterOfferSql(filters, values);
   const [listing, stats] = await Promise.all([
     readOfferPage(`${offerDetailSelect()} where o.publish_generation_id=$1 and o.canonical_product_id=$2
@@ -740,12 +742,41 @@ export async function getPublicProductListing(slug: string, filters: OfferFilter
         and (stock_count is null or stock_count>0) and offer_verified_at>now()-interval '24 hours')::int available,
       max(offer_verified_at) latest from offers
       where publish_generation_id=$1 and canonical_product_id=$2 and availability_state <> 'quarantined'`,
-      [publication?.generation_id ?? null, product.id]),
+      [generationId, product.id]),
   ]);
   return { ...listing, id: product.id, slug: product.slug, name: product.name, brand: product.brand,
     planFamily: product.plan_family, family: product.family, billingPeriod: product.billing_period,
     overview: stats[0] ?? { total: 0, available: 0, latest: null } };
 }
+
+type ProductListing = NonNullable<Awaited<ReturnType<typeof loadPublicProductListing>>>;
+
+const globalForProductCache = globalThis as typeof globalThis & {
+  priceRadarProductListingCache?: AsyncCache<string, ProductListing | null>;
+};
+// A product page is the same for every visitor until the next publication or live refresh,
+// yet each request joined offers, raw snapshots, matches and attributes again: the price
+// table streamed in about 1.5 s after the shell. Keyed by the publication revision, an entry
+// can never outlive the data it was read from.
+const productListingCache = globalForProductCache.priceRadarProductListingCache
+  ?? createAsyncCache<string, ProductListing | null>({ ttlMs: 5 * 60_000, maxEntries: 256, maxPending: 16 });
+globalForProductCache.priceRadarProductListingCache = productListingCache;
+
+export async function getPublicProductListing(slug: string, filters: OfferFilters, page: number) {
+  const pointer = await getPublicationPointer();
+  const generationId = pointer?.generation_id ?? null;
+  const key = `${publicationCacheKey(pointer)}:${slug}:${JSON.stringify(filters, Object.keys(filters).sort())}:${page}`;
+  const load = () => loadPublicProductListing(slug, filters, page, generationId);
+  try {
+    return await productListingCache.get(key, load);
+  } catch (error) {
+    // Too many distinct pages loading at once: serve this one directly rather than fail it.
+    if (error instanceof AsyncCacheCapacityError) return load();
+    throw error;
+  }
+}
+
+export function getProductListingCacheStats() { return productListingCache.stats(); }
 
 export const getMerchantIdentity = cache(async (slug: string) => {
   const [merchant] = await query<MerchantRow>(

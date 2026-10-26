@@ -16,6 +16,7 @@ export * from "./review.js";
 export * from "./scheduler.js";
 export * from "./source-health.js";
 export * from "./submissions.js";
+export * from "./transit-stations.js";
 export * from "./url-security.js";
 export * from "./vetting.js";
 export * from './platform-policy.js';

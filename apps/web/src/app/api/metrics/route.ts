@@ -1,6 +1,7 @@
 import { query, getDatabaseMetrics } from "@/lib/database";
 import { getChannelCacheStats, getChannelReadModelCacheStats } from "@/lib/catalog-read-cache";
 import { getHomeCacheStats } from "@/lib/home-snapshot";
+import { getProductListingCacheStats } from "@/lib/public-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export async function GET() {
   const channelCache = getChannelCacheStats();
   const channelReadModel = getChannelReadModelCacheStats();
   const homeCache = getHomeCacheStats();
+  const productCache = getProductListingCacheStats();
   const lines = [
     metric("price_radar_enabled_sources", "Enabled collection sources", Number(row?.enabled_sources ?? 0)),
     metric("price_radar_current_offers", "Offers in current generation", Number(row?.current_offers ?? 0)),
@@ -54,6 +56,9 @@ export async function GET() {
     metric("price_radar_web_home_cache_coalesced_total", "Homepage requests joined to an in-flight read", homeCache.coalesced),
     metric("price_radar_web_home_stale_served_total", "Homepage requests answered from the previous publication while the new one loaded", homeCache.staleServed),
     metric("price_radar_web_home_refresh_failures_total", "Background homepage loads that failed", homeCache.backgroundFailures),
+    metric("price_radar_web_product_cache_hits_total", "Publication-scoped product page cache hits", productCache.hits),
+    metric("price_radar_web_product_cache_misses_total", "Publication-scoped product page cache misses", productCache.misses),
+    metric("price_radar_web_product_cache_entries", "Product page cache entries currently retained", productCache.size),
     metric("price_radar_metrics_query_ms", "Metrics query latency in milliseconds", performance.now() - started),
   ];
   return new Response(`${lines.join("\n")}\n`, { headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });

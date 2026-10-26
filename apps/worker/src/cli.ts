@@ -1,4 +1,4 @@
-import { runTransitSweep } from "./transit-runner.js";
+import { runRelayStationSweep, runTransitSweep } from "./transit-runner.js";
 import { runSubscriptionSweep } from "./subscription-runner.js";
 import { fetchOfficialDocuments } from "./official-document-fetcher.js";
 import { BrowserCollector } from "@price-radar/browser-collector";
@@ -189,6 +189,10 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
+    if (command === "refresh-relay-stations") {
+      process.stdout.write(`${JSON.stringify(await runRelayStationSweep(config.databaseUrl), null, 2)}\n`);
+      return;
+    }
     if (command === "discover-grok") {
       if (!argument) throw new Error("usage: discover-grok <query>");
       const apiKey = process.env.XAI_API_KEY;
@@ -285,7 +289,7 @@ async function main(): Promise<void> {
       process.stdout.write(`${JSON.stringify({ source, crawl, publication: { ...publication, publicSnapshot, alerts } }, null, 2)}\n`);
       return;
     }
-    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|seed-official-api-history|refresh-transit|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|discover-links|discover-telegram|discover-github|coverage-check|llm-extract-candidates|bootstrap> [argument]");
+    throw new Error("usage: <probe|onboard|precheck-submission|crawl|publish|rollback|snapshot-generation|evaluate-alerts|deliver-notifications|refresh-subscriptions|refresh-official-api|seed-official-api-history|refresh-transit|refresh-relay-stations|import-directories|enumerate-16688|vet-candidates|refresh-quality-profiles|repair-entry-urls|channel-cycle|discover-grok|discover-search|discover-links|discover-telegram|discover-github|coverage-check|llm-extract-candidates|bootstrap> [argument]");
   } finally {
     await database.close();
     rawObjectStore.destroy();
