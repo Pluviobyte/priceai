@@ -3,14 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { MODEL_ICON_ENTRIES } from "../model-icons";
 import { createIceFlameMaterial, updateIceFlameMaterial } from "./ice-flame-material";
 import "./ice-cube-logo.css";
 
 type Axis = "x" | "y" | "z";
 
-const STUDIO_HDR_URL = "/env/empty_warehouse_01_1k.hdr";
 
 const SHELL_SIZE = 1.16;
 const SHELL_HALF = SHELL_SIZE * 0.5;
@@ -276,28 +274,6 @@ export function IceCubeLogo({ size }: IceCubeLogoProps = {}) {
       const coreMaterial = USE_SOLID_ICE_CORE ? iceCoreMaterial() : undefined;
       const iconMaterials = MODEL_ICON_ENTRIES.map(() => decalMaterial());
 
-      new HDRLoader().load(STUDIO_HDR_URL, (hdr) => {
-        if (disposed || !renderer) {
-          hdr.dispose();
-          return;
-        }
-        hdr.mapping = THREE.EquirectangularReflectionMapping;
-        const envScene = new THREE.Scene();
-        envScene.background = hdr;
-        const pmrem = new THREE.PMREMGenerator(renderer);
-        const studio = pmrem.fromScene(envScene, 0.035);
-        hdr.dispose();
-        pmrem.dispose();
-        environmentTarget?.dispose();
-        environmentTarget = studio;
-        scene.environment = studio.texture;
-        scene.environmentIntensity = 0.5;
-        shellMaterial.envMap = studio.texture;
-        shellMaterial.envMapIntensity = 0.62;
-        shellMaterial.needsUpdate = true;
-        if (coreMaterial) coreMaterial.envMapIntensity = 0;
-        renderer.render(scene, camera);
-      });
       const cubelets: THREE.Group[] = [];
       const spacing = 1.36;
       const half = spacing * 0.5;

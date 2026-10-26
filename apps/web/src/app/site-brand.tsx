@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { IceCubeLogo } from "./cube-logo";
-import { ResendCubeLogo } from "./resend-cube-logo";
+import { ClassicCubeLogo, IceCubeLogo } from "./cube-logo";
 
 /**
  * 站点自己的名称与标识。名称来自 PRODUCT.md 的产品定义，
@@ -31,7 +30,7 @@ export function BrandMark({ size = 28 }: { size?: number }) {
 export function BrandLockup({ tagline = true }: { tagline?: boolean }) {
   return (
     <Link className="site-brand" href="/" aria-label={`${SITE_NAME} 首页`}>
-      {HEADER_LOGO_VARIANT === "ice" ? <IceCubeLogo size={48} /> : <ResendCubeLogo />}
+      {HEADER_LOGO_VARIANT === "ice" ? <IceCubeLogo size={48} /> : <ClassicCubeLogo />}
       <span className="site-brand-name">{SITE_NAME}</span>
       {tagline && <span className="site-brand-tagline">{SITE_TAGLINE}</span>}
     </Link>

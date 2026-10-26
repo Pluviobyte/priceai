@@ -3,6 +3,7 @@ import Link from "next/link";
 import { OFFICIAL_API_SPONSOR_ENABLED } from "@/lib/site-features";
 import { getOfficialApiPrices, getOfficialSubscriptionPrices, type OfficialApiPrice } from "@/lib/public-pricing";
 import { SiteFooter } from "../site-footer";
+import { PLAN_QUOTA_PROVIDERS, PLAN_QUOTAS_CHECKED_ON } from "@/lib/plan-quotas";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,16 @@ export default async function OfficialApiPage({ searchParams }: { searchParams: 
         const label = vendorAliases[group.vendor] ?? group.vendor;
         return <tr key={group.vendor}><td><Link href={`/official-api/providers/${group.vendor.toLowerCase()}`}><span className="priceai-provider-name"><img src={`/model-icons/${vendorIcons[group.vendor] ?? "openai.svg"}`} alt="" /><b>{label} 官方 API</b></span><small>{group.vendor} 官方模型与公开计费文档。</small></Link></td><td><span className="priceai-type-pill">官方 API</span></td><td><div className="priceai-api-plans">{group.rows.map((row) => <a href={row.evidenceUrl} target="_blank" rel="noopener noreferrer nofollow" key={row.id}><span><b>{row.modelName}</b><strong>{money(row.inputPrice, row.currency)} / {money(row.outputPrice, row.currency)}</strong></span><p>{row.priceTier === "batch" ? "批处理" : "标准计费"} · 输入 / 输出 · {row.unit.replaceAll("_", " ")}</p>{row.cachedInputPrice && <em>缓存输入 {money(row.cachedInputPrice, row.currency)}</em>}</a>)}</div></td><td><b>{models.length} 个覆盖项</b><p>{models.map((row) => row.modelName).join("、")}</p><small>{group.rows.some((row) => row.modality.includes("image")) ? "包含图片或多模态输入；" : ""}具体上下文、速率限制与可用地区以官方文档为准。</small></td><td><p>{date(group.latest)}</p><a className="priceai-row-button" href={group.rows[0]?.evidenceUrl ?? "/official-api"} target="_blank" rel="noopener noreferrer nofollow">查看　›</a></td></tr>;
       })}</tbody></table></div> : <div className="empty-state">没有匹配的官方 API 来源渠道，请尝试其他关键词或模型分类。</div>}
+      <section className="priceai-plan-quotas" id="plans" aria-labelledby="plan-quotas-heading">
+        <h2 id="plan-quotas-heading">官方订阅额度与 Coding Plan</h2>
+        <p>订阅套餐按产品内额度计量，Coding Plan 按请求次数或积分计量，都不等同于按 token 计费的 API。下表摘自各厂商官方页面，核验于 {PLAN_QUOTAS_CHECKED_ON}，以官方页面为准。</p>
+        <div className="priceai-api-table-wrap"><table className="priceai-api-table"><thead><tr><th>厂商 / 计划</th><th>套餐</th><th>价格</th><th>额度</th></tr></thead><tbody>
+          {PLAN_QUOTA_PROVIDERS.flatMap((provider) => provider.plans.map((plan, index) => <tr key={`${provider.provider}-${plan.plan}`}>
+            {index === 0 && <td rowSpan={provider.plans.length}><a href={provider.sourceUrl} target="_blank" rel="noopener noreferrer nofollow"><b>{provider.provider}</b></a><small>{provider.kind === "coding" ? "Coding / Token Plan" : "官方订阅"}</small><small>{provider.notes}</small></td>}
+            <td>{plan.plan}</td><td>{plan.price}</td><td>{plan.quota}</td>
+          </tr>))}
+        </tbody></table></div>
+      </section>
       <aside className="priceai-official-note priceai-api-note"><b>API 价格阅读提示</b><p>输入、缓存输入、输出与批处理价格不能直接混在一起比较。上下文长度、免费额度、地域与速率限制也可能影响实际成本。</p></aside>
       <p className="priceai-api-disclaimer">免责声明：PriceAI 只整理公开文档和公开页面中的 API 渠道信息，不售卖 API、不承诺可用性，也不替任何渠道提供 SLA。</p>
     </main><SiteFooter />

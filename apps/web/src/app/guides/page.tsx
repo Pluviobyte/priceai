@@ -99,7 +99,7 @@ export default function GuidesPage() {
 
     <h2 id="contribute">参与完善 PriceAI</h2>
     <p>发现商品价格、库存、链接或描述异常时，可以从商品详情页提交纠错。商家可以申请收录公开店铺与商品 Feed，平台建议和使用问题可以前往意见反馈。</p>
-    <div className="priceai-doc-inline-actions"><Link href="/submit">申请收录</Link><Link href="/channels">举报问题商品</Link><Link href="/support">提交意见反馈</Link></div>
+    <div className="priceai-doc-inline-actions"><Link href="/submit">申请收录</Link><Link href="/channels">举报问题商品</Link><Link href="/contact?kind=feedback">提交意见反馈</Link></div>
 
     <h2 id="next-reading">继续阅读</h2>
     <div className="priceai-doc-reading-list">

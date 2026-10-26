@@ -181,6 +181,28 @@ export const sources = pgTable(
   ],
 );
 
+/**
+ * Messages from the public contact form: feedback, cooperation, sponsorship and wholesale
+ * inquiries. Kept apart from shop submissions, which start an automated precheck.
+ */
+export const siteInquiries = pgTable(
+  "site_inquiries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: text("kind").notNull(),
+    name: text("name"),
+    contact: text("contact").notNull(),
+    message: text("message").notNull(),
+    submitterFingerprint: text("submitter_fingerprint").notNull(),
+    status: text("status").notNull().default("new"),
+    createdAt,
+  },
+  (table) => [
+    index("site_inquiries_created_idx").on(table.createdAt),
+    index("site_inquiries_fingerprint_idx").on(table.submitterFingerprint, table.createdAt),
+  ],
+);
+
 export const sourceSubmissions = pgTable(
   "source_submissions",
   {

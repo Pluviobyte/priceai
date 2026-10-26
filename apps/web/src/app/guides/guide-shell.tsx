@@ -57,6 +57,7 @@ const navGroups = [
       { label: "订阅 AI 需要什么支付卡", href: "/guides/visa-card-for-ai-subscription", slug: "visa-card-for-ai-subscription" },
       { label: "AI 订阅礼品卡限制", href: "/guides/ai-subscription-gift-card", slug: "ai-subscription-gift-card" },
       { label: "卡网渠道靠谱吗", href: "/guides/are-ai-subscription-card-shops-reliable", slug: "are-ai-subscription-card-shops-reliable" },
+      { label: "账号防封指南", href: "/account-safety", slug: "account-safety" },
     ],
   },
   {

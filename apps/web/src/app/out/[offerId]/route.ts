@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveOutboundOffer } from "@/lib/public-platform";
+import { withReferralTags } from "@/lib/outbound-link";
 
 export async function GET(request: Request, { params }: { params: Promise<{ offerId: string }> }) {
   const { offerId } = await params;
@@ -8,5 +9,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ offe
   if (!destination) return NextResponse.redirect(new URL("/", request.url), 302);
   const url = new URL(destination);
   if (url.protocol !== "http:" && url.protocol !== "https:") return NextResponse.redirect(new URL("/", request.url), 302);
-  return NextResponse.redirect(url, 302);
+  return NextResponse.redirect(withReferralTags(url), 302);
 }

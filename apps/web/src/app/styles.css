@@ -256,6 +256,7 @@ footer nav a { padding: 7px 9px; font-size: 12px; }
 .login-card p { color: var(--muted); line-height: 1.7; }
 .admin-login-form { display: grid; gap: 14px; margin: 28px 0 20px; }
 .form-error { margin-top: 18px; padding: 10px 12px; border-radius: 10px; color: #8f2d24; background: #fae8e5; font-size: 13px; }
+.form-success { margin-top: 18px; padding: 10px 12px; border-radius: 10px; color: #1f5d3a; background: #e3f3e8; font-size: 13px; }
 .source-list { display: grid; gap: 14px; }
 .source-card { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; padding: 22px; border: 1px solid var(--line); border-radius: 20px; background: white; }
 .source-card-main h2 { margin: 14px 0 6px; }
@@ -1377,6 +1378,17 @@ html[data-theme="dark"] .priceai-emotion-tag.purple { background: rgba(168, 85, 
 .priceai-api-plans strong { margin-left: auto; color: var(--accent-deep); font-size: 12px; white-space: nowrap; }
 .priceai-api-plans p { margin: 3px 0 0; }
 .priceai-api-plans em { width: fit-content; display: inline-flex; margin-top: 5px; padding: 2px 7px; border-radius: 999px; color: var(--accent-deep); background: var(--accent-soft); font-size: 10px; font-style: normal; }
+.priceai-plan-quotas { margin-top: 32px; }
+.priceai-plan-quotas > h2 { margin: 0 0 6px; color: var(--color-text-primary); font-size: 18px; }
+.priceai-plan-quotas > p { margin: 0 0 14px; color: var(--color-text-muted); font-size: 13px; line-height: 1.7; }
+.priceai-plan-quotas .priceai-api-table { min-width: 760px; }
+.priceai-plan-quotas .priceai-api-table th:nth-child(1) { width: 34%; }
+.priceai-plan-quotas .priceai-api-table th:nth-child(2) { width: 18%; }
+.priceai-plan-quotas .priceai-api-table th:nth-child(3) { width: 18%; }
+.priceai-plan-quotas .priceai-api-table th:nth-child(4) { width: 30%; }
+.priceai-plan-quotas .priceai-api-table td[rowspan] { border-right: 1px solid var(--color-border-subtle); }
+.priceai-plan-quotas .priceai-api-table td[rowspan] b { color: var(--color-text-primary); font-size: 13px; }
+.priceai-plan-quotas .priceai-api-table td:first-child small { margin-left: 0; }
 .priceai-api-table td:nth-child(4) p { margin: 5px 0; }
 .priceai-api-table td:nth-child(4) small { display: block; line-height: 20px; }
 .priceai-api-table td:last-child p { margin: 0 0 10px; }

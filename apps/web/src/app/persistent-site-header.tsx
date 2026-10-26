@@ -26,6 +26,7 @@ const sections: Record<string, HeaderSection> = {
   support: "home",
   account: "home",
   wholesale: "home",
+  contact: "home",
 };
 
 /** Shared layout ownership keeps the WebGL canvas alive during client navigation. */

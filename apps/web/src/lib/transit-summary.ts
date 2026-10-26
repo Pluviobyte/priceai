@@ -14,6 +14,14 @@ export function modelFamily(price: TransitModelPrice): string {
   return "ChatGPT";
 }
 
+// A free model variant (OpenRouter's ":free", rate-limited previews) is not what a buyer pays
+// for the family, so the minimum is the cheapest paid price; free counts only when nothing
+// in the family is paid. A missing price is never read as free.
+function paidFloor(values: number[]): number {
+  const paid = values.filter((value) => value > 0);
+  return paid.length ? Math.min(...paid) : 0;
+}
+
 export function familyRanges(prices: TransitModelPrice[]): Array<{ family: string; min: number; max: number }> {
   const groups = new Map<string, number[]>();
   for (const price of prices) {
@@ -22,13 +30,15 @@ export function familyRanges(prices: TransitModelPrice[]): Array<{ family: strin
     const family = modelFamily(price);
     groups.set(family, [...(groups.get(family) ?? []), value]);
   }
-  return [...groups.entries()].map(([family, values]) => ({ family, min: Math.min(...values), max: Math.max(...values) })).sort((a, b) => a.min - b.min).slice(0, 4);
+  return [...groups.entries()].map(([family, values]) => ({ family, min: paidFloor(values), max: Math.max(...values) })).sort((a, b) => a.min - b.min).slice(0, 4);
 }
 
-export function lowest(prices: TransitModelPrice[]): { value: number | null; family: string; isMultiplier: boolean } {
+export function lowest(prices: TransitModelPrice[]): { value: number | null; family: string; isMultiplier: boolean; freeCount: number } {
   const multiplierRows = prices.filter((price) => price.multiplier !== null && Number.isFinite(Number(price.multiplier)) && Number(price.multiplier) >= 0);
   const rows = multiplierRows.length ? multiplierRows : prices.filter((price) => price.inputPrice !== null && Number.isFinite(Number(price.inputPrice)) && Number(price.inputPrice) >= 0);
-  const row = [...rows].sort((a, b) => Number(multiplierRows.length ? a.multiplier : a.inputPrice) - Number(multiplierRows.length ? b.multiplier : b.inputPrice))[0];
-  return row ? { value: Number(multiplierRows.length ? row.multiplier : row.inputPrice), family: modelFamily(row), isMultiplier: multiplierRows.length > 0 } : { value: null, family: "暂无", isMultiplier: false };
+  const amount = (price: TransitModelPrice) => Number(multiplierRows.length ? price.multiplier : price.inputPrice);
+  const freeCount = rows.filter((price) => amount(price) === 0).length;
+  const paid = rows.filter((price) => amount(price) > 0);
+  const row = [...(paid.length ? paid : rows)].sort((a, b) => amount(a) - amount(b))[0];
+  return row ? { value: amount(row), family: modelFamily(row), isMultiplier: multiplierRows.length > 0, freeCount } : { value: null, family: "暂无", isMultiplier: false, freeCount: 0 };
 }
-
