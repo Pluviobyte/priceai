@@ -97,7 +97,7 @@ const PLACEHOLDER: HomeSnapshot = {
     { slug: "claude-max-5x", name: "Claude Max 5x", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "claude-max-20x", name: "Claude Max 20x", brand: "Anthropic", icon: "claude", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "gemini-pro", name: "Google AI Pro", brand: "Google", icon: "gemini", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
-    { slug: "supergrok", name: "SuperGrok", brand: "xAI", icon: "grok", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
+    { slug: "supergrok", name: "Grok Premium", brand: "xAI", icon: "grok", spec: "1 个月", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
     { slug: "resource-gmail", name: "Gmail", brand: "Google", icon: "gmail", spec: "邮箱账号", kind: "resource", official: null, lowest: null, band: null, offerCount: 0, inStockMerchantCount: 0, verifiedAt: null },
   ],
   changes: [],

@@ -28,6 +28,7 @@ import {
   extractChatGptGoWebPrice,
   extractClaudePlanPrice,
   extractOfficialPagePrice,
+  extractXaiTierPrice,
   parseAppStoreListings,
   resolveAppStoreListing,
   storefrontFromAppStoreUrl,
@@ -119,7 +120,10 @@ const CANONICAL_SLUG_BY_PLAN: Readonly<Record<string, string>> = {
   "anthropic:claude-pro-monthly": "claude-pro",
   "anthropic:claude-max-5x-monthly": "claude-max-5x",
   "anthropic:claude-max-20x-monthly": "claude-max-20x",
+  "xai:grok-plus-monthly": "grok-plus",
   "xai:supergrok-monthly": "supergrok",
+  "xai:supergrok-plus-monthly": "grok-super",
+  "xai:grok-ultra-monthly": "supergrok-heavy",
 };
 
 const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
@@ -130,8 +134,12 @@ const VERIFIED_WEB_PRICES: readonly PriceSeed[] = [
   { vendor: "anthropic", planCode: "claude-pro-annual", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Pro annual", evidenceUrl: "https://claude.com/pricing", evidence: { billedUpfront: true }, verificationTerms: ["Pro"] },
   { vendor: "anthropic", planCode: "claude-max-5x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Max 5x", evidenceUrl: "https://support.claude.com/en/articles/11049741-what-is-the-max-plan", evidence: { usageMultiple: 5 }, verificationTerms: ["Max 5x", "Claude"] },
   { vendor: "anthropic", planCode: "claude-max-20x-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Max 20x", evidenceUrl: "https://support.claude.com/en/articles/11049741-what-is-the-max-plan", evidence: { usageMultiple: 20 }, verificationTerms: ["Max 20x", "Claude"] },
-  { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "SuperGrok", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok"] },
-  { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "SuperGrok Plus", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["SuperGrok Plus"] },
+  // x.ai/pricing headings since 2026-10-12 are Plus/Premium/Super/Ultra; the old name
+  // stays accepted so a rollback of the page still parses. The first term is the card heading.
+  { vendor: "xai", planCode: "grok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 8, rawPlanName: "Plus", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["Plus", "SuperGrok Lite"] },
+  { vendor: "xai", planCode: "supergrok-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 30, rawPlanName: "Premium", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["Premium", "SuperGrok"] },
+  { vendor: "xai", planCode: "supergrok-plus-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 100, rawPlanName: "Super", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["Super", "SuperGrok Plus"] },
+  { vendor: "xai", planCode: "grok-ultra-monthly", channel: "web", countryCode: "US", currency: "USD", priceKind: "exact", amount: 200, rawPlanName: "Ultra", evidenceUrl: "https://x.ai/pricing", verificationTerms: ["Ultra", "SuperGrok Heavy"] },
 ];
 
 // Announcement fallback is historical evidence, never a newly verified checkout price.
@@ -618,6 +626,7 @@ export async function verifyOfficialWebPrices(database: Database, verifiedAt = n
     if (page?.html && price?.verificationTerms) {
       amount = plan.vendor === "anthropic" ? extractClaudePlanPrice(page.html, plan.planCode)
         : plan.planCode === "chatgpt-go-monthly" ? extractChatGptGoWebPrice(page.html)
+        : plan.vendor === "xai" ? extractXaiTierPrice(page.html, price.verificationTerms)
         : extractOfficialPagePrice(page.html, price.verificationTerms);
       if (amount !== null && price.amount !== undefined && (amount < price.amount * 0.25 || amount > price.amount * 4)) amount = null;
     }

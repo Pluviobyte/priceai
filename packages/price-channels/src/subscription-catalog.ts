@@ -32,8 +32,12 @@ export const OFFICIAL_SUBSCRIPTION_PLAN_CATALOG: readonly OfficialSubscriptionPl
   { vendor: "google", planCode: "google-ai-pro-monthly", displayName: "Google AI Pro (5 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
   { vendor: "google", planCode: "google-ai-ultra-5x-monthly", displayName: "Google AI Ultra 5x (20 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
   { vendor: "google", planCode: "google-ai-ultra-monthly", displayName: "Google AI Ultra 20x (30 TB)", billingPeriod: "month", officialUrl: "https://gemini.google/subscriptions/" },
-  { vendor: "xai", planCode: "supergrok-monthly", displayName: "SuperGrok", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
-  { vendor: "xai", planCode: "supergrok-plus-monthly", displayName: "SuperGrok Plus", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
+  // xAI renamed the tiers on 2026-10-12; the plan codes keep their old identity so price
+  // history and App Store aliases (still "SuperGrok"/"SuperGrok Plus") stay attached.
+  { vendor: "xai", planCode: "grok-plus-monthly", displayName: "Grok Plus（原 SuperGrok Lite）", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
+  { vendor: "xai", planCode: "supergrok-monthly", displayName: "Grok Premium（原 SuperGrok）", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
+  { vendor: "xai", planCode: "supergrok-plus-monthly", displayName: "Grok Super（原 SuperGrok Plus）", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
+  { vendor: "xai", planCode: "grok-ultra-monthly", displayName: "Grok Ultra（原 SuperGrok Heavy）", billingPeriod: "month", officialUrl: "https://x.ai/pricing" },
 ];
 
 /** 页面默认展示的重点地区。完整商店与国家目录见 storefront-catalog.ts。 */

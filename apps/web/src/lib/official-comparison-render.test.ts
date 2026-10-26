@@ -40,7 +40,7 @@ test("region pagination preserves filters and explicit region stays directly acc
     cells += (part.match(/<td/g) ?? []).length;
     assert.match(part, /compare_region=US/);
   }
-  assert.equal(cells, 78, "all combinations remain reachable across row pages");
+  assert.equal(cells, 90, "all combinations remain reachable across row pages");
   const later = await render({ compare_page: "2", compare_rows_page: "2", compare_basis: "month" });
   assert.match(later, /compare_rows_page=2/);
   assert.match(later, /compare_page=2/);

@@ -52,6 +52,8 @@ export interface PublicOfferDetail extends PublicOffer {
   apiAvailable: boolean | null;
   autoDelivery: boolean | null;
   firstSeenAt: Date;
+  /** When the shop itself was first collected; a buyer reads it as how long it has been known. */
+  sourceFirstSeenAt: Date | null;
 }
 
 export interface PublicProductDetail {
@@ -210,6 +212,7 @@ interface OfferDetailRow extends OfferRow {
   api_available: boolean | null;
   auto_delivery: boolean | null;
   first_seen_at: Date;
+  source_first_seen_at: Date | null;
 }
 
 interface HistoryRow {
@@ -268,7 +271,7 @@ const FEATURED_PRODUCTS = [
   { slug: "chatgpt-plus", name: "ChatGPT Plus", platform: "OpenAI" },
   { slug: "claude-pro", name: "Claude Pro", platform: "Anthropic" },
   { slug: "gemini-pro", name: "Google AI Pro", platform: "Google" },
-  { slug: "supergrok", name: "SuperGrok", platform: "xAI" },
+  { slug: "supergrok", name: "Grok Premium", platform: "xAI" },
 ] as const;
 
 export async function getPublicCatalog(): Promise<PublicCatalog> {
@@ -408,6 +411,7 @@ function mapOfferDetail(row: OfferDetailRow): PublicOfferDetail {
     apiAvailable: row.api_available,
     autoDelivery: row.auto_delivery,
     firstSeenAt: row.first_seen_at,
+    sourceFirstSeenAt: row.source_first_seen_at,
   };
 }
 
@@ -418,7 +422,7 @@ function offerDetailSelect(): string {
                  case when o.offer_verified_at>now()-interval '6 hours' then 'fresh'
                       when o.offer_verified_at>now()-interval '24 hours' then 'aging' else 'stale' end freshness_state,
                  o.offer_mode,o.product_url,o.risk_facts,o.offer_verified_at verified_at,
-                 o.first_seen_at,ros.raw_title,ros.raw_description,ros.raw_category,
+                 o.first_seen_at,s.first_seen_at source_first_seen_at,ros.raw_title,ros.raw_description,ros.raw_category,
                  ros.raw_price_text,o.source_item_id,oa.duration_days,oa.warranty_type,
                  oa.warranty_hours,oa.account_ownership,oa.phone_bound,oa.shared,
                  oa.web_available,oa.api_available,oa.auto_delivery

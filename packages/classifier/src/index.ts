@@ -5,7 +5,7 @@ import type {
   RawOfferInput,
 } from "@price-radar/schema";
 
-const VERSION = "rules-2026-09-11.1";
+const VERSION = "rules-2026-10-26.1";
 
 interface ProductRule {
   slug: string;
@@ -34,7 +34,8 @@ const OTHER_ASSISTANTS = /文心|通义|讯飞|kimi|智谱|glm|混元/i;
 // A phone-verification service is sold per use; 马/🐎 is the common homophone for 码.
 // "已接码"/"未接马" instead describes an account that is already verified, so it is an
 // attribute of the thing being sold and must never outrank the plan or mailbox it modifies.
-const VERIFICATION_SERVICE = /(?<![已未带含不])接\s*(?:码|马|🐎)(?!\s*(?:后|之后|可|能|即))|(?<![未没不无]绑定?手机)验证码/i;
+// Shops also sell the step itself without the word 接码: "【codex手机号验证】", "Codex过一次性验证".
+const VERIFICATION_SERVICE = /(?<![已未带含不])接\s*(?:码|马|🐎)(?!\s*(?:后|之后|可|能|即))|(?<![未没不无]绑定?手机)验证码|(?:codex|gpt|openai)\s*手机号(?!\s*已)|(?<![免无需不绑已])手机号\s*验证|一次性验证/i;
 
 // A mailbox bundled with an AI account is an accessory; a mailbox sold in order to
 // register one announces itself ("长效微软邮箱注册") and stays a mailbox offer.
@@ -49,11 +50,100 @@ const PLUS_NOT_SOLD = /非\s*plus|(?:可|支持|能)\s*升级[^a-z]{0,2}plus|开
 // Resource products are exempt: a mailbox or verification listing is its own product.
 const NOT_A_SUBSCRIPTION = /教程|橙皮书|破甲|破限|提链|返利|不含\s*(?:plus|账号|会员)/i;
 
+// Naming a plan is not selling it. "（类似于SuperGroK bot）" compares a Muse AI account
+// with Grok, and "免kyc可以开pro套餐" says what a free Claude account can be upgraded to.
+// Both phrases are cut before the plan rules see the text.
+const COMPARISON_PHRASE = /(?:类似于?|对标|媲美|平替|同款|堪比|替代)[^）)】\]，,。|｜]{0,30}/gi;
+const UPGRADE_PHRASE = /(?:可以|可|能|支持)\s*(?:开通|开|升级|升)\s*(?:pro|plus|max|team)(?:\s*(?:套餐|会员))?/gi;
+
+function stripNonSaleMentions(text: string): string {
+  return text.replace(COMPARISON_PHRASE, " ").replace(UPGRADE_PHRASE, " ");
+}
+
+// A title that calls the goods a free or basic account sells the account, not the plan
+// on whose shelf it sits ("G free普号 … 专为team车优化" under "PLUS/Team").
+const ACCOUNT_SIGNAL = /普号|普通号|普通账号|空号|白号|\bfree\b(?!\s*(?:trial|试用))/i;
+// "Claude Pro 代充…也可提供已过kyc的普号" sells the plan and offers an account as an extra.
+const PLAN_PURCHASE = /代[充冲]|直[充冲]|官[充冲]|充值(?!专用)|月卡|订阅/;
+const PLAN_ACCOUNT: Record<string, string> = {
+  "chatgpt-plus": "chatgpt-account", "chatgpt-pro": "chatgpt-account", "chatgpt-pro-5x": "chatgpt-account",
+  "chatgpt-pro-20x": "chatgpt-account", "chatgpt-team": "chatgpt-account", "chatgpt-go": "chatgpt-account",
+  "chatgpt-plus-eligibility": "chatgpt-account",
+  "claude-pro": "claude-account", "claude-max-5x": "claude-account", "claude-max-20x": "claude-account",
+  "claude-team": "claude-account",
+  "gemini-pro": "gemini-account", "google-ai-ultra": "gemini-account", "google-ai-ultra-5x": "gemini-account",
+  "grok-plus": "grok-account", supergrok: "grok-account", "grok-super": "grok-account", "supergrok-heavy": "grok-account",
+  "cursor-pro": "cursor-account", "kiro-pro": "kiro-account",
+};
+
+// "附赠 SuperGrok" in a ChatGPT listing gives Grok away; it does not sell it.
+const GROK_BUNDLED = /(?:包含|含|附赠|赠送|送)[^。]{0,10}(?:super)?grok/i;
+
 const productRules: ProductRule[] = [
+  // xAI renamed its tiers on 2026-10-12: Plus $8 (was SuperGrok Lite), Premium $30 (was
+  // SuperGrok), Super $100 (was SuperGrok Plus), Ultra $200 (was SuperGrok Heavy). Shops
+  // still sell both names, and "Super" now means two plans three times apart: "旧版 Super
+  // 30美元" is Premium, "新版 Super 100$" is Super. A tier word or price decides; a bare
+  // "SuperGrok" keeps its old meaning, Premium. These rules lead because a listing that
+  // names Grok is never a ChatGPT plan, whatever shelf it sits on.
+  {
+    slug: "supergrok-heavy",
+    include: [/grok[\s\S]*(?:heavy|ultra)|(?:heavy|ultra)[\s\S]*grok/i, /grok[\s\S]{0,20}(?:(?:200|300)\s*(?:刀|美元|美金|\$|usd)|50\s*x)/i],
+    exclude: [GROK_BUNDLED],
+  },
+  {
+    slug: "supergrok",
+    include: [
+      /grok[\s\S]*premium|premium[\s\S]*grok/i,
+      /grok[\s\S]{0,20}(?<![0-9])4\s*x(?![a-z0-9])/i,
+      /grok[\s\S]{0,30}(?:旧版|(?<![0-9])30\s*(?:刀|美元|美金|\$|usd))|(?:旧版|(?<![0-9])30\s*(?:刀|美元|美金|\$|usd))[\s\S]{0,30}grok/i,
+    ],
+    exclude: [GROK_BUNDLED, /(?:x[-\s]*twitter|twitter|推特)[^。]{0,8}premium/i],
+  },
+  {
+    slug: "grok-super",
+    include: [
+      /grok[\s\S]{0,30}(?:(?<![0-9])100\s*(?:刀|美元|美金|\$|usd)|(?<![0-9])15\s*x)/i,
+      /cursor\s*super/i,
+      /(?:新版|四合一|三合一)[\s\S]{0,30}super|super[\s\S]{0,30}(?:新版|四合一|三合一)/i,
+    ],
+    require: [/grok/i],
+    exclude: [GROK_BUNDLED],
+  },
+  {
+    slug: "grok-plus",
+    include: [/grok[\s\S]{0,12}(?:plus|lite)(?![a-z])/i, /grok[\s\S]{0,20}(?<![0-9])8\s*(?:刀|美元|美金|\$|usd)/i],
+    exclude: [GROK_BUNDLED],
+  },
+  {
+    slug: "supergrok",
+    include: [/supergrok/i, /\bgrok[\s\S]{0,6}super(?![a-z])/i],
+    exclude: [GROK_BUNDLED],
+  },
+  // A relay's prepaid balance ("耀耀中转站 5USD … claude，codex plus/pro大模型API卡密")
+  // names every model it proxies, so it has to be caught before any plan rule.
+  {
+    slug: "api-transit-credit",
+    include: [/中转站|中转\s*api|api\s*中转|(?:大模型|模型)\s*api|api\s*(?:卡密|额度|余额)/i],
+  },
   {
     slug: "codex-credits",
     include: [/\bcodex\b.*(?:额度|点数|credits?)/i],
-    exclude: [/接马|接码|绑定|手机号/i],
+    exclude: [/接马|接码|绑定|手机号|邀请/i],
+  },
+  // "Plus半价资格号（不是成品Plus!!!）" is an account that may buy Plus at half price, not
+  // Plus. At ¥3–10 it set the Plus minimum for the whole site.
+  {
+    slug: "chatgpt-plus-eligibility",
+    include: [/资格(?:号|账号|账户)|半价[\s\S]{0,8}(?:资格|试用)|(?:资格|试用)[\s\S]{0,8}半价/i],
+    require: [/plus|半价/i],
+    // "Plus可直接充值，Premium、Super、Ultra确认…半价资格" lists Grok tiers. A half-price
+    // top-up "仅限半价资格号购买" sells Plus itself, unless it says it is no finished Plus.
+    exclude: [
+      VENDOR_OTHER, /premium|super|ultra/i,
+      /^(?![\s\S]*(?:不是\s*成品|非成品|只是资格|无代充))[\s\S]*(?:充值|卡充|[直代官实]充|实付|卡密|成品号)/i,
+      /(?:仅限|须|搭配|自己准备)[\s\S]{0,6}半价资格/,
+    ],
   },
   {
     slug: "chatgpt-team",
@@ -95,6 +185,10 @@ const productRules: ProductRule[] = [
     exclude: [/\b(?:pro|go|team|k12|free)\b|额度/i, VERIFICATION_SERVICE, PLUS_NOT_SOLD],
   },
   {
+    slug: "claude-team",
+    include: [/\bclaude\b[\s\S]*(?:\bteam\b|premium\s*seat|席位)/i],
+  },
+  {
     slug: "claude-max-20x",
     include: [/\bclaude\b.*(?:\bmax\s*)?\b20\s*x\b/i],
   },
@@ -106,6 +200,12 @@ const productRules: ProductRule[] = [
     slug: "claude-pro",
     include: [/\bclaude\b.*\bpro\b/i],
     exclude: [/\bmax\b/i],
+  },
+  // Ultra is sold in two tiers ("Google AI Ultra 5x【家庭组车位】" against the 20x plan);
+  // one product would price the smaller under the larger's name.
+  {
+    slug: "google-ai-ultra-5x",
+    include: [/\b(?:google\s*ai|gemini)\b.*\bultra\b[\s\S]{0,6}(?<![0-9])5\s*x/i],
   },
   {
     slug: "google-ai-ultra",
@@ -119,11 +219,6 @@ const productRules: ProductRule[] = [
       /\bgoogle\s*ai\s*pro\b/i,
     ],
     exclude: [/\bultra\b/i],
-  },
-  {
-    slug: "supergrok",
-    include: [/\bsuper\s*grok\b/i, /\bgrok\b.*\bsuper\b/i],
-    exclude: [/heavy/i, /(?:包含|含|附赠|赠送|送)[^。]{0,10}supergrok/i],
   },
   {
     slug: "cursor-pro",
@@ -228,12 +323,12 @@ const additionalRules: ProductRule[] = [
   // Guides and helper tools are sold in their own right; NOT_A_SUBSCRIPTION keeps them
   // out of the plan rules, and these two give them a home instead of dropping them.
   { slug: 'resource-tutorial', include: [/教程|橙皮书|攻略/i], exclude: [NON_AI_BRANDS] },
-  { slug: 'resource-tool', include: [/提链|破甲|破限|注册机/i], exclude: [NON_AI_BRANDS] },
+  { slug: 'resource-tool', include: [/提链|破甲|破限|注册机|邀请(?:奖励|码|链接|好友|额度|服务)|自助邀请/i], exclude: [NON_AI_BRANDS] },
+  { slug: 'muse-ai', include: [/\bmuse\b/i] },
   { slug: 'chatgpt-account', include: [/(?:chat\s*gpt|gpt).*(?:普号|普通号|成品老号|空号)/i, /g[-\s]*free.*(?:普号|codex)/i, /codex.*(?:成品|普号|空号)/i, /(?:chat\s*gpt|gpt)\s*free[\s\S]{0,4}账号/i] },
   { slug: 'claude-account', include: [/claude.*(?:普号|普通账号|兑换号|空号)/i] },
   { slug: 'gemini-account', include: [/gemini.*(?:账号|成品|账户)/i] },
-  { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i] },
-  { slug: 'supergrok-heavy', include: [/(?:super\s*)?grok.*heavy/i] },
+  { slug: 'grok-account', include: [/grok.*(?:普号|体验号|普通账号)/i, /grok[\s\S]{0,6}\bfree\b/i, /grok[\s\S]{0,8}build/i] },
   { slug: 'cursor-account', include: [/cursor.*(?:账号|成品|账户)/i] },
   { slug: 'kiro-pro', include: [/kiro.*(?:pro|额度)/i] },
   { slug: 'kiro-account', include: [/kiro.*(?:普号|free|账号)/i] },
@@ -274,16 +369,24 @@ const modeRules: Array<{ mode: OfferMode; patterns: RegExp[] }> = [
  */
 function normalizeBrandAliases(text: string): string {
   return text
+    // Zero-width characters split a brand without showing ("SuperGro\u200bk").
+    .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
     .replace(/[\u03c1\u0440]/g, "p")
-    .replace(/\bgr0k\b/gi, "grok")
+    // Grok is spelt every way the platform filter misses: "gro-k", "Gro——k", "Gro_K",
+    // "Gr00k", "G2ok", "Gork", and most often a bare "gro" ("gro普号", "super gro").
+    .replace(/\bg\s*r\s*o\s*[-—_.·/\s]+\s*k\b/gi, "grok")
+    .replace(/\bgr[o0]{1,2}k\b|\bg2ok\b|\bgork\b|\bgok\b/gi, "grok")
+    .replace(/\bgro(?![a-z])/gi, "grok")
     .replace(/[×✖╳]/g, "x")
-    .replace(/\bg\s*[.\u00b7\u30fb]\s*p\s*[.\u00b7\u30fb]?\s*t\b/gi, "gpt")
+    .replace(/\bg\s*[-.+*\u00b7\u30fb]\s*p\s*[-.+*\u00b7\u30fb]?\s*t\b/gi, "gpt")
+    .replace(/\bgp\s*\*/gi, "gpt ")
     .replace(/\bg\s*[皮屁]\s*t\b/gi, "gpt")
+    // 鸡/🐔 stand in for G: "鸡pt plus", "🐔皮成品", "🐓PT-日抛".
+    .replace(/(?:鸡|🐔|🐓|🐥)\s*(?:p\s*t|皮)/giu, "gpt")
     .replace(/\b(?:gtp|gpp|ggt|jpt)\b/gi, "gpt")
     .replace(/\bco\s+dex\b/gi, "codex")
     .replace(/\bcla\s+ude\b/gi, "claude")
-    .replace(/\bgro\s+k\b/gi, "grok")
-    .replace(/\bsuper\s*gr[o0](?!k)\b/gi, "supergrok")
+    .replace(/\bsuper\s*gr[o0]{1,2}k?(?![a-z])/gi, "supergrok")
     .replace(/\boai\b/gi, "openai")
     // Merchants write 帐密/帐号 as often as 账密/账号; one normalisation serves every rule.
     .replace(/帐/g, "账");
@@ -299,20 +402,20 @@ function normalizedText(offer: RawOfferInput): string {
 }
 
 function normalizedProductText(offer: RawOfferInput): string {
-  return normalizeBrandAliases([offer.rawTitle, offer.rawCategory]
+  return stripNonSaleMentions(normalizeBrandAliases([offer.rawTitle, offer.rawCategory]
     .filter((value): value is string => Boolean(value))
     .join(" ")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
-    .trim());
+    .trim()));
 }
 
 // The title alone, for deciding whether the listing names its own plan.
 function normalizedTitleText(offer: RawOfferInput): string {
-  return normalizeBrandAliases(offer.rawTitle
+  return stripNonSaleMentions(normalizeBrandAliases(offer.rawTitle
     .normalize("NFKC")
     .replace(/\s+/g, " ")
-    .trim());
+    .trim()));
 }
 
 function matchProduct(text: string): {
@@ -505,6 +608,21 @@ function extractAttributes(text: string, mode: OfferMode): OfferAttributes {
   return attributes;
 }
 
+const TITLE_VENDORS: Record<string, RegExp> = {
+  openai: /chat\s*gpt|\bgpt|codex|openai/i,
+  anthropic: /claude/i,
+  google: /gemini|google\s*ai/i,
+  xai: /grok/i,
+};
+
+function productVendor(slug: string): string {
+  if (/^(?:chatgpt|codex)|openai/.test(slug)) return "openai";
+  if (/^claude/.test(slug)) return "anthropic";
+  if (/^(?:gemini|google)/.test(slug)) return "google";
+  if (/grok/.test(slug)) return "xai";
+  return slug;
+}
+
 export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const text = normalizedText(offer);
   // A title that names its own plan outranks the category: shops file a Plus listing
@@ -514,7 +632,24 @@ export function classifyOffer(offer: RawOfferInput): ClassificationResult {
   const titleMatch = matchProduct(titleText);
   const titleIsPrecise = titleMatch.slug !== null
     && (!/-account$/.test(titleMatch.slug) || /free|普号|空号|普通号|半成品/i.test(titleText));
-  const product = titleIsPrecise ? titleMatch : matchProduct(normalizedProductText(offer));
+  const fromCategory = titleIsPrecise ? null : matchProduct(normalizedProductText(offer));
+  // A title that names its own vendor keeps it, even when it only says "account": a
+  // Dreamina account on a Grok shelf is not a Grok plan.
+  const namedVendors = [...new Set(Object.entries(TITLE_VENDORS)
+    .filter(([, pattern]) => pattern.test(titleText)).map(([vendor]) => vendor))];
+  const categoryVendor = fromCategory?.slug ? productVendor(fromCategory.slug) : null;
+  const matched = !fromCategory ? titleMatch
+    : titleMatch.slug && fromCategory.slug && productVendor(titleMatch.slug) !== categoryVendor
+      ? titleMatch
+      // A title naming only Grok on a ChatGPT shelf is not ChatGPT, even when no rule
+      // can say which Grok product it is.
+      : namedVendors.length === 1 && categoryVendor && categoryVendor in TITLE_VENDORS && namedVendors[0] !== categoryVendor
+        ? { slug: null, matchedRules: [], conflicts: [] }
+        : fromCategory;
+  const accountSlug = matched.slug ? PLAN_ACCOUNT[matched.slug] : undefined;
+  const product = accountSlug && ACCOUNT_SIGNAL.test(titleText) && !PLAN_PURCHASE.test(titleText)
+    ? { ...matched, slug: accountSlug, matchedRules: [`product:${accountSlug}`] }
+    : matched;
   const mode = matchOfferMode(deliveryText(offer, text));
   const conflictingSignals = [...product.conflicts, ...mode.conflicts];
   const matchedRules = [...product.matchedRules, ...mode.matchedRules];

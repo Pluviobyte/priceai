@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { classifyOffer } from './index.js';
-const classify = (rawTitle: string) => classifyOffer({sourceItemId:'test',rawTitle,price:'99',rawPriceText:'99',currency:'CNY',stockState:'in_stock',productUrl:'https://example.com/item/1',capturedAt:new Date().toISOString(),rawPayloadHash:'1234567890abcdef'});
+const base = {sourceItemId:'test',price:'99',rawPriceText:'99',currency:'CNY',stockState:'in_stock',productUrl:'https://example.com/item/1',capturedAt:new Date().toISOString(),rawPayloadHash:'1234567890abcdef'} as const;
+const classify = (rawTitle: string) => classifyOffer({...base,rawTitle});
 test('real merchant spelling variants retain explicit plan identity', () => {
   for (const [title,slug] of [['GPT-Plus 年订阅','chatgpt-plus'],['GPT 一个月 Plus代充（卡付）','chatgpt-plus'],['Claude 5x（正价卡付 质保）','claude-max-5x'],['Claude 20x（正价卡付 质保）','claude-max-20x'],['ChatGPT Pro20X成品','chatgpt-pro-20x']]) assert.equal(classify(title!).canonicalProductSlug,slug,title!);
 });
@@ -143,7 +144,7 @@ test('disguised brand spellings normalise before matching', () => {
     ['越南货|Ggt plus| 硬货稳定| 质保首登', 'chatgpt-plus'],
     ['Gρt plus官方充值 (visa卡冲 质保订阅版)', 'chatgpt-plus'],
     ['PRO 20x GP.T 24小时可充 质保订阅30天', 'chatgpt-pro-20x'],
-    ['Super gro lite 两个月（保15天）', 'supergrok'],
+    ['Super gro lite 两个月（保15天）', 'grok-plus'],
     ['Super gr0k heavy月卡成品/直充', 'supergrok-heavy'],
   ] as const) assert.equal(classify(title).canonicalProductSlug, slug, title);
 });
@@ -352,4 +353,58 @@ test('a shelf name listing many categories does not decide this item\'s delivery
   assert.equal(withCategory('Gemini Ultra 20x 家庭组席位', 'Gemini 充值/成品号').attributes.offerMode, 'shared_account');
   // A category naming one delivery form still counts when the title names none.
   assert.equal(withCategory('Gemini Ultra 20x 权益', 'Gemini 充值/成品号').attributes.offerMode, 'finished_account');
+});
+
+test('a listing that names another vendor or another kind of goods leaves the shelf it sits on', () => {
+  // Production listings, each the cheapest "offer" of the plan whose shelf it sat on.
+  const cases: Array<[string, string, string | null]> = [
+    ['gro4.6 build号 质保一周｜自动发货 账号密码直登', 'chat G plus', 'grok-account'],
+    ['G+p·t Free 成品号全格式 Outlook邮箱｜已接马｜可刷新 RT｜支持codex 反代', 'G plus', 'chatgpt-account'],
+    ['G free普号 | iCloud | 账密+2fa | 未接🐎| 生图 | 住宅ip| 支持 6-Luna（专为team车优化）', 'C880818', 'chatgpt-account'],
+    ['【G Codex 手机号】Codex过一次性验证【自动发货】', 'G Plus', 'resource-openai-verification'],
+    ['Muse AI 10亿token成品号（类似于SuperGroK bot）', 'G plus成品号', 'muse-ai'],
+    ['Claude 普号free｜outlook邮箱 【质保首登】（免kyc可以开pro套餐）', 'Claude直冲/成品号', 'claude-account'],
+    ['耀耀中转站 5USD 【永不过期】0.1不降智6a，claude，codex plus/pro大模型API卡密', 'GPT全模型', 'api-transit-credit'],
+    ['Codex 好友邀请奖励｜额度增加｜卡密自助邀请', 'Codex 额度', 'resource-tool'],
+    ['Dreamina Basic 海外即梦｜成品账号7天（900-1200积分）质保1天-替代gro可用', 'gro 直充/super/free x会员直充', 'dreamina-account'],
+    ['Claude Premium Seat | 125USD | 31天质保 | 官方订阅', 'Claude 5X 成品', 'claude-team'],
+  ];
+  for (const [rawTitle, rawCategory, slug] of cases) {
+    assert.equal(classifyOffer({ ...base, rawTitle, rawCategory }).canonicalProductSlug, slug, rawTitle);
+  }
+});
+
+test('a plan sold together with an account stays the plan', () => {
+  assert.equal(classify('Claude Pro 【代充｜成品号+20元，免kyc，也可提供已过kyc的普号】(质保订阅)').canonicalProductSlug, 'claude-pro');
+  assert.equal(classify('已接马-iCloud邮箱-PLUS成品号-质保一小时内首登-可直接登录codex免手机号验证').canonicalProductSlug, 'chatgpt-plus');
+  assert.equal(classify('已接马 【网页+反代+codex】uip渠道 icloud邮箱 Plus成品 带RT 已绑手机号验证').canonicalProductSlug, 'chatgpt-plus');
+});
+
+test('a half-price eligibility account is not Plus, a half-price top-up is', () => {
+  for (const title of [
+    '(源头)Plus半价资格号，试用1个月(不是 成品Plus!!!)，可以自己换绑，无代充，无售后',
+    '鸡pt plus半价资格号 开正价使用',
+    'Plus半价资格号 iCloud邮箱（1个月资格）',
+  ]) assert.equal(classify(title).canonicalProductSlug, 'chatgpt-plus-eligibility', title);
+  for (const title of [
+    '[仅限半价资格号购买] GPT PLUS官方卡充 [质保订阅]',
+    'G plus （仅限有半价资格的账号）',
+    'plus成品号（一个月资格号）',
+  ]) assert.equal(classify(title).canonicalProductSlug, 'chatgpt-plus', title);
+});
+
+test('Grok tiers follow the October 2026 names, old names by what they now are', () => {
+  for (const [title, slug] of [
+    ['卡充GroK Plus 8$【官冲】 质保30天订阅', 'grok-plus'],
+    ['美区官方卡充 Gro Premium 4x 1个月', 'supergrok'],
+    ['G2ok旧版 Super充值码30美元一个月的不包含cursor/x premium/ 非全家桶', 'supergrok'],
+    ['【IOS美区】gro Supergro官方充值（月卡） (ID直冲)', 'supergrok'],
+    ['卡充GroK Super 100$【官冲】 质保30天订阅', 'grok-super'],
+    ['【质保订阅】Gro super 15x 1个月', 'grok-super'],
+    ['Grok·X·Cursor 三合一订阅 Super 月卡', 'grok-super'],
+    ['Gro·X·Cursor 三合一订阅 Premium', 'supergrok'],
+    ['【正规直冲】GroKUltra30天【GroK Ultra + Cursor Ultra】', 'supergrok-heavy'],
+    ['SuperGro​k Super 月卡｜成品号', 'supergrok'],
+    ['gro普号（库存）', 'grok-account'],
+  ] as const) assert.equal(classify(title).canonicalProductSlug, slug, title);
 });

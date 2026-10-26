@@ -25,7 +25,7 @@ function visibleTextFromHtml(html: string): string {
 export function extractOfficialPagePrice(html: string, requiredTerms: readonly string[]): number | null {
   const normalizedTerms = requiredTerms.join(" ").toLowerCase();
   if (normalizedTerms === "supergrok" || normalizedTerms === "supergrok plus") {
-    return extractSuperGrokMonthlyPrice(html, normalizedTerms);
+    return extractXaiTierPrice(html, [normalizedTerms]);
   }
   // OpenAI pages discuss several dollar prices in the same paragraph. Distance
   // from the article title cannot establish which tier or billing period owns one.
@@ -62,13 +62,18 @@ export function extractOfficialPagePrice(html: string, requiredTerms: readonly s
   return candidates.sort((left, right) => left.score - right.score)[0]?.amount ?? null;
 }
 
-/** xAI price cards are identified by their exact heading, not a name prefix. */
-function extractSuperGrokMonthlyPrice(html: string, normalizedPlanName: string): number | null {
+/**
+ * xAI price cards are identified by their exact heading, not a name prefix: "Super" must
+ * not read the "SuperGrok Plus" card, nor "Plus" the "Premium" one. Any of the accepted
+ * headings may own the card, so the current and the pre-2026-10-12 name both parse.
+ */
+export function extractXaiTierPrice(html: string, headingNames: readonly string[]): number | null {
+  const accepted = new Set(headingNames.map(name => name.toLowerCase()));
   const headings = [...html.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
   const amounts = new Set<number>();
   for (let index = 0; index < headings.length; index++) {
     const heading = headings[index]!;
-    if (visibleTextFromHtml(heading[2]!).toLowerCase() !== normalizedPlanName) continue;
+    if (!accepted.has(visibleTextFromHtml(heading[2]!).toLowerCase())) continue;
     const start = heading.index! + heading[0].length;
     const card = visibleTextFromHtml(html.slice(start, headings[index + 1]?.index ?? html.length));
     // An annual payment expressed as a monthly equivalent is a different offer.

@@ -97,9 +97,15 @@ function groupPlans(rows: OfficialSubscriptionPrice[]): PlanGroup[] {
     const latest = group.rows.reduce<Date | null>((current, row) => !current || row.verifiedAt > current ? row.verifiedAt : current, null);
     return { key, ...group, reference: selectOfficialSubscriptionReference(group.rows), latest };
   }).filter(plan => plan.planCode !== "claude-pro-annual").sort((a, b) => {
-    const claudeOrder = ["claude-pro-monthly", "claude-max-5x-monthly", "claude-max-20x-monthly"];
-    if (a.vendor === "anthropic" && b.vendor === "anthropic") {
-      const rank = (code: string) => claudeOrder.includes(code) ? claudeOrder.indexOf(code) : claudeOrder.length;
+    // Tier names do not sort by price ("Premium" < "Super" < "Ultra" alphabetically by luck,
+    // "Plus" does not), so these vendors list their plans cheapest first.
+    const tierOrder: Record<string, string[]> = {
+      anthropic: ["claude-pro-monthly", "claude-max-5x-monthly", "claude-max-20x-monthly"],
+      xai: ["grok-plus-monthly", "supergrok-monthly", "supergrok-plus-monthly", "grok-ultra-monthly"],
+    };
+    const order = a.vendor === b.vendor ? tierOrder[a.vendor] : undefined;
+    if (order) {
+      const rank = (code: string) => order.includes(code) ? order.indexOf(code) : order.length;
       return rank(a.planCode) - rank(b.planCode) || a.planName.localeCompare(b.planName, "zh-CN");
     }
     const vendorOrder = ["openai", "anthropic", "google", "xai"];

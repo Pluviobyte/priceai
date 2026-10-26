@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractChatGptGoWebPrice, extractClaudePlanPrice, hasAmbiguousAppStorePrices, extractOfficialPagePrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
+import { extractChatGptGoWebPrice, extractClaudePlanPrice, hasAmbiguousAppStorePrices, extractOfficialPagePrice, extractXaiTierPrice, officialPageConfirmsPrice, parseAppStorePriceListings, selectAppStorePlanPrice } from "./storefront-parser.js";
 
 test("parses common App Store currency formats", () => {
   const html = `
@@ -163,4 +163,17 @@ test("multiple distinct prices require review; repeated identical prices do not"
   assert.equal(hasAmbiguousAppStorePrices(rows, "plan"), true);
   assert.equal(hasAmbiguousAppStorePrices([rows[0]!, rows[0]!], "Plan"), false);
   assert.equal(hasAmbiguousAppStorePrices(rows, "Other"), false);
+});
+
+test('xAI tier cards parse under the October 2026 names and the old ones', () => {
+  // Shape of x.ai/pricing after the rename: each tier is a heading followed by its card.
+  const html = '<h3>Free</h3><p>$0/month</p><h3>Plus</h3><p>$8/month</p><h3>Premium</h3><p>$30/month</p>'
+    + '<h3>Super</h3><p>$100/month</p><h3>Ultra</h3><p>$200/month</p><h3>Plus</h3><p>$8/month</p>';
+  assert.equal(extractXaiTierPrice(html, ['Plus', 'SuperGrok Lite']), 8);
+  assert.equal(extractXaiTierPrice(html, ['Premium', 'SuperGrok']), 30);
+  assert.equal(extractXaiTierPrice(html, ['Super', 'SuperGrok Plus']), 100);
+  assert.equal(extractXaiTierPrice(html, ['Ultra', 'SuperGrok Heavy']), 200);
+  assert.equal(extractXaiTierPrice('<h3>SuperGrok</h3><p>$30/month</p>', ['Premium', 'SuperGrok']), 30);
+  // Two different amounts under one name prove nothing.
+  assert.equal(extractXaiTierPrice('<h3>Super</h3><p>$100/month</p><h3>Super</h3><p>$90/month</p>', ['Super']), null);
 });
