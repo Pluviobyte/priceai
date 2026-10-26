@@ -9,8 +9,8 @@ import {
 } from "../app/analytics-tags";
 
 test("analytics tags target the configured PriceAI projects", () => {
-  assert.equal(GOOGLE_ANALYTICS_MEASUREMENT_ID, "G-HL70Z3V7Z7");
-  assert.match(googleAnalyticsBootstrap, /gtag\('config', 'G-HL70Z3V7Z7'\)/);
+  assert.equal(GOOGLE_ANALYTICS_MEASUREMENT_ID, "G-2S4H99HX65");
+  assert.match(googleAnalyticsBootstrap, /gtag\('config', 'G-2S4H99HX65'\)/);
 
   assert.equal(CLARITY_PROJECT_ID, "yl5tdfvwjh");
   assert.match(clarityBootstrap, /https:\/\/www\.clarity\.ms\/tag\//);

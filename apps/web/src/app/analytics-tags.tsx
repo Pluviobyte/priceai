@@ -1,6 +1,6 @@
 import Script from "next/script";
 
-export const GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-HL70Z3V7Z7";
+export const GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-2S4H99HX65";
 export const CLARITY_PROJECT_ID = "yl5tdfvwjh";
 
 export const googleAnalyticsBootstrap = `
