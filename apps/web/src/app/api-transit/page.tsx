@@ -56,7 +56,13 @@ export default async function ApiTransitPage({ searchParams }: { searchParams: P
     const matchesCategory = !category || prices.some((price) => modelFamily(price) === category);
     return matchesQuery && matchesCategory;
   });
-  providers.sort((a, b) => sort === "price" ? (lowest(pricesByProvider.get(a.slug) ?? []).value ?? Infinity) - (lowest(pricesByProvider.get(b.slug) ?? []).value ?? Infinity) : sort === "stability" ? (b.successRate7d ?? -1) - (a.successRate7d ?? -1) : (b.successRate7d ?? -1) - (a.successRate7d ?? -1) || b.sampleCount7d - a.sampleCount7d);
+  // A gateway's dollar price and a relay's multiplier are not one scale: price order ranks
+  // multipliers, and providers quoting only dollar prices follow them.
+  const priceRank = (slug: string) => {
+    const low = lowest(pricesByProvider.get(slug) ?? []);
+    return low.value === null ? Infinity : low.isMultiplier ? low.value : 1_000_000 + low.value;
+  };
+  providers.sort((a, b) => sort === "price" ? priceRank(a.slug) - priceRank(b.slug) : sort === "stability" ? (b.successRate7d ?? -1) - (a.successRate7d ?? -1) : (b.successRate7d ?? -1) - (a.successRate7d ?? -1) || b.sampleCount7d - a.sampleCount7d);
   const latest = data.providers.reduce<Date | null>((current, provider) => !provider.lastCheckedAt ? current : !current || provider.lastCheckedAt > current ? provider.lastCheckedAt : current, null);
   const sampleCount = data.providers.reduce((sum, provider) => sum + provider.sampleCount7d, 0);
   // Relay multipliers and gateway dollar prices are different units; the headline quotes
