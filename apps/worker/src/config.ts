@@ -14,6 +14,8 @@ export interface WorkerConfig {
   /** Channel worker: due sources crawled per cycle. */
   channelCrawlBatch: number;
   channelPlatformConcurrency: number;
+  /** Idle window after a successful publication, while collection keeps running. */
+  channelPublishCooldownMs: number;
   /** Channel worker: age after which a source quality profile is recomputed. */
   qualityProfileMaxAgeMs: number;
   /** Master switch for automatic source discovery and vetting. */
@@ -43,6 +45,11 @@ function positiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function publicationCooldown(value: string | undefined): number {
+  const parsed = value === undefined || value === '' ? Number.NaN : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(60_000, Math.floor(parsed)) : 30_000;
+}
+
 export function readWorkerConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): WorkerConfig {
@@ -60,6 +67,7 @@ export function readWorkerConfig(
     candidateVettingBatch: positiveNumber(env.CANDIDATE_VETTING_BATCH, 20),
     channelCrawlBatch: positiveNumber(env.CHANNEL_CRAWL_BATCH, 50),
     channelPlatformConcurrency: Math.min(8, Math.max(1, Math.floor(positiveNumber(env.CHANNEL_PLATFORM_CONCURRENCY, 4)))),
+    channelPublishCooldownMs: publicationCooldown(env.CHANNEL_PUBLISH_COOLDOWN_MS),
     qualityProfileMaxAgeMs: positiveNumber(env.QUALITY_PROFILE_MAX_AGE_MS, 7 * 24 * 60 * 60 * 1_000),
     sourceDiscoveryEnabled: (env.SOURCE_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",
     linkDiscoveryEnabled: (env.LINK_DISCOVERY_ENABLED ?? "true").toLowerCase() !== "false",

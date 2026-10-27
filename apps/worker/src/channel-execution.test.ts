@@ -5,6 +5,50 @@ import { PlatformTaskPool, IncrementalPublisher } from './channel-execution.js';
 const gate = () => { let resolve!: () => void; const promise = new Promise<void>(r => {resolve=r;}); return {promise,resolve}; };
 const turn = () => new Promise<void>(r => setImmediate(r));
 
+test('successful publication leaves a full maintenance window even with a dirty backlog', async t => {
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});
+  const hold=gate(),started=gate();const starts:number[]=[];let errors=0;
+  const pub=new IncrementalPublisher(async()=>{
+    starts.push(Date.now());if(starts.length===1){started.resolve();await hold.promise;}
+  },()=>{errors++;},3,30_000,30_000);
+  pub.changed();pub.changed();pub.changed();await started.promise;
+  // Collection can finish many jobs during publication without starting another publish.
+  for(let i=0;i<10;i++)pub.changed();
+  t.mock.timers.tick(5000);hold.resolve();await turn();
+  t.mock.timers.tick(29_999);pub.changed();await turn();assert.equal(starts.length,1);
+  t.mock.timers.tick(1);await turn();assert.deepEqual(starts,[1000,36_000]);
+  t.mock.timers.tick(60_000);await turn();assert.equal(starts.length,2);
+  await pub.flush();assert.equal(errors,0);
+});
+
+test('new changes during an idle cooldown cannot bypass it; later changes still publish', async t => {
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});
+  const starts:number[]=[];
+  const pub=new IncrementalPublisher(async()=>{starts.push(Date.now());},error=>assert.fail(String(error)),1,30_000,30_000);
+  pub.changed();await turn();
+  t.mock.timers.tick(10_000);pub.changed();pub.changed();await turn();assert.equal(starts.length,1);
+  t.mock.timers.tick(19_999);await turn();assert.equal(starts.length,1);
+  t.mock.timers.tick(1);await turn();assert.equal(starts.length,2);
+  t.mock.timers.tick(40_000);pub.changed();await turn();assert.equal(starts.length,3);
+  await pub.flush();
+});
+
+test('publication failure uses retry delay and does not discard pending changes', async t => {
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});let calls=0,errors=0;
+  const pub=new IncrementalPublisher(async()=>{if(++calls===1)throw new Error('busy');},()=>{errors++;},1,100,30_000);
+  pub.changed();await turn();
+  t.mock.timers.tick(99);await turn();assert.equal(calls,1);
+  t.mock.timers.tick(1);await turn();assert.equal(calls,2);
+  await pub.flush();assert.equal(calls,2);assert.equal(errors,1);
+});
+
+test('shutdown drains cooldown backlog once and leaves no delayed publication', async t => {
+  t.mock.timers.enable({apis:['Date','setTimeout'],now:1000});let calls=0;
+  const pub=new IncrementalPublisher(async()=>{calls++;},error=>assert.fail(String(error)),1,30_000,30_000);
+  pub.changed();await turn();pub.changed();await pub.flush();assert.equal(calls,2);
+  t.mock.timers.tick(60_000);await turn();assert.equal(calls,2);
+});
+
 test('different platforms overlap; refresh and admission on the same platform remain FIFO', async () => {
   const pool = new PlatformTaskPool(2, new AbortController().signal);
   const hold=gate(), started=gate(); const events:string[]=[];

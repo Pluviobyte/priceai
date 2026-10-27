@@ -27,7 +27,8 @@ export async function runContinuousChannelWork(db:Database,registry:CollectorReg
     log({event:publication.unchanged?'channels_refreshed':'channels_published',...publication,durationMs:Date.now()-started});
     if(options.rawObjectStore && !publication.unchanged) await storePublicGenerationSnapshot(db,options.rawObjectStore,publication.generationId).catch(error=>log({event:'public_snapshot_failed',error:String(error)}));
     await evaluatePriceAlerts(db,publication.generationId).catch(error=>log({event:'price_alert_evaluation_failed',error:String(error)}));
-  },error=>log({event:'incremental_publication_failed',error:String(error)}));
+    log({event:'publication_maintenance_window',durationMs:config.channelPublishCooldownMs});
+  },error=>log({event:'incremental_publication_failed',error:String(error)}),3,30_000,config.channelPublishCooldownMs);
   const maintain=async()=>{
     await prepareVettingQueue(db);
     const recovered=await recoverClearedPlatformCandidates(db,1000);

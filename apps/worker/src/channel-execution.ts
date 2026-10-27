@@ -39,24 +39,36 @@ export class IncrementalPublisher {
   private running: Promise<void> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private closing = false;
+  private nextPublishAt = 0;
   constructor(private readonly publish: () => Promise<void>, private readonly onError: (error: unknown) => void,
-    private readonly batch = 3, private readonly delayMs = 30_000) {}
+    private readonly batch = 3, private readonly delayMs = 30_000,
+    private readonly cooldownMs = 0) {}
   changed() {
     this.dirty++;
     this.schedule();
   }
   private schedule() {
     if (this.closing || this.running || !this.dirty) return;
+    const cooldownRemaining = this.nextPublishAt - Date.now();
+    if (cooldownRemaining > 0) {
+      this.timer ??= setTimeout(() => { this.timer = undefined; this.start(); }, cooldownRemaining);
+      return;
+    }
     if (this.dirty >= this.batch) { this.start(); return; }
     this.timer ??= setTimeout(() => { this.timer = undefined; this.start(); }, this.delayMs);
   }
   private start() {
-    if (this.running || !this.dirty) return;
+    if (this.closing || this.running || !this.dirty) return;
+    // Even a full batch must leave the post-commit maintenance window intact.
+    if (Date.now() < this.nextPublishAt) { this.schedule(); return; }
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     const count = this.dirty;
     this.dirty = 0;
-    this.running = Promise.resolve().then(this.publish).catch(error => {
+    this.running = Promise.resolve().then(this.publish).then(() => {
+      // No DB transaction/lock is held here. Crawls continue collecting dirty changes.
+      this.nextPublishAt = Date.now() + this.cooldownMs;
+    }).catch(error => {
       this.dirty += count;
       this.onError(error);
       // Retry after a delay, even when the pending count exceeds the batch size.
@@ -67,6 +79,7 @@ export class IncrementalPublisher {
     });
   }
   async flush() {
+    // Shutdown drains pending changes immediately; cooldown only governs steady-state scheduling.
     this.closing = true;
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
